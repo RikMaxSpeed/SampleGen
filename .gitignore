@@ -4,4 +4,6 @@
 # But do not ignore .py and .ipynb files
 !*.py
 !*.ipynb
+!*.md
+!*.xcodeproj
 

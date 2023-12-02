@@ -23,12 +23,14 @@
 		79E291592B1BAC0100EF046D /* .gitignore */ = {isa = PBXFileReference; lastKnownFileType = text; path = .gitignore; sourceTree = "<group>"; };
 		79E2915A2B1BAC5000EF046D /* MakeAndTrain.ipynb */ = {isa = PBXFileReference; lastKnownFileType = text; path = MakeAndTrain.ipynb; sourceTree = "<group>"; };
 		79E2915B2B1BAC5000EF046D /* WebScrape.ipynb */ = {isa = PBXFileReference; lastKnownFileType = text; path = WebScrape.ipynb; sourceTree = "<group>"; };
+		79E2915C2B1BB01400EF046D /* README.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = README.md; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
 		7929AC272ADD810F006851A3 = {
 			isa = PBXGroup;
 			children = (
+				79E2915C2B1BB01400EF046D /* README.md */,
 				79E2915A2B1BAC5000EF046D /* MakeAndTrain.ipynb */,
 				79E2915B2B1BAC5000EF046D /* WebScrape.ipynb */,
 				79E291592B1BAC0100EF046D /* .gitignore */,
