@@ -6,10 +6,45 @@
 	objectVersion = 56;
 	objects = {
 
+/* Begin PBXFileReference section */
+		7929AC2E2ADD81AA006851A3 /* AudioUtils.py */ = {isa = PBXFileReference; lastKnownFileType = text.script.python; path = AudioUtils.py; sourceTree = "<group>"; };
+		7929AC2F2ADDBB84006851A3 /* AutoEncoder.py */ = {isa = PBXFileReference; lastKnownFileType = text.script.python; path = AutoEncoder.py; sourceTree = "<group>"; };
+		7929AC302ADDBBB2006851A3 /* Train.py */ = {isa = PBXFileReference; lastKnownFileType = text.script.python; path = Train.py; sourceTree = "<group>"; };
+		7929AC312ADDBCFF006851A3 /* MakeSTFTs.py */ = {isa = PBXFileReference; lastKnownFileType = text.script.python; path = MakeSTFTs.py; sourceTree = "<group>"; };
+		7929AC322AE01445006851A3 /* Graph.py */ = {isa = PBXFileReference; lastKnownFileType = text.script.python; path = Graph.py; sourceTree = "<group>"; };
+		7929AC332AE05D49006851A3 /* ModelUtils.py */ = {isa = PBXFileReference; lastKnownFileType = text.script.python; path = ModelUtils.py; sourceTree = "<group>"; };
+		792DEDDB2AE584CA00DE1F74 /* Augment.py */ = {isa = PBXFileReference; lastKnownFileType = text.script.python; path = Augment.py; sourceTree = "<group>"; };
+		79BC48E42AEBFD4500F9B8B9 /* Generate.py */ = {isa = PBXFileReference; lastKnownFileType = text.script.python; path = Generate.py; sourceTree = "<group>"; };
+		79E291542B1896B600EF046D /* Device.py */ = {isa = PBXFileReference; lastKnownFileType = text.script.python; path = Device.py; sourceTree = "<group>"; };
+		79E291552B18DE3200EF046D /* WeightedLoss.py */ = {isa = PBXFileReference; lastKnownFileType = text.script.python; path = WeightedLoss.py; sourceTree = "<group>"; };
+		79E291562B18E0AA00EF046D /* Debug.py */ = {isa = PBXFileReference; lastKnownFileType = text.script.python; path = Debug.py; sourceTree = "<group>"; };
+		79E291572B18EB8500EF046D /* LegacyModels.py */ = {isa = PBXFileReference; lastKnownFileType = text.script.python; path = LegacyModels.py; sourceTree = "<group>"; };
+		79E291582B19190600EF046D /* HyperParameterTuning.py */ = {isa = PBXFileReference; lastKnownFileType = text.script.python; path = HyperParameterTuning.py; sourceTree = "<group>"; };
+		79E291592B1BAC0100EF046D /* .gitignore */ = {isa = PBXFileReference; lastKnownFileType = text; path = .gitignore; sourceTree = "<group>"; };
+		79E2915A2B1BAC5000EF046D /* MakeAndTrain.ipynb */ = {isa = PBXFileReference; lastKnownFileType = text; path = MakeAndTrain.ipynb; sourceTree = "<group>"; };
+		79E2915B2B1BAC5000EF046D /* WebScrape.ipynb */ = {isa = PBXFileReference; lastKnownFileType = text; path = WebScrape.ipynb; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
 /* Begin PBXGroup section */
 		7929AC272ADD810F006851A3 = {
 			isa = PBXGroup;
 			children = (
+				79E2915A2B1BAC5000EF046D /* MakeAndTrain.ipynb */,
+				79E2915B2B1BAC5000EF046D /* WebScrape.ipynb */,
+				79E291592B1BAC0100EF046D /* .gitignore */,
+				7929AC2E2ADD81AA006851A3 /* AudioUtils.py */,
+				792DEDDB2AE584CA00DE1F74 /* Augment.py */,
+				7929AC2F2ADDBB84006851A3 /* AutoEncoder.py */,
+				79E291562B18E0AA00EF046D /* Debug.py */,
+				79E291542B1896B600EF046D /* Device.py */,
+				79BC48E42AEBFD4500F9B8B9 /* Generate.py */,
+				7929AC322AE01445006851A3 /* Graph.py */,
+				79E291582B19190600EF046D /* HyperParameterTuning.py */,
+				79E291572B18EB8500EF046D /* LegacyModels.py */,
+				7929AC312ADDBCFF006851A3 /* MakeSTFTs.py */,
+				7929AC332AE05D49006851A3 /* ModelUtils.py */,
+				7929AC302ADDBBB2006851A3 /* Train.py */,
+				79E291552B18DE3200EF046D /* WeightedLoss.py */,
 			);
 			sourceTree = "<group>";
 		};
