@@ -7,12 +7,17 @@ from AudioUtils import *
 import time
 import sys
 
-# These global variables are re-used in Train.py
-# Would be better to create a class to store these
+# Bunch of nasty global variables...
 sample_rate = 44100
 stft_buckets = 1024
 stft_hop = int(1024 * 3 / 4)
-print("Using sample rate={} Hz, FFT={} buckets, hop={} samples".format(sample_rate, stft_buckets, stft_hop))
+
+sample_duration = 2 # seconds
+sequence_length = int(sample_duration * sample_rate / stft_hop)
+input_size = stft_buckets * sequence_length
+
+print("Using sample rate={} Hz, FFT={} buckets, hop={} samples, duration={:.1f} sec = {:,} time steps".format(sample_rate, stft_buckets, stft_hop, sample_duration, sequence_length))
+
 
 
 def lowest_frequency(stft, sample_rate):
@@ -123,3 +128,101 @@ def load_STFTs():
     stfts, file_names = load_from_file(stft_file)
     print("Loaded {} STFTs from {}".format(len(stfts), stft_file))
     return stfts, file_names
+
+
+
+
+def adjust_stft_length(stft_tensor, target_length):
+    
+    assert(stft_buckets <= stft_tensor.shape[0] <= stft_buckets + 1)
+    current_length = stft_tensor.shape[1]
+    
+    # If the current length is equal to the target, return the tensor as is
+    if current_length == target_length:
+        return stft_tensor
+
+    # If the current length is greater than the target, truncate it
+    if current_length > target_length:
+        return stft_tensor[:, :target_length]
+
+    # If the current length is less than the target, pad it with zeros
+    padding_length = target_length - current_length
+    padding = torch.zeros((stft_tensor.shape[0], padding_length))
+    
+    return torch.cat((stft_tensor, padding), dim=1)
+
+
+def transpose(tensor):
+    return tensor.transpose(0, 1) # Swap the SFTF bins and sequence length
+
+
+def convert_stft_to_input(stft):
+    assert(len(stft.shape) == 2)
+    assert(stft.shape[0] == stft_buckets + 1)
+    stft = stft[1:, :]
+    assert(stft.shape[0] == stft_buckets)
+    
+    stft = adjust_stft_length(stft, sequence_length)
+    stft = complex_to_mulaw(stft)
+#    stft = transpose(stft)
+#    debug("stft.transpose", stft)
+    
+    return stft.contiguous()
+
+
+def convert_stft_to_output(stft):
+    #debug("convert_stft_to_output.stft", stft)
+    
+    # Fix dimensions
+    amplitudes = stft.squeeze(0)
+    amplitudes = transpose(amplitudes)
+    
+    # Get rid of any silly values...
+    amplitudes[amplitudes <= 0] = 0
+    
+    # Add back the constant bucket = 0
+    assert(amplitudes.shape[0] == stft_buckets)
+    zeros = torch.zeros(amplitudes.size(1)).unsqueeze(0).to(device)
+    amplitudes = torch.cat((zeros, amplitudes), dim=0)
+    assert(amplitudes.shape[0] == stft_buckets + 1)
+    
+    # Convert back to complex with 0 phase
+    output_stft = mulaw_to_zero_phase_complex(amplitudes)
+    assert(output_stft.shape[0] == stft_buckets + 1)
+    output_stft = output_stft.cpu().detach().numpy()
+
+    return output_stft
+        
+
+def test_stft_conversions(filename):
+    sr, stft = compute_stft_for_file(filename, 2*stft_buckets, stft_hop)
+    debug("stft", stft)
+    
+    if False: # Generate a synthetic spectrum
+        for f in range(stft.shape[0]):
+            for t in range(stft.shape[1]):
+                stft[f, t] = 75*np.sin(f*t) if f>=2*t and f <= 3*t else 0
+    
+    plot_stft(filename, stft, sr, stft_hop)
+    stft = np.abs(stft) # because we discard the phases, everything becomes positive amplitudes
+    
+    tensor = torch.tensor(stft)
+    input = convert_stft_to_input(tensor).to(device)
+    output = convert_stft_to_output(input)
+    
+    plot_stft("Resynth " + filename, output, sr, stft_hop)
+    save_and_play_audio_from_stft(output, sr, stft_hop, "Results/resynth-mulaw-" + os.path.basename(filename), True)
+
+    diff = np.abs(output - stft)
+    debug("diff", diff)
+    plot_stft("Diff", diff, sr, stft_hop)
+    for f in range(stft.shape[0]):
+        for t in range(stft.shape[1]):
+            d = diff[f, t]
+            if d > 0.1:
+                print("f={}, t={}, diff={:.3f}, stft={:.3f}, output={:.3f}".format(f, t, d, stft[f, t], output[f, t]))
+
+
+#test_stft_conversions("Samples/Piano C4 Major 13.wav")
+#test_stft_conversions("/Users/Richard/Coding/WaveFiles/FreeWaveSamples/Alesis-S4-Plus-Clean-Gtr-C4.wav")
+#sys.exit(1)

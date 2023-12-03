@@ -2,6 +2,18 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from Debug import *
+from MakeSTFTs import * # required for some global variables :(
+from ModelUtils import *
+
+
+# Loss functions
+def reconstruction_loss(recon_x, x):
+    return F.mse_loss(recon_x, x, reduction='sum')
+        
+        
+def kl_divergence(mu, logvar):
+    # see https://stackoverflow.com/questions/74865368/kl-divergence-loss-equation
+    return -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
 
 
 # Generic VAE composed of a number of fully connected linear layers (re-usable)
@@ -54,21 +66,15 @@ class VariationalAutoEncoder(nn.Module):
         z = self.reparameterize(mu, logvar)
         
         return self.decode(z), mu, logvar
-
-
-    def reconstruction_loss(self, recon_x, x):
-        return F.mse_loss(recon_x, x, reduction='sum')
         
-    def kl_divergence(self, mu, logvar):
-        return -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
         
     def loss_function(self, recon_x, x, mu, logvar):
-        error  = self.reconstruction_loss(recon_x, x)
-        kl_div = self.kl_divergence(mu, logvar)
+        error  = reconstruction_loss(recon_x, x)
+        kl_div = kl_divergence(mu, logvar)
 
         #print("error={:.3f}, kl_divergence={:.3f}, ratio={:.1f}".format(error, kl_div, kl_div/error))
         
-        # The model is always able to efficiently minimise the KL loss, so it's unneccesary to weight it vs the reconstruction loss.
+        # The optimiser appears to be able to efficiently minimise the KL loss, so it's unneccesary to weight it vs the reconstruction loss.
         kl_weight = 1.0
         
         return (error + kl_weight * kl_div) / x[0].numel()
@@ -119,51 +125,68 @@ class STFTVariationalAutoEncoder(nn.Module):
         return self.vae.loss_function(recon_x, x, mu, logvar)
 
 
+    def forward_loss(self, inputs):
+        outputs, mus, logvars = self.forward(inputs, True)
+        loss = self.loss_function(outputs, inputs, mus, logvars)
+        return loss
 
-# Basic auto-encoder with no VAE
+
+
+##########################################################################################
+# CNN/RNN Auto-encoder with no VAE
+#
 
 class HybridCNNAutoEncoder(nn.Module):
     @staticmethod
-    def estimate_parameters(stft_buckets, seq_length, num_conv_filters, rnn_hidden_size, input_size):
+    def estimate_parameters(stft_buckets, seq_length, kernel_count, kernel_size, rnn_hidden_size):
         # Parameters in the 1D Conv layer
-        conv_params = (stft_buckets * num_conv_filters * 3) + num_conv_filters  # (in_channels * out_channels * kernel_size) + out_channels (for bias)
+        conv_params = (stft_buckets * kernel_count * kernel_count) + kernel_count  # (in_channels * out_channels * kernel_size) + out_channels (for bias)
 
         # Parameters in the GRU layer - Encoder
-        # GRU parameters = 3 * (hidden_size^2 + hidden_size * input_size + hidden_size) * num_layers
-        rnn_input_size = num_conv_filters * input_size
-        encoder_rnn_params = 3 * (rnn_hidden_size**2 + rnn_hidden_size * rnn_input_size + rnn_hidden_size)
+        rnn_input_size = kernel_count * seq_length
+        encoder_rnn_params = 3 * (rnn_hidden_size**2 + rnn_hidden_size * seq_length + rnn_hidden_size)
 
         # Parameters in the GRU layer - Decoder (similar to encoder)
         decoder_rnn_params = encoder_rnn_params #3 * (rnn_hidden_size**2 + rnn_hidden_size * rnn_input_size + rnn_hidden_size)
 
         # Parameters in the 1D Transposed Conv layer
-        deconv_params = (num_conv_filters * stft_buckets * 3) + stft_buckets  # (in_channels * out_channels * kernel_size) + out_channels (for bias)
+        deconv_params = (kernel_count * stft_buckets * kernel_count) + stft_buckets  # (in_channels * out_channels * kernel_size) + out_channels (for bias)
 
         total_params = conv_params + encoder_rnn_params + decoder_rnn_params + deconv_params
         return total_params
 
 
-    def __init__(self, stft_buckets, seq_length, num_conv_filters, rnn_hidden_size, input_size):
+    def __init__(self, stft_buckets, seq_length, kernel_count, kernel_size, rnn_hidden_size):
         super(HybridCNNAutoEncoder, self).__init__()
-        self.input_size = input_size
         self.seq_length = seq_length
         self.rnn_hidden_size = rnn_hidden_size
-
+        self.encoded_size = rnn_hidden_size * seq_length
+        print(f"sequence_length={seq_length}, encoded_size={self.encoded_size}")
         # Encoder
-        self.encoder_conv1d = nn.Conv1d(in_channels=stft_buckets, out_channels=num_conv_filters, kernel_size=3, stride=1, padding=1)
-        self.encoder_relu = nn.ReLU()
-        self.encoder_rnn = nn.GRU(input_size=num_conv_filters * input_size, hidden_size=rnn_hidden_size, batch_first=True)
+        self.encoder_conv1d = nn.Conv1d(in_channels=stft_buckets, out_channels=kernel_count, kernel_size=kernel_size, stride=1, padding=1)
+        print(f"encoder_conv1d={self.encoder_conv1d}")
+    
+        self.encoder_rnn = nn.GRU(input_size=kernel_count * seq_length, hidden_size=rnn_hidden_size, batch_first=True)
+        print(f"encoder_rnn={self.encoder_rnn}")
 
         # Decoder
-        self.decoder_rnn = nn.GRU(input_size=rnn_hidden_size, hidden_size=num_conv_filters * input_size, batch_first=True)
-        self.decoder_conv1d = nn.ConvTranspose1d(in_channels=num_conv_filters, out_channels=stft_buckets, kernel_size=3, stride=1, padding=1)
-
+        self.decoder_rnn = nn.GRU(input_size=kernel_count * input_size, hidden_size=rnn_hidden_size, batch_first=True)
+        print(f"decoder_rnn={self.decoder_rnn}")
+        
+        self.decoder_conv1d = nn.ConvTranspose1d(in_channels=kernel_count, out_channels=stft_buckets, kernel_size=kernel_size, stride=1, padding=1)
+        print(f"decoder_conv1d={self.decoder_conv1d}")
+        
+        
     def encode(self, x):
+        debug("encode.x", x)
         x = self.encoder_conv1d(x)
-        x = self.encoder_relu(x)
+        debug("encoder_conv1d.x", x)
+        x = F.relu(x)
+        debug("relu.x", x)
         x = x.view(x.size(0), self.seq_length, -1)
         x, _ = self.encoder_rnn(x)
         return x.flatten()
+
 
     def decode(self, x):
         x = x.view(x.shape[0], self.seq_length, self.rnn_hidden_size)
@@ -172,10 +195,99 @@ class HybridCNNAutoEncoder(nn.Module):
         x = self.decoder_conv1d(x)
         return x
 
+
     def forward(self, x):
         x = self.encode(x)
         x = self.decode(x)
         return x
         
+        
+    def forward_loss(self, inputs):
+        x = self.forward(inputs)
+        return reconstruction_loss(x, inputs)
 
+
+##########################################################################################
+# Top-Level to create models and read hyper-parameters
+#
+
+model_type = None
+
+def set_model_type(name):
+    global model_type
+    if model_type != name:
+        model_type = name
+        print(f"Using model={model_type}")
+
+
+def get_layers(model_params):
+    latent_size, layer3_ratio, layer2_ratio, layer1_ratio = model_params
+
+    # Translate the ratios into actual sizes: this ensures we have increasing layer sizes
+    layer3_size = int(latent_size * layer3_ratio)
+    layer2_size = int(layer3_size * layer2_ratio)
+    layer1_size = int(layer2_size * layer1_ratio)
+    assert(latent_size <= layer3_size <= layer2_size <= layer1_size)
+    
+    layers = [stft_buckets * sequence_length, layer1_size, layer2_size, layer3_size, latent_size]
+
+    return layers
+    
+    
+
+
+
+
+def make_model(model_params, max_params, verbose):
+    invalid_model = None, None
+    
+    if model_type == "VAE_MLP":
+        latent_size, layer3_ratio, layer2_ratio, layer1_ratio = model_params
+        layers = get_layers(model_params)
+        approx_size = 2 * fully_connected_size(layers)
+        if approx_size > max_params:
+            print(f"Model is too large: approx {size:,} parameters vs max={max_params:,}")
+            return invalid_model
+            
+        model_text = f"{model_type}: latent={layers[4]}, layer3={layers[3]}, layer2={layers[2]}, layer1={layers[1]}"
+        model = STFTVariationalAutoEncoder(sequence_length, stft_buckets, layers[1:], nn.ReLU())
+
+    elif model_type == "Hybrid_CNN":
+        kernel_count, kernel_size, rnn_hidden_size = model_params
+        
+        # for some reason we get int64 here which upsets PyTorch...
+        kernel_count    = int(kernel_count)
+        kernel_size     = int(kernel_size)
+        rnn_hidden_size = int(rnn_hidden_size)
+        
+        approx_size = HybridCNNAutoEncoder.estimate_parameters(stft_buckets, sequence_length, kernel_count, kernel_size, rnn_hidden_size)
+        print(f"approx_size={approx_size:,} parameters")
+        if approx_size > max_params:
+            print(f"Model is too large: approx {size:,} parameters vs max={max_params:,}")
+            return invalid_model
+            
+        model_text = f"{model_type}: kernels={kernel_count}, kernel_size={kernel_size}, rnn_hidden={rnn_hidden_size}"
+        print(model_text)
+        model = HybridCNNAutoEncoder(stft_buckets, sequence_length, kernel_count, kernel_size, rnn_hidden_size)
+
+    else:
+        raise Exception(f"Unknown model: {model_type}")
+        
+    
+    # Check the real size:
+    size = count_trainable_parameters(model)
+    print(f"model={model_type}, approx size={approx_size:,} parmaters, exact={size:,}, error={100*(approx_size/size - 1):.2f}%")
+    
+    if size > max_params:
+        print(f"Model is too large: {size:,} parameters vs max={max_params:,}")
+        return invalid_model
+
+    # Get ready!
+    model.float() # ensure we're using float32 and not float64
+    model.to(device)
+
+    if verbose:
+        print("model={}".format(model))
+    
+    return model, model_text
 

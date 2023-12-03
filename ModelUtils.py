@@ -8,6 +8,15 @@ import matplotlib.pyplot as plt
 from Debug import *
 
 
+# Interpolates N values exponentially in the range [start, end]
+def exponential_interpolation(start, end, N):
+    return [start * (end/start) ** (i/(N-1)) for i in range(N)]
+
+
+def count_trainable_parameters(model):
+    return sum(p.numel() for p in model.parameters() if p.requires_grad)
+
+
 def compute_average_loss(model, dataset, batch_size):
     
     model.eval()
