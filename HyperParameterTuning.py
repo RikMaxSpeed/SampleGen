@@ -31,11 +31,11 @@ def optimise_hyper_parameters():
     generate_training_stfts(1000) # we could use a smaller data-set here to speed things up?
     
     search_space = list()
-    search_space.append(Integer(5,      10,     'uniform',     name='latent_size'))
+    search_space.append(Integer(4,      8,     'uniform',     name='latent_size'))
     search_space.append(Real   (1.0,    10.0,   'uniform',     name='layer3_ratio'))
     search_space.append(Real   (1.0,    10.0,   'uniform',     name='layer2_ratio'))
     search_space.append(Real   (1.0,    10.0,   'uniform',     name='layer1_ratio'))
-    search_space.append(Integer(8,      512,    'log-uniform', name='batch_size'))
+    search_space.append(Integer(16,     512,    'log-uniform', name='batch_size'))
     search_space.append(Real   (1e-6,   1e-2,   'log-uniform', name='learning_rate'))
     search_space.append(Real   (1e-8,   1e-2,   'log-uniform', name='weight_decay'))
 

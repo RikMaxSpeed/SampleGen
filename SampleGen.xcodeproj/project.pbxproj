@@ -30,9 +30,6 @@
 		7929AC272ADD810F006851A3 = {
 			isa = PBXGroup;
 			children = (
-				79E2915C2B1BB01400EF046D /* README.md */,
-				79E2915A2B1BAC5000EF046D /* MakeAndTrain.ipynb */,
-				79E2915B2B1BAC5000EF046D /* WebScrape.ipynb */,
 				79E291592B1BAC0100EF046D /* .gitignore */,
 				7929AC2E2ADD81AA006851A3 /* AudioUtils.py */,
 				792DEDDB2AE584CA00DE1F74 /* Augment.py */,
@@ -43,9 +40,12 @@
 				7929AC322AE01445006851A3 /* Graph.py */,
 				79E291582B19190600EF046D /* HyperParameterTuning.py */,
 				79E291572B18EB8500EF046D /* LegacyModels.py */,
+				79E2915A2B1BAC5000EF046D /* MakeAndTrain.ipynb */,
 				7929AC312ADDBCFF006851A3 /* MakeSTFTs.py */,
 				7929AC332AE05D49006851A3 /* ModelUtils.py */,
+				79E2915C2B1BB01400EF046D /* README.md */,
 				7929AC302ADDBBB2006851A3 /* Train.py */,
+				79E2915B2B1BAC5000EF046D /* WebScrape.ipynb */,
 				79E291552B18DE3200EF046D /* WeightedLoss.py */,
 			);
 			sourceTree = "<group>";

@@ -19,7 +19,8 @@ input_size = stft_buckets * sequence_length
 
 
 def get_best_hyper_params():
-    return [6, 7.753192086063947, 7.411389428825689, 5.301401097330652, 9, 0.0009685451968313163, 5.151727534054279e-05]
+    return [6, 7.753192086063947, 7.411389428825689, 5.301401097330652, 16, 0.0001, 5.151727534054279e-05]
+    #return [6, 7.753192086063947, 7.411389428825689, 5.301401097330652, 9, 0.0009685451968313163, 5.151727534054279e-05] # Converges too quickly
     #return [8, 3.7266841851402606, 3.787922442988532, 8.189781767196333, 9, 4.5017602108986394e-05, 1.767746772905285e-07]
     
 def get_best_filename():
@@ -150,15 +151,6 @@ def predict_stft(model, input_stft, randomise):
     return convert_stft_to_output(predicted_stft), loss
 
 
-def mlp_size(layer_sizes):
-    total_params = 0
-    
-    for i in range(len(layer_sizes) - 1):
-        total_params += (layer_sizes[i] * layer_sizes[i+1]) + layer_sizes[i+1]
-        
-    return total_params
-
-
 # Sample data
 stfts = []
 file_names = []
@@ -210,7 +202,7 @@ def train_model(hyper_params, max_time, max_ratio, max_overfit, verbose):
     
     # Check this model isn't too large (without allocating any memory!)
     train = stfts.numel()
-    size = 2 * mlp_size(layers) # encode and decode, this is pretty accurate, it's missing the stdev layer + ?
+    size = 2 * fully_connected_size(layers) # encode and decode, this is pretty accurate, it's missing the stdev layer + ?
     print(f"layers={layers} -> approx model size={size:,} parameters")
     if size > train * max_ratio * 1.1:
         print("Aborting: max model size exceeded.")
@@ -249,7 +241,7 @@ def train_model(hyper_params, max_time, max_ratio, max_overfit, verbose):
     test_losses = []
     
     # Stopping condition
-    window = 20 # check progress between two windows
+    window = 10 # check progress between two windows
     min_change = 0.005 # stop if lossNew/lossOld - 1 < min_change
 
     graph_interval = 5
@@ -278,18 +270,30 @@ def train_model(hyper_params, max_time, max_ratio, max_overfit, verbose):
             print("Aborting: model returns NaNs :(") # Happens when the learning rate is too high
             return max_loss
             
-        # Save the best models (but not too often)
-        global last_saved_loss
-        if epoch > 20 and train_losses[-1] < last_saved_loss * 0.95:
-            last_saved_loss = train_losses[-1]
-            filename = f"Model {model_text}, loss={last_saved_loss:.4f}.wab"
-            print("*** Best! loss={:.4f}, model={}, hyper={}".format(last_saved_loss, model_text, optimiser_text))
-            torch.save(model.state_dict(), filename)
         
         # Progress
         now = time.time()
         total = now - start
-        
+
+
+        # Save the best models (but not too often)
+        global last_saved_loss
+        if epoch > 20 and train_losses[-1] < last_saved_loss * 0.95:
+            last_saved_loss = train_losses[-1]
+            filename = f"Model {model_text}" # keep over-writing the same file as the loss improves
+            print("*** Best! loss={:.4f}, model={}, hyper={}".format(last_saved_loss, model_text, optimiser_text))
+            torch.save(model.state_dict(), filename + ".wab")
+            with open(filename+".txt", 'w') as file:
+                file.write(f"model: {model_text}\n")
+                file.write(f"optimiser: {optimiser_text}\n")
+                file.write("\n")
+                file.write(f"time={total:.0f} sec, train_size={len(train_dataset)}, batch_size={batch_size}, epoch={epoch} = {total/epoch:.1f} sec/epoch\n")
+                file.write(f"\ttrain loss={train_losses[-1]:.5f}\n")
+                file.write(f"\ttest  loss={test_losses[-1]:.5f}\n")
+                file.write("\n")
+                file.write(str(hyper_params))
+
+
         if verbose and now - lastGraph > graph_interval:
             plot_losses(train_losses, test_losses)
             lastGraph = now
@@ -307,7 +311,7 @@ def train_model(hyper_params, max_time, max_ratio, max_overfit, verbose):
             break
             
         # Early stopping based on average convergence:
-        if epoch % 25 == 0:
+        if epoch % 25 == 0 and epoch > 40:
             mean, stdev = compute_epoch_stats(all_test_losses, epoch, 10)
             loss = test_losses[-1]
             if mean is not None and loss > mean: # we could make this more aggressive, for example: mean - 0.5 * stdev

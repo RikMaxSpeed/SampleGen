@@ -1,4 +1,4 @@
-#  SampleGen: AI modelling of Audio Samples
+#  SampleGen: AI generation of Audio Samples
 
 ## Description
 
@@ -12,11 +12,14 @@ My proposal here is to reate an AI model that can reasonably faithfully regenera
 
 ## Data
 
-The model is trained on a dataset of public samples acquired from websites such as https://freewavesamples.com.
+The model is trained on a dataset of public domain samples acquired from websites such as https://freewavesamples.com.
 
 Currently approx 980 samples have been gathered, restricted purely to the note C4 (interpolation at other frequencies is currently out of scope).
 
+The samples cover many musical instruments, both acoustic, and electronic, including a large number of synthesized sounds. 
+
 If needed, the data can be augmented by simply mixing 2 samples.
+
 
 ## Implementation
 
@@ -76,7 +79,17 @@ My initial model was simply four fully-connected layers, the decoder is implemen
 
 ## Key Lessons Learnt
 
-VAE 
+Using ChatGPT
+
+Data Visualisation
+
+VAE
+KL weight unnecessary!
+
+YouTube tutorials
+
+Hyper-Parameter Optimisation
+
 
 
 ## Conclusion

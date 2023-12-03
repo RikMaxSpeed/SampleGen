@@ -234,7 +234,7 @@ class MuLawCodec:
         return torch.sign(y) * magnitude
 
 
-codec = MuLawCodec(1) # Yet another hyper-parameter but we can't tune this one as it's outside the model's loss function.
+codec = MuLawCodec(2) # Yet another hyper-parameter but we can't tune this one as it's outside the model's loss function.
 
 
 # We normalise all amplitudes to [0, 1] on input.

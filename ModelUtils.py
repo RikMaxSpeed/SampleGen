@@ -132,10 +132,11 @@ def plot_multiple_losses(losses, names, min_count):
     plt.plot(Xs, Ms, label = "Mean loss", linewidth=2, c="blue")
     plt.fill_between(Xs, Ms - SDs, Ms + SDs, color='gray', alpha=0.2, label='±1 SD')
         
-    plt.title("Test Loss vs Epoch")
+    plt.title(f"Test Loss vs Epoch for {len(losses)} runs")
     plt.ylabel("Loss")
     plt.xlabel("Epoch")
-    plt.legend()
+    plt.legend(loc='upper right')
+    plt.tight_layout()
     plt.show()
 
 
@@ -151,3 +152,14 @@ def test_loss_chart():
     plot_multiple_losses(examples, names, 5)
 
 #test_loss_chart()
+
+
+# Computes the number of parameters of stacked fully-connected layers
+def fully_connected_size(layer_sizes):
+
+    total_params = 0
+    
+    for i in range(len(layer_sizes) - 1):
+        total_params += (layer_sizes[i] * layer_sizes[i+1]) + layer_sizes[i+1]
+        
+    return total_params

@@ -3,6 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from Debug import *
 
+
 # Generic VAE composed of a number of fully connected linear layers (re-usable)
 class VariationalAutoEncoder(nn.Module):
     def __init__(self, sizes, activation_fn=F.relu):
@@ -75,6 +76,13 @@ class VariationalAutoEncoder(nn.Module):
 
 
 class STFTVariationalAutoEncoder(nn.Module):
+    @staticmethod
+    def estimate_parameters(sequence_length, stft_buckets, sizes):
+        sizes = [sequence_length * stft_buckets] + sizes
+        return fully_connected_size(sizes) * 2 # encode + decode
+        # Note: this approximate but good enough in practice
+
+
     def __init__(self, sequence_length, stft_buckets, sizes, activation_fn):
         super(STFTVariationalAutoEncoder, self).__init__()
         self.sequence_length = sequence_length
@@ -109,3 +117,65 @@ class STFTVariationalAutoEncoder(nn.Module):
 
     def loss_function(self, recon_x, x, mu, logvar):
         return self.vae.loss_function(recon_x, x, mu, logvar)
+
+
+
+# Basic auto-encoder with no VAE
+
+class HybridCNNAutoEncoder(nn.Module):
+    @staticmethod
+    def estimate_parameters(stft_buckets, seq_length, num_conv_filters, rnn_hidden_size, input_size):
+        # Parameters in the 1D Conv layer
+        conv_params = (stft_buckets * num_conv_filters * 3) + num_conv_filters  # (in_channels * out_channels * kernel_size) + out_channels (for bias)
+
+        # Parameters in the GRU layer - Encoder
+        # GRU parameters = 3 * (hidden_size^2 + hidden_size * input_size + hidden_size) * num_layers
+        rnn_input_size = num_conv_filters * input_size
+        encoder_rnn_params = 3 * (rnn_hidden_size**2 + rnn_hidden_size * rnn_input_size + rnn_hidden_size)
+
+        # Parameters in the GRU layer - Decoder (similar to encoder)
+        decoder_rnn_params = encoder_rnn_params #3 * (rnn_hidden_size**2 + rnn_hidden_size * rnn_input_size + rnn_hidden_size)
+
+        # Parameters in the 1D Transposed Conv layer
+        deconv_params = (num_conv_filters * stft_buckets * 3) + stft_buckets  # (in_channels * out_channels * kernel_size) + out_channels (for bias)
+
+        total_params = conv_params + encoder_rnn_params + decoder_rnn_params + deconv_params
+        return total_params
+
+
+    def __init__(self, stft_buckets, seq_length, num_conv_filters, rnn_hidden_size, input_size):
+        super(HybridCNNAutoEncoder, self).__init__()
+        self.input_size = input_size
+        self.seq_length = seq_length
+        self.rnn_hidden_size = rnn_hidden_size
+
+        # Encoder
+        self.encoder_conv1d = nn.Conv1d(in_channels=stft_buckets, out_channels=num_conv_filters, kernel_size=3, stride=1, padding=1)
+        self.encoder_relu = nn.ReLU()
+        self.encoder_rnn = nn.GRU(input_size=num_conv_filters * input_size, hidden_size=rnn_hidden_size, batch_first=True)
+
+        # Decoder
+        self.decoder_rnn = nn.GRU(input_size=rnn_hidden_size, hidden_size=num_conv_filters * input_size, batch_first=True)
+        self.decoder_conv1d = nn.ConvTranspose1d(in_channels=num_conv_filters, out_channels=stft_buckets, kernel_size=3, stride=1, padding=1)
+
+    def encode(self, x):
+        x = self.encoder_conv1d(x)
+        x = self.encoder_relu(x)
+        x = x.view(x.size(0), self.seq_length, -1)
+        x, _ = self.encoder_rnn(x)
+        return x.flatten()
+
+    def decode(self, x):
+        x = x.view(x.shape[0], self.seq_length, self.rnn_hidden_size)
+        x, _ = self.decoder_rnn(x)
+        x = x.view(x.size(0), -1, self.input_size)
+        x = self.decoder_conv1d(x)
+        return x
+
+    def forward(self, x):
+        x = self.encode(x)
+        x = self.decode(x)
+        return x
+        
+
+
