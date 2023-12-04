@@ -8,9 +8,10 @@ from ModelUtils import *
 
 # Loss functions
 def reconstruction_loss(recon_x, x):
+    assert(recon_x.shape == x.shape)
     return F.mse_loss(recon_x, x, reduction='sum')
-        
-        
+
+
 def kl_divergence(mu, logvar):
     # see https://stackoverflow.com/questions/74865368/kl-divergence-loss-equation
     return -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
@@ -128,7 +129,7 @@ class STFTVariationalAutoEncoder(nn.Module):
     def forward_loss(self, inputs):
         outputs, mus, logvars = self.forward(inputs, True)
         loss = self.loss_function(outputs, inputs, mus, logvars)
-        return loss
+        return loss, outputs
 
 
 
@@ -158,41 +159,60 @@ class HybridCNNAutoEncoder(nn.Module):
 
     def __init__(self, stft_buckets, seq_length, kernel_count, kernel_size, rnn_hidden_size):
         super(HybridCNNAutoEncoder, self).__init__()
+        self.stft_buckets = stft_buckets
         self.seq_length = seq_length
         self.rnn_hidden_size = rnn_hidden_size
-        self.encoded_size = rnn_hidden_size * seq_length
-        print(f"sequence_length={seq_length}, encoded_size={self.encoded_size}")
-        # Encoder
-        self.encoder_conv1d = nn.Conv1d(in_channels=stft_buckets, out_channels=kernel_count, kernel_size=kernel_size, stride=1, padding=1)
-        print(f"encoder_conv1d={self.encoder_conv1d}")
-    
-        self.encoder_rnn = nn.GRU(input_size=kernel_count * seq_length, hidden_size=rnn_hidden_size, batch_first=True)
-        print(f"encoder_rnn={self.encoder_rnn}")
 
-        # Decoder
-        self.decoder_rnn = nn.GRU(input_size=kernel_count * input_size, hidden_size=rnn_hidden_size, batch_first=True)
-        print(f"decoder_rnn={self.decoder_rnn}")
+        # Simulate
+        batch=7
+        x = torch.rand(batch, stft_buckets, seq_length)
+
+        # Encoder
+        conv_pad = 0
+        conv_stride = 1
+        self.encoder_conv1d = nn.Conv1d(in_channels=stft_buckets, out_channels=kernel_count, kernel_size=kernel_size, stride=conv_stride, padding=conv_pad)
+        x = get_output_for_layer("encoder_conv1d", self.encoder_conv1d, x)
+    
+        x = x.view(x.size(0), x.size(2), -1)
+        print(f"x.view={x.shape}")
         
-        self.decoder_conv1d = nn.ConvTranspose1d(in_channels=kernel_count, out_channels=stft_buckets, kernel_size=kernel_size, stride=1, padding=1)
-        print(f"decoder_conv1d={self.decoder_conv1d}")
+        self.encoder_rnn = nn.GRU(input_size=kernel_count, hidden_size=rnn_hidden_size, batch_first=True, num_layers=1, dropout=0) # more hyper-parameters!
+        x = get_output_for_layer("encoder_rnn", self.encoder_rnn, x)
+        
+        # Latent
+        self.latent_size = x.size(1) * x.size(2)
+        x = x.reshape(x.size(0), self.latent_size)
+        print(f"latent={x.shape}")
+        
+        # Decoder
+        x = torch.rand(batch, self.latent_size)
+        x = x.view(x.shape[0], -1, rnn_hidden_size)
+        self.decoder_rnn = nn.GRU(input_size=rnn_hidden_size, hidden_size=kernel_count, batch_first=True)
+        x = get_output_for_layer("decoder_rnn", self.decoder_rnn, x)
+        x = x.reshape(x.size(0), x.size(2), x.size(1))
+        print(f"x.view={x.shape}")
+        self.decoder_conv1d = nn.ConvTranspose1d(in_channels=kernel_count, out_channels=stft_buckets, kernel_size=kernel_size, stride=conv_stride, padding=conv_pad)
+        x = get_output_for_layer("decoder_conv1d", self.decoder_conv1d, x)
+        print("model created successfully!\n\n")
         
         
     def encode(self, x):
-        debug("encode.x", x)
         x = self.encoder_conv1d(x)
-        debug("encoder_conv1d.x", x)
         x = F.relu(x)
-        debug("relu.x", x)
-        x = x.view(x.size(0), self.seq_length, -1)
+        x = x.view(x.size(0), x.size(2), -1)
         x, _ = self.encoder_rnn(x)
-        return x.flatten()
-
+        x = x.reshape(x.size(0), self.latent_size)
+        return x
 
     def decode(self, x):
-        x = x.view(x.shape[0], self.seq_length, self.rnn_hidden_size)
+        assert(x.shape[1] == self.latent_size)
+        x = x.view(x.shape[0], -1, self.rnn_hidden_size)
         x, _ = self.decoder_rnn(x)
-        x = x.view(x.size(0), -1, self.input_size)
+        x = x.reshape(x.size(0), x.size(2), x.size(1))
         x = self.decoder_conv1d(x)
+        assert(x.shape[1] == self.stft_buckets)
+        x = x[:, :, :self.seq_length] # truncate to the expected sequence length
+        assert(x.shape[2] == self.seq_length)
         return x
 
 
@@ -203,8 +223,8 @@ class HybridCNNAutoEncoder(nn.Module):
         
         
     def forward_loss(self, inputs):
-        x = self.forward(inputs)
-        return reconstruction_loss(x, inputs)
+        outputs = self.forward(inputs)
+        return reconstruction_loss(outputs, inputs), outputs
 
 
 ##########################################################################################

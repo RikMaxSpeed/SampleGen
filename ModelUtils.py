@@ -17,6 +17,22 @@ def count_trainable_parameters(model):
     return sum(p.numel() for p in model.parameters() if p.requires_grad)
 
 
+def get_output_for_layer(name, layer, input):
+
+    try:
+        with torch.no_grad():
+            output = layer.forward(input)
+            if isinstance(output, tuple):
+                output = output[0]
+
+        print(f"{name}: layer={layer}, input={input.shape} --> output={output.shape}")
+        return output
+            
+    except Exception as e:
+        print(f"{name}: layer={layer}, input={input.shape} --> error:{e}")
+        raise e
+
+
 def compute_average_loss(model, dataset, batch_size):
     
     model.eval()
@@ -29,10 +45,7 @@ def compute_average_loss(model, dataset, batch_size):
     with torch.no_grad():  # Disable gradient computations during evaluation
         for batch_idx, (inputs,) in enumerate(data_loader):
             inputs = inputs.to(device)
-        
-            # Forward pass
-            outputs, mus, logvars = model.forward(inputs, False)
-            loss = model.loss_function(inputs, outputs, mus, logvars)
+            loss, _ = model.forward_loss(inputs)
 
             total_loss += loss.item() * len(inputs)
             total_samples += len(inputs)

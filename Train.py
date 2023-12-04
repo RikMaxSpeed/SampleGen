@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 from IPython.display import FileLink
 import math
 
-from AutoEncoder import *
+from AutoEncoderModels import *
 from MakeSTFTs import *
 from Graph import *
 from ModelUtils import *
@@ -30,10 +30,9 @@ def predict_stft(model, input_stft, randomise):
     input_stft = input_stft.to(device)
     
     with torch.no_grad():
-        predicted_stft, mu, logvar = model.forward(input_stft, randomise)
-    
-    loss = model.loss_function(predicted_stft, input_stft, mu, logvar).item()
+        loss, predicted_stft = model.forward_loss(input_stft)
 
+    predicted_stft = predicted_stft.squeeze(0)
     return convert_stft_to_output(predicted_stft), loss
 
 
@@ -88,7 +87,6 @@ def train_model(hyper_params, max_time, max_params, max_overfit, verbose):
     
     # Optmiser parameters:
     batch_size, learning_rate, weight_decay = opt_params
-    batch_size=7 # hack
     batch_size = int(batch_size) # required even though it's declared integer in the search-space :(
     optimiser_text = f"batch={batch_size}, learning_rate={learning_rate:.1g}, weight_decay={weight_decay:.1g}"
     print(f"optimiser: {optimiser_text}")
@@ -129,7 +127,7 @@ def train_model(hyper_params, max_time, max_params, max_overfit, verbose):
             inputs = inputs.to(device)
         
             # Forward pass
-            loss = model.forward_loss(inputs)
+            loss, _ = model.forward_loss(inputs)
             
             # Backward pass and optimization
             optimizer.zero_grad()

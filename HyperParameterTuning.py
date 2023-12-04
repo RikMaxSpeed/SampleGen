@@ -54,7 +54,7 @@ def optimise_hyper_parameters():
         set_model_type("Hybrid_CNN")
         search_space.append(Integer(3,      4,      'uniform',      name='kernel_count'))
         search_space.append(Integer(5,      6,      'uniform',      name='kernel_size'))
-        search_space.append(Integer(42,    43,      'uniform',      name='rnn_hidden_size'))
+        search_space.append(Integer(30,    31,      'uniform',      name='rnn_hidden_size'))
 
         
     print("Optimising hyper-parameters:")

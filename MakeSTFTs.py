@@ -175,7 +175,7 @@ def convert_stft_to_output(stft):
     
     # Fix dimensions
     amplitudes = stft.squeeze(0)
-    amplitudes = transpose(amplitudes)
+    #amplitudes = transpose(amplitudes)
     
     # Get rid of any silly values...
     amplitudes[amplitudes <= 0] = 0

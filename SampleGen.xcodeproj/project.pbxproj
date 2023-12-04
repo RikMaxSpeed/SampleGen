@@ -8,7 +8,7 @@
 
 /* Begin PBXFileReference section */
 		7929AC2E2ADD81AA006851A3 /* AudioUtils.py */ = {isa = PBXFileReference; lastKnownFileType = text.script.python; path = AudioUtils.py; sourceTree = "<group>"; };
-		7929AC2F2ADDBB84006851A3 /* AutoEncoder.py */ = {isa = PBXFileReference; lastKnownFileType = text.script.python; path = AutoEncoder.py; sourceTree = "<group>"; };
+		7929AC2F2ADDBB84006851A3 /* AutoEncoderModels.py */ = {isa = PBXFileReference; lastKnownFileType = text.script.python; path = AutoEncoderModels.py; sourceTree = "<group>"; };
 		7929AC302ADDBBB2006851A3 /* Train.py */ = {isa = PBXFileReference; lastKnownFileType = text.script.python; path = Train.py; sourceTree = "<group>"; };
 		7929AC312ADDBCFF006851A3 /* MakeSTFTs.py */ = {isa = PBXFileReference; lastKnownFileType = text.script.python; path = MakeSTFTs.py; sourceTree = "<group>"; };
 		7929AC322AE01445006851A3 /* Graph.py */ = {isa = PBXFileReference; lastKnownFileType = text.script.python; path = Graph.py; sourceTree = "<group>"; };
@@ -33,7 +33,7 @@
 				79E291592B1BAC0100EF046D /* .gitignore */,
 				7929AC2E2ADD81AA006851A3 /* AudioUtils.py */,
 				792DEDDB2AE584CA00DE1F74 /* Augment.py */,
-				7929AC2F2ADDBB84006851A3 /* AutoEncoder.py */,
+				7929AC2F2ADDBB84006851A3 /* AutoEncoderModels.py */,
 				79E291562B18E0AA00EF046D /* Debug.py */,
 				79E291542B1896B600EF046D /* Device.py */,
 				79BC48E42AEBFD4500F9B8B9 /* Generate.py */,
