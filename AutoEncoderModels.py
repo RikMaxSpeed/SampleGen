@@ -7,9 +7,9 @@ from ModelUtils import *
 
 
 # Loss functions
-def reconstruction_loss(recon_x, x):
-    assert(recon_x.shape == x.shape)
-    return F.mse_loss(recon_x, x, reduction='sum')
+def reconstruction_loss(inputs, outputs):
+    assert(inputs.shape == outputs.shape)
+    return F.mse_loss(inputs, outputs, reduction='sum')
 
 
 def kl_divergence(mu, logvar):
@@ -19,6 +19,12 @@ def kl_divergence(mu, logvar):
 
 # Generic VAE composed of a number of fully connected linear layers (re-usable)
 class VariationalAutoEncoder(nn.Module):
+    @staticmethod
+    def approx_trainable_parameters(sizes):
+        return fully_connected_size(sizes) * 2 # encode + decode
+        # Note: approximate but good enough in practice
+        
+        
     def __init__(self, sizes, activation_fn=F.relu):
         super(VariationalAutoEncoder, self).__init__()
         
@@ -69,8 +75,8 @@ class VariationalAutoEncoder(nn.Module):
         return self.decode(z), mu, logvar
         
         
-    def loss_function(self, recon_x, x, mu, logvar):
-        error  = reconstruction_loss(recon_x, x)
+    def loss_function(self, inputs, outputs, mu, logvar):
+        error  = reconstruction_loss(inputs, outputs)
         kl_div = kl_divergence(mu, logvar)
 
         #print("error={:.3f}, kl_divergence={:.3f}, ratio={:.1f}".format(error, kl_div, kl_div/error))
@@ -84,10 +90,9 @@ class VariationalAutoEncoder(nn.Module):
 
 class STFTVariationalAutoEncoder(nn.Module):
     @staticmethod
-    def estimate_parameters(sequence_length, stft_buckets, sizes):
+    def approx_trainable_parameters(sequence_length, stft_buckets, sizes):
         sizes = [sequence_length * stft_buckets] + sizes
-        return fully_connected_size(sizes) * 2 # encode + decode
-        # Note: this approximate but good enough in practice
+        return VariationalAutoEncoder.approx_trainable_parameters(sizes)
 
 
     def __init__(self, sequence_length, stft_buckets, sizes, activation_fn):
@@ -115,116 +120,174 @@ class STFTVariationalAutoEncoder(nn.Module):
         return x
         
         
-    def forward(self, x, randomize):
+    def forward(self, x):
         x = x.reshape(x.size(0), -1)
         x, mu, logvar = self.vae.forward(x)
         x = x.reshape(x.size(0), self.sequence_length, self.stft_buckets)
         return x, mu, logvar
 
 
-    def loss_function(self, recon_x, x, mu, logvar):
-        return self.vae.loss_function(recon_x, x, mu, logvar)
+    def loss_function(self, inputs, outputs, mu, logvar):
+        return self.vae.loss_function(inputs, outputs, mu, logvar)
 
 
     def forward_loss(self, inputs):
         outputs, mus, logvars = self.forward(inputs, True)
-        loss = self.loss_function(outputs, inputs, mus, logvars)
+        loss = self.loss_function(inputs, outputs, mus, logvars)
         return loss, outputs
 
 
-
 ##########################################################################################
-# CNN/RNN Auto-encoder with no VAE
+# Step-Wise MLP Auto-encoder with no VAE
 #
 
-class HybridCNNAutoEncoder(nn.Module):
+class StepWiseMLPAutoEncoder(nn.Module):
+        
     @staticmethod
-    def estimate_parameters(stft_buckets, seq_length, kernel_count, kernel_size, rnn_hidden_size):
-        # Parameters in the 1D Conv layer
-        conv_params = (stft_buckets * kernel_count * kernel_count) + kernel_count  # (in_channels * out_channels * kernel_size) + out_channels (for bias)
-
-        # Parameters in the GRU layer - Encoder
-        rnn_input_size = kernel_count * seq_length
-        encoder_rnn_params = 3 * (rnn_hidden_size**2 + rnn_hidden_size * seq_length + rnn_hidden_size)
-
-        # Parameters in the GRU layer - Decoder (similar to encoder)
-        decoder_rnn_params = encoder_rnn_params #3 * (rnn_hidden_size**2 + rnn_hidden_size * rnn_input_size + rnn_hidden_size)
-
-        # Parameters in the 1D Transposed Conv layer
-        deconv_params = (kernel_count * stft_buckets * kernel_count) + stft_buckets  # (in_channels * out_channels * kernel_size) + out_channels (for bias)
-
-        total_params = conv_params + encoder_rnn_params + decoder_rnn_params + deconv_params
-        return total_params
-
-
-    def __init__(self, stft_buckets, seq_length, kernel_count, kernel_size, rnn_hidden_size):
-        super(HybridCNNAutoEncoder, self).__init__()
-        self.stft_buckets = stft_buckets
-        self.seq_length = seq_length
-        self.rnn_hidden_size = rnn_hidden_size
-
-        # Simulate
-        batch=7
-        x = torch.rand(batch, stft_buckets, seq_length)
-
-        # Encoder
-        conv_pad = 0
-        conv_stride = 1
-        self.encoder_conv1d = nn.Conv1d(in_channels=stft_buckets, out_channels=kernel_count, kernel_size=kernel_size, stride=conv_stride, padding=conv_pad)
-        x = get_output_for_layer("encoder_conv1d", self.encoder_conv1d, x)
-    
-        x = x.view(x.size(0), x.size(2), -1)
-        print(f"x.view={x.shape}")
+    def get_layer_sizes(stft_buckets, control_size, depth, ratio):
+        encode_layer_sizes = interpolate_layer_sizes(1 + 2 * stft_buckets, control_size, depth, ratio)
+        decode_layer_sizes = interpolate_layer_sizes(1 + stft_buckets + control_size, stft_buckets, depth, ratio)
+        return encode_layer_sizes, decode_layer_sizes
         
-        self.encoder_rnn = nn.GRU(input_size=kernel_count, hidden_size=rnn_hidden_size, batch_first=True, num_layers=1, dropout=0) # more hyper-parameters!
-        x = get_output_for_layer("encoder_rnn", self.encoder_rnn, x)
+    @staticmethod
+    def approx_trainable_parameters(stft_buckets, control_size, depth, ratio):
+        encode_layer_sizes, decode_layer_sizes = StepWiseMLPAutoEncoder.get_layer_sizes(stft_buckets, control_size, depth, ratio)
+        encode_size = fully_connected_size(encode_layer_sizes)
+        decode_size = fully_connected_size(decode_layer_sizes)
+        total = encode_size + decode_size
+        print("encode={encode_layer_sizes}={encode_size:,}, decode={decode_layer_sizes}={decode_size:,}, total={total:,}")
+        return total
+
+    def __init__(self, stft_buckets, sequence_length, control_size, depth, ratio):
+        super(StepWiseMLPAutoEncoder, self).__init__()
         
-        # Latent
-        self.latent_size = x.size(1) * x.size(2)
-        x = x.reshape(x.size(0), self.latent_size)
-        print(f"latent={x.shape}")
+        self.sequence_length = sequence_length
+        self.control_size = control_size
+        print(f"Compression: {stft_buckets/control_size:.1f} x smaller")
+        encode_layer_sizes, decode_layer_sizes = StepWiseMLPAutoEncoder.get_layer_sizes(stft_buckets, control_size, depth, ratio)
         
-        # Decoder
-        x = torch.rand(batch, self.latent_size)
-        x = x.view(x.shape[0], -1, rnn_hidden_size)
-        self.decoder_rnn = nn.GRU(input_size=rnn_hidden_size, hidden_size=kernel_count, batch_first=True)
-        x = get_output_for_layer("decoder_rnn", self.decoder_rnn, x)
-        x = x.reshape(x.size(0), x.size(2), x.size(1))
-        print(f"x.view={x.shape}")
-        self.decoder_conv1d = nn.ConvTranspose1d(in_channels=kernel_count, out_channels=stft_buckets, kernel_size=kernel_size, stride=conv_stride, padding=conv_pad)
-        x = get_output_for_layer("decoder_conv1d", self.decoder_conv1d, x)
-        print("model created successfully!\n\n")
-        
-        
+        self.encoder = build_sequential_model(encode_layer_sizes)
+        self.decoder = build_sequential_model(decode_layer_sizes)
+
+        display(self)
+
     def encode(self, x):
-        x = self.encoder_conv1d(x)
-        x = F.relu(x)
-        x = x.view(x.size(0), x.size(2), -1)
-        x, _ = self.encoder_rnn(x)
-        x = x.reshape(x.size(0), self.latent_size)
-        return x
+        batch_size = x.size(0)
+        controls = torch.zeros(batch_size, self.sequence_length, self.control_size).to(device)
+        prev_stft = torch.zeros(batch_size, stft_buckets).to(device)
+        
+        # Process each time step
+        for t in range(self.sequence_length):
+            t_tensor = torch.full((batch_size, 1), t / float(self.sequence_length), dtype=torch.float32).to(device)
+            
+            # Concatenate previous STFT, current STFT, and time step
+            curr_stft = x[:, :, t]
+            combined_input = torch.cat([prev_stft, curr_stft, t_tensor], dim=1)
+            
+            # Update control parameters
+            result = self.encoder(combined_input)
+            controls[:, t, :] = result
+
+            # Update previous STFT frame
+            prev_stft = curr_stft.clone()
+
+        controls = controls.flatten(-2)
+        return controls
+
 
     def decode(self, x):
-        assert(x.shape[1] == self.latent_size)
-        x = x.view(x.shape[0], -1, self.rnn_hidden_size)
-        x, _ = self.decoder_rnn(x)
-        x = x.reshape(x.size(0), x.size(2), x.size(1))
-        x = self.decoder_conv1d(x)
-        assert(x.shape[1] == self.stft_buckets)
-        x = x[:, :, :self.seq_length] # truncate to the expected sequence length
-        assert(x.shape[2] == self.seq_length)
-        return x
+        batch_size = x.size(0)
+        controls = x.view(batch_size, self.sequence_length, self.control_size).to(device)
+        prev_stft = torch.zeros(batch_size, stft_buckets).to(device)
+        reconstructed = torch.zeros(batch_size, stft_buckets, self.sequence_length).to(device)
+
+        # Process each time step
+        for t in range(self.sequence_length):
+            t_tensor = torch.full((batch_size, 1), t / float(self.sequence_length), dtype=torch.float32).to(device)
+
+            # Concatenate control parameters and previous STFT
+            combined_input = torch.cat([controls[:, t, :], prev_stft, t_tensor], dim=1)
+            
+            # Update previous STFT frame with the output of the decoder
+            prev_stft = self.decoder(combined_input)
+
+            # Store the reconstructed STFT frame
+            reconstructed[:, :, t] = prev_stft
+
+        return reconstructed
 
 
-    def forward(self, x):
-        x = self.encode(x)
-        x = self.decode(x)
-        return x
+    def forward(self, inputs):
+        controls = self.encode(inputs)
+        outputs = self.decode(controls)
+        return outputs
         
         
     def forward_loss(self, inputs):
         outputs = self.forward(inputs)
-        return reconstruction_loss(outputs, inputs), outputs
+        loss = reconstruction_loss(inputs, outputs) / inputs[0].numel()
+        return loss, outputs
+
+
+##########################################################################################
+# Step-Wise MLP Auto-encoder with VAE
+# Here we combine the StepWiseMLP model with the VAE auto-encoder.
+# It might actually be possible to train them separately, ie: first the StepWiseMLP, then use the VAE to further compress the data.
+
+class StepWiseVAEAutoEncoder:
+    @staticmethod
+    def get_vae_layers(stft_buckets, sequence_length, control_size, depth, ratio, latent_size, vae_depth, vae_ratio):
+        stepwise_output_size = controls * latent_size
+        return interpolate_layer_sizes(stepwise_output_size, latent_size, vae_depth, vae_ratio)
+
+
+    @staticmethod
+    def approx_trainable_parameters(stft_buckets, sequence_length, control_size, depth, ratio, latent_size, vae_depth, vae_ratio):
+        stepwise = StepWiseMLPAutoEncoder.approx_trainable_parameters(stft_buckets, control_size, depth, ratio)
+        vae_layers = get_vae_layers(stft_buckets, sequence_length, control_size, depth, ratio, latent_size, vae_depth, vae_ratio)
+        vae = VariationalAutoEncoder.approx_trainable_parameters(vae_layers)
+        return stepwise + vae
+
+
+    def __init__(self, stft_buckets, sequence_length, control_size, depth, ratio, latent_size, vae_depth, vae_ratio):
+        super(StepWiseMLPVAEAutoEncoder, self).__init__()
+        
+        self.stepwise = StepWiseMLPAutoEncoder(stft_buckets, sequence_length, control_size, depth, ratio)
+        
+        vae_layers = get_vae_layers(stft_buckets, sequence_length, control_size, depth, ratio, latent_size, vae_depth, vae_ratio)
+        self.vae = VariationalAutoEncoder(vae_layers)
+
+
+    def encode(self, x):
+        controls = self.stepwise.encode(x)
+        mu, logvar = self.vae.encode(controls)
+        return mu, logvar
+
+
+    def decode(self, z):
+        controls = self.vae.decode(z)
+        stft = self.stepwise.decode(controls)
+        return stft
+
+
+    def forward(self, x):
+        mu, logvar = self.encode(x)
+        z = self.vae.reparameterize(mu, logvar)
+        return self.decode(z), mu, logvar
+        
+        
+    def loss_function(self, inputs, outputs, mu, logvar):
+        return self.vae.loss_function(inputs, outputs, mu, logvar)
+        
+        
+    def forward_loss(self, inputs):
+        outputs, mus, logvars = self.forward(inputs, True)
+        loss = self.loss_function(inputs, outputs, mus, logvars)
+        return loss, outputs
+
+    
+
+
 
 
 ##########################################################################################
@@ -253,10 +316,6 @@ def get_layers(model_params):
 
     return layers
     
-    
-
-
-
 
 def make_model(model_params, max_params, verbose):
     invalid_model = None, None
@@ -271,8 +330,18 @@ def make_model(model_params, max_params, verbose):
             
         model_text = f"{model_type}: latent={layers[4]}, layer3={layers[3]}, layer2={layers[2]}, layer1={layers[1]}"
         model = STFTVariationalAutoEncoder(sequence_length, stft_buckets, layers[1:], nn.ReLU())
-
-    elif model_type == "Hybrid_CNN":
+        
+    elif model_type == "StepWiseMLP":
+        control_size, depth, ratio = model_params
+        approx_size = StepWiseMLPAutoEncoder.approx_trainable_parameters(stft_buckets, control_size, depth, ratio)
+        if approx_size > max_params:
+            print(f"Model is too large: approx {size:,} parameters vs max={max_params:,}")
+            return invalid_model
+            
+        model_text = f"{model_type}: control={control_size}, depth={depth}, ratio={ratio:.2f}"
+        model = StepWiseMLPAutoEncoder(stft_buckets, sequence_length, control_size, depth, ratio)
+            
+    elif model_type == "Hybrid_CNN": # This didn't work
         kernel_count, kernel_size, rnn_hidden_size = model_params
         
         # for some reason we get int64 here which upsets PyTorch...
@@ -280,7 +349,7 @@ def make_model(model_params, max_params, verbose):
         kernel_size     = int(kernel_size)
         rnn_hidden_size = int(rnn_hidden_size)
         
-        approx_size = HybridCNNAutoEncoder.estimate_parameters(stft_buckets, sequence_length, kernel_count, kernel_size, rnn_hidden_size)
+        approx_size = HybridCNNAutoEncoder.approx_trainable_parameters(stft_buckets, sequence_length, kernel_count, kernel_size, rnn_hidden_size)
         print(f"approx_size={approx_size:,} parameters")
         if approx_size > max_params:
             print(f"Model is too large: approx {size:,} parameters vs max={max_params:,}")
@@ -296,7 +365,7 @@ def make_model(model_params, max_params, verbose):
     
     # Check the real size:
     size = count_trainable_parameters(model)
-    print(f"model={model_type}, approx size={approx_size:,} parmaters, exact={size:,}, error={100*(approx_size/size - 1):.2f}%")
+    print(f"model={model_type}, approx size={approx_size:,} parameters, exact={size:,}, error={100*(approx_size/size - 1):.2f}%")
     
     if size > max_params:
         print(f"Model is too large: {size:,} parameters vs max={max_params:,}")

@@ -227,3 +227,101 @@ class STFTAutoEncoder(nn.Module):
         x = self.decode(x)
         return x
 
+
+
+
+##########################################################################################
+# CNN/RNN Auto-encoder with no VAE
+#
+
+class HybridCNNAutoEncoder(nn.Module):
+    @staticmethod
+    def approx_trainable_parameters(stft_buckets, seq_length, kernel_count, kernel_size, rnn_hidden_size):
+        # Parameters in the 1D Conv layer
+        conv_params = (stft_buckets * kernel_count * kernel_count) + kernel_count  # (in_channels * out_channels * kernel_size) + out_channels (for bias)
+
+        # Parameters in the GRU layer - Encoder
+        rnn_input_size = kernel_count * seq_length
+        encoder_rnn_params = 3 * (rnn_hidden_size**2 + rnn_hidden_size * seq_length + rnn_hidden_size)
+
+        # Parameters in the GRU layer - Decoder (similar to encoder)
+        decoder_rnn_params = encoder_rnn_params #3 * (rnn_hidden_size**2 + rnn_hidden_size * rnn_input_size + rnn_hidden_size)
+
+        # Parameters in the 1D Transposed Conv layer
+        deconv_params = (kernel_count * stft_buckets * kernel_count) + stft_buckets  # (in_channels * out_channels * kernel_size) + out_channels (for bias)
+
+        total_params = conv_params + encoder_rnn_params + decoder_rnn_params + deconv_params
+        return total_params
+
+
+    def __init__(self, stft_buckets, seq_length, kernel_count, kernel_size, rnn_hidden_size):
+        super(HybridCNNAutoEncoder, self).__init__()
+        self.stft_buckets = stft_buckets
+        self.seq_length = seq_length
+        self.rnn_hidden_size = rnn_hidden_size
+
+        # Simulate
+        batch=7
+        x = torch.rand(batch, stft_buckets, seq_length)
+    
+        # Encoder
+        conv_pad = 0
+        conv_stride = 1
+        x = x.unsqueeze(1)
+        print(f"x.unsqueeze={x.shape}")
+        self.encoder_conv = nn.Conv2d(in_channels=1, out_channels=kernel_count, kernel_size=(1, kernel_size), stride=conv_stride, padding=conv_pad)
+        x = get_output_for_layer("encoder_conv", self.encoder_conv, x)
+    
+        stft_kernel_results = x.size(1) * x.size(2)
+        x = x.reshape(x.size(0), x.size(3), stft_kernel_results)
+        print(f"x.reshape={x.shape}")
+        
+        self.encoder_rnn = nn.GRU(input_size=stft_kernel_results, hidden_size=rnn_hidden_size, batch_first=True, num_layers=1, dropout=0) # more hyper-parameters!
+        x = get_output_for_layer("encoder_rnn", self.encoder_rnn, x)
+        
+        # Latent
+        self.latent_size = x.size(1) * x.size(2)
+        x = x.reshape(x.size(0), self.latent_size)
+        print(f"latent={x.shape}")
+        
+        # Decoder
+        x = torch.rand(batch, self.latent_size)
+        x = x.view(x.shape[0], -1, rnn_hidden_size)
+        self.decoder_rnn = nn.GRU(input_size=rnn_hidden_size, hidden_size=stft_kernel_results, batch_first=True)
+        x = get_output_for_layer("decoder_rnn", self.decoder_rnn, x)
+        x = x.unsqueeze(1)
+        print(f"x.unsqueeze={x.shape}")
+        self.decoder_conv = nn.ConvTranspose2d(in_channels=1, out_channels=stft_buckets, kernel_size=(1, kernel_size), stride=conv_stride, padding=conv_pad)
+        x = get_output_for_layer("decoder_conv", self.decoder_conv, x)
+        print("model created successfully!\n\n")
+        
+        
+    def encode(self, x):
+        x = self.encoder_conv(x)
+        x = F.relu(x)
+        x = x.view(x.size(0), x.size(2), -1)
+        x, _ = self.encoder_rnn(x)
+        x = x.reshape(x.size(0), self.latent_size)
+        return x
+
+    def decode(self, x):
+        assert(x.shape[1] == self.latent_size)
+        x = x.view(x.shape[0], -1, self.rnn_hidden_size)
+        x, _ = self.decoder_rnn(x)
+        x = x.reshape(x.size(0), x.size(2), x.size(1))
+        x = self.decoder_conv(x)
+        assert(x.shape[1] == self.stft_buckets)
+        x = x[:, :, :self.seq_length] # truncate to the expected sequence length
+        assert(x.shape[2] == self.seq_length)
+        return x
+
+
+    def forward(self, x):
+        x = self.encode(x)
+        x = self.decode(x)
+        return x
+        
+        
+    def forward_loss(self, inputs):
+        outputs = self.forward(inputs)
+        return reconstruction_loss(outputs, inputs), outputs

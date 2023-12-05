@@ -46,8 +46,15 @@ def compute_average_loss(model, dataset, batch_size):
         for batch_idx, (inputs,) in enumerate(data_loader):
             inputs = inputs.to(device)
             loss, _ = model.forward_loss(inputs)
-
-            total_loss += loss.item() * len(inputs)
+            loss = loss.item()
+            
+            if np.isnan(loss): # give-up
+                raise Exception("model.forward_loss returned NaN :(")
+                
+            if loss > 1e6: # also give up if the model explodes
+                raise Exception(f"model.forward_loss exploded: loss={loss:g} :(")
+                
+            total_loss += loss * len(inputs)
             total_samples += len(inputs)
 
     return total_loss / total_samples
@@ -185,3 +192,32 @@ def fully_connected_size(layer_sizes):
         total_params += (layer_sizes[i] * layer_sizes[i+1]) + layer_sizes[i+1]
         
     return total_params
+
+
+# Builds multiple fully-connected layers with ReLU() in between:
+def build_sequential_model(layer_sizes):
+    layers = []
+    
+    for i in range(len(layer_sizes) - 1):
+        layers.append(nn.Linear(layer_sizes[i], layer_sizes[i+1]))
+        if i < len(layer_sizes) - 2:  # Add ReLU activation for all but the last layer
+            layers.append(nn.ReLU())
+            
+    return nn.Sequential(*layers)
+    
+# Interpolates a list of layer sizes form start input to and end output, with a given depth layers and a power ratio
+# If ratio = 1, the interpolation is linear.
+# If ratio < 1, the intermediate layers will tend towards the end size.
+# If ratio > 1, the intermediate layers will tend towards the start size.
+# This allows us to parameterise the construction of N-layer MLPs, whilst biasing the layer sizes to the start dimension or the end
+# dimensions. Assuming start & end are fixed, we only have 2 parameters to tune for the shape of the MLP: depth & ratio.
+
+def interpolate_layer_sizes(start, end, depth, ratio):
+    layers=[]
+    for i in range(depth):
+        t = i / (depth - 1)
+        t = t ** ratio
+        layers.append(int(start + t * (end - start)))
+    
+    #print(f"start={start}, end={end}, depth={depth}, ratio={ratio:.2f} --> layers={layers}")
+    return layers

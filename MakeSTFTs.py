@@ -12,7 +12,7 @@ sample_rate = 44100
 stft_buckets = 1024
 stft_hop = int(1024 * 3 / 4)
 
-sample_duration = 2 # seconds
+sample_duration = 2.0 # seconds
 sequence_length = int(sample_duration * sample_rate / stft_hop)
 input_size = stft_buckets * sequence_length
 

@@ -35,7 +35,7 @@ def evaluate_model(params):
 
 
 def optimise_hyper_parameters():
-    generate_training_stfts(1000) # we could use a smaller data-set here to speed things up?
+    generate_training_stfts(100) # we could use a smaller data-set here to speed things up?
 
     # Optimiser:
     search_space = list()
@@ -51,10 +51,15 @@ def optimise_hyper_parameters():
         search_space.append(Real   (1.0,    10.0,   'uniform',      name='layer2_ratio'))
         search_space.append(Real   (1.0,    10.0,   'uniform',      name='layer1_ratio'))
     else:
-        set_model_type("Hybrid_CNN")
-        search_space.append(Integer(3,      4,      'uniform',      name='kernel_count'))
-        search_space.append(Integer(5,      6,      'uniform',      name='kernel_size'))
-        search_space.append(Integer(30,    31,      'uniform',      name='rnn_hidden_size'))
+        set_model_type("StepWiseMLP")
+        search_space.append(Integer(10,       50,   'uniform',      name='control_size'))
+        search_space.append(Integer(2,         4,   'uniform',      name='depth'))
+        search_space.append(Real   (0.1,     2.0,   'log-uniform',  name='ratio'))
+#    else: # Didn't work
+#        set_model_type("Hybrid_CNN")
+#        search_space.append(Integer(3,      4,      'uniform',      name='kernel_count'))
+#        search_space.append(Integer(5,      6,      'uniform',      name='kernel_size'))
+#        search_space.append(Integer(30,    31,      'uniform',      name='rnn_hidden_size'))
 
         
     print("Optimising hyper-parameters:")
