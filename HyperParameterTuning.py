@@ -32,6 +32,8 @@ def evaluate_model(params):
             print(f"*** Exception: {e}")
         except:
             print(f"*** Something broke :(")
+        
+        return 100000 # return a high loss...
 
 
 def optimise_hyper_parameters():

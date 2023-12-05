@@ -20,7 +20,7 @@ def log_interp(start, end, steps):
 
 
 
-def predict_stft(model, input_stft, randomise):
+def predict_stft(model, input_stft):
     input_stft = convert_stft_to_input(input_stft)
 
     # Add an extra dimension for batch (if not already present)
@@ -41,9 +41,11 @@ stfts = []
 file_names = []
 count = -1
 sanity_test_stft = None
+sanity_test_name = None
+
 
 def generate_training_stfts(how_many):
-    global stfts, filenames, count, sanity_test_stft
+    global stfts, filenames, count, sanity_test_stft, sanity_test_name
     
     if how_many == count:
         return # no need to do this again
@@ -55,7 +57,14 @@ def generate_training_stfts(how_many):
     assert(len(stfts) == count)
     
     print(f"Using {count} STFTs")
-    sanity_test_stft = stfts[7] # Used to prove everything's working from A-Z
+    
+    # Here we pick an example file to sanity check that everything is behaving from A-Z
+    for i in range(len(file_names)):
+        if "grand piano c3" in file_names[i].lower():
+            sanity_test_stft = stfts[i]
+            sanity_test_name = file_names[i]
+            break
+    
     lengths = np.array([x.shape[1] for x in stfts])
     plot_multiple_histograms_vs_gaussian([lengths * stft_hop / sample_rate], ["Sample Durations (seconds)"])
     stfts = torch.stack([convert_stft_to_input(stft) for stft in stfts])
@@ -152,9 +161,13 @@ def train_model(hyper_params, max_time, max_params, max_overfit, verbose):
         global last_saved_loss
         if epoch > 20 and train_losses[-1] < last_saved_loss * 0.95:
             last_saved_loss = train_losses[-1]
+            
+            # Save the model:
             filename = model_text # keep over-writing the same file as the loss improves
             print("*** Best! loss={:.4f}, model={}, hyper={}".format(last_saved_loss, model_text, optimiser_text))
             torch.save(model.state_dict(), filename + ".wab")
+            
+            # Write the parameters to file:
             with open(filename+".txt", 'w') as file:
                 file.write(model_text + "\n")
                 file.write(f"optimiser: {optimiser_text}\n")
@@ -164,7 +177,11 @@ def train_model(hyper_params, max_time, max_params, max_overfit, verbose):
                 file.write(f"\ttest  loss={test_losses[-1]:.5f}\n")
                 file.write("\n")
                 file.write(str(hyper_params))
-
+            
+            # Generate a test tone:
+            resynth, loss = predict_stft(model, sanity_test_stft)
+            save_and_play_audio_from_stft(resynth, sample_rate, stft_hop, f"Results/{sanity_test_name} {model_text} - resynth.wav", False)
+            
 
         if verbose and now - lastGraph > graph_interval:
             plot_losses(train_losses, test_losses)
@@ -177,7 +194,7 @@ def train_model(hyper_params, max_time, max_params, max_overfit, verbose):
             break
     
         if epoch < 5: # Test a random sample to show that the code is working from A-Z
-            resynth, loss = predict_stft(model, sanity_test_stft, True)
+            resynth, loss = predict_stft(model, sanity_test_stft)
 
         if total > max_time:
             print("Total time={:.1f} exceeds max={:.0f}sec".format(total, max_time))
@@ -249,7 +266,7 @@ def test_all():
         if noisy:
             save_and_play_audio_from_stft(stft.cpu().numpy(), sample_rate, stft_hop, None, True)
         
-        resynth, loss = predict_stft(model, stft, False)
+        resynth, loss = predict_stft(model, stft)
         names.append(name)
         losses.append(loss)
         

@@ -140,7 +140,9 @@ class STFTVariationalAutoEncoder(nn.Module):
 
 ##########################################################################################
 # Step-Wise MLP Auto-encoder with no VAE
-#
+# At each step in the STFT, we run a MLP using as input the previous and current frames, and output a 'control' result.
+# The goals are that the MLP learns how to predict a frame from the previous frame, and to generate key descriptive parameters at each step.
+# On further reading, it looks like this could be replaced with an RNN, I will give that a go!
 
 class StepWiseMLPAutoEncoder(nn.Module):
         
@@ -353,9 +355,9 @@ def make_model(model_params, max_params, verbose):
             print(f"Model is too large: approx {size:,} parameters vs max={max_params:,}")
             return invalid_model
             
-        model_text = f"{model_type}: control={control_size}, depth={depth}, ratio={ratio:.2f}"
+        model_text = f"{model_type}: control={control_size}, depth={depth}, ratio={ratio:.2f}, latent={latent_size}, VAE depth={vae_depth}, VAE ratio={vae_ratio:.2f}"
         model = StepWiseVAEMLPAutoEncoder(stft_buckets, sequence_length, control_size, depth, ratio, latent_size, vae_depth, vae_ratio)
-            
+    
             
     elif model_type == "Hybrid_CNN": # This didn't work
         kernel_count, kernel_size, rnn_hidden_size = model_params

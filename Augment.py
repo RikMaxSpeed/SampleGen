@@ -71,7 +71,7 @@ def get_training_stfts(total = None):
     if total is None:
         total = count
         
-    if count >= total: # We could shuffle, but I'll keep it relatively static for now.
+    if count >= total: # We could shuffle, but I'll keep it static for now.
         return stfts[:total], file_names[:total]
     
     # Augment
