@@ -11,7 +11,7 @@ from Train import *
 max_params = 120000000 # Approx size of 1000 STFTs in the trainin set
 
 count = 0
-break_on_exceptions = True
+break_on_exceptions = False # Set this to False to allow the process to continue even if the model blows up.
 
 def evaluate_model(params):
     global count
