@@ -213,6 +213,11 @@ def build_sequential_model(layer_sizes):
 # dimensions. Assuming start & end are fixed, we only have 2 parameters to tune for the shape of the MLP: depth & ratio.
 
 def interpolate_layer_sizes(start, end, depth, ratio):
+    assert(depth > 0)
+    
+    if depth == 1:
+        return [start, end]
+
     layers=[]
     for i in range(depth):
         t = i / (depth - 1)

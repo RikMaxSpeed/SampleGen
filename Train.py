@@ -87,6 +87,7 @@ def train_model(hyper_params, max_time, max_params, max_overfit, verbose):
     
     # Optmiser parameters:
     batch_size, learning_rate, weight_decay = opt_params
+    batch_size = 7 # debug hack
     batch_size = int(batch_size) # required even though it's declared integer in the search-space :(
     optimiser_text = f"batch={batch_size}, learning_rate={learning_rate:.1g}, weight_decay={weight_decay:.1g}"
     print(f"optimiser: {optimiser_text}")

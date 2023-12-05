@@ -45,17 +45,36 @@ def optimise_hyper_parameters():
 
     # Model:
     if False:
+        # Train the STFTVariationalAutoEncoder
         set_model_type("VAE_MLP")
         search_space.append(Integer(4,      8,      'uniform',      name='latent_size'))
         search_space.append(Real   (1.0,    10.0,   'uniform',      name='layer3_ratio'))
         search_space.append(Real   (1.0,    10.0,   'uniform',      name='layer2_ratio'))
         search_space.append(Real   (1.0,    10.0,   'uniform',      name='layer1_ratio'))
-    else:
+        
+    if False:
+        # Train just the StepWiseMLPAutoEncode (with no VAE)
         set_model_type("StepWiseMLP")
         search_space.append(Integer(10,       50,   'uniform',      name='control_size'))
         search_space.append(Integer(2,         4,   'uniform',      name='depth'))
         search_space.append(Real   (0.1,     2.0,   'log-uniform',  name='ratio'))
-#    else: # Didn't work
+        
+    if True:
+        # Train the StepWiseVAEMLPAutoEncoder
+        set_model_type("StepWiseVAEMLP")
+        
+        # StepWiseMLP parameters
+        search_space.append(Integer(40,       50,   'uniform',      name='control_size'))
+        search_space.append(Integer(2,         4,   'uniform',      name='depth'))
+        search_space.append(Real   (0.1,       4,   'log-uniform',  name='ratio'))
+        
+        # VAE parameters:
+        search_space.append(Integer(4,         8,   'uniform',      name='latent_size'))
+        search_space.append(Integer(1,         5,   'uniform',      name='vae_depth'))
+        search_space.append(Real   (0.1,       4,   'log-uniform',  name='vae_ratio'))
+    
+
+#    if False: # didn't work well
 #        set_model_type("Hybrid_CNN")
 #        search_space.append(Integer(3,      4,      'uniform',      name='kernel_count'))
 #        search_space.append(Integer(5,      6,      'uniform',      name='kernel_size'))

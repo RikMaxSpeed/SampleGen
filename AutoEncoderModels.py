@@ -43,6 +43,8 @@ class VariationalAutoEncoder(nn.Module):
         # Activation function
         self.activation_fn = activation_fn
 
+        print(f"VariationalAutoEncoder compression: {sizes[0]/sizes[-1]:.1f} x smaller")
+
 
     def encode(self, x):
         for layer in self.encoder_layers:
@@ -84,8 +86,7 @@ class VariationalAutoEncoder(nn.Module):
         # The optimiser appears to be able to efficiently minimise the KL loss, so it's unneccesary to weight it vs the reconstruction loss.
         kl_weight = 1.0
         
-        return (error + kl_weight * kl_div) / x[0].numel()
-
+        return (error + kl_weight * kl_div) / inputs[0].numel()
 
 
 class STFTVariationalAutoEncoder(nn.Module):
@@ -155,7 +156,7 @@ class StepWiseMLPAutoEncoder(nn.Module):
         encode_size = fully_connected_size(encode_layer_sizes)
         decode_size = fully_connected_size(decode_layer_sizes)
         total = encode_size + decode_size
-        print("encode={encode_layer_sizes}={encode_size:,}, decode={decode_layer_sizes}={decode_size:,}, total={total:,}")
+        print(f"encode={encode_layer_sizes}={encode_size:,}, decode={decode_layer_sizes}={decode_size:,}, total={total:,}")
         return total
 
     def __init__(self, stft_buckets, sequence_length, control_size, depth, ratio):
@@ -163,13 +164,11 @@ class StepWiseMLPAutoEncoder(nn.Module):
         
         self.sequence_length = sequence_length
         self.control_size = control_size
-        print(f"Compression: {stft_buckets/control_size:.1f} x smaller")
+        print(f"StepWiseMLPAutoEncoder compression: {stft_buckets/control_size:.1f} x smaller")
         encode_layer_sizes, decode_layer_sizes = StepWiseMLPAutoEncoder.get_layer_sizes(stft_buckets, control_size, depth, ratio)
         
         self.encoder = build_sequential_model(encode_layer_sizes)
         self.decoder = build_sequential_model(decode_layer_sizes)
-
-        display(self)
 
     def encode(self, x):
         batch_size = x.size(0)
@@ -232,30 +231,36 @@ class StepWiseMLPAutoEncoder(nn.Module):
 ##########################################################################################
 # Step-Wise MLP Auto-encoder with VAE
 # Here we combine the StepWiseMLP model with the VAE auto-encoder.
-# It might actually be possible to train them separately, ie: first the StepWiseMLP, then use the VAE to further compress the data.
+# It might actually be possible to train them separately, ie: first optimise the StepWiseMLP, then use the VAE to further compress the data.
 
-class StepWiseVAEAutoEncoder:
+class StepWiseVAEMLPAutoEncoder(nn.Module):
     @staticmethod
     def get_vae_layers(stft_buckets, sequence_length, control_size, depth, ratio, latent_size, vae_depth, vae_ratio):
-        stepwise_output_size = controls * latent_size
-        return interpolate_layer_sizes(stepwise_output_size, latent_size, vae_depth, vae_ratio)
+        stepwise_output_size = control_size * sequence_length
+        layers = interpolate_layer_sizes(stepwise_output_size, latent_size, vae_depth, vae_ratio)
+        print(f"VAE_layers={layers}")
+        return layers
 
 
     @staticmethod
     def approx_trainable_parameters(stft_buckets, sequence_length, control_size, depth, ratio, latent_size, vae_depth, vae_ratio):
         stepwise = StepWiseMLPAutoEncoder.approx_trainable_parameters(stft_buckets, control_size, depth, ratio)
-        vae_layers = get_vae_layers(stft_buckets, sequence_length, control_size, depth, ratio, latent_size, vae_depth, vae_ratio)
+        vae_layers = StepWiseVAEMLPAutoEncoder.get_vae_layers(stft_buckets, sequence_length, control_size, depth, ratio, latent_size, vae_depth, vae_ratio)
         vae = VariationalAutoEncoder.approx_trainable_parameters(vae_layers)
         return stepwise + vae
 
 
     def __init__(self, stft_buckets, sequence_length, control_size, depth, ratio, latent_size, vae_depth, vae_ratio):
-        super(StepWiseMLPVAEAutoEncoder, self).__init__()
+        super(StepWiseVAEMLPAutoEncoder, self).__init__()
         
         self.stepwise = StepWiseMLPAutoEncoder(stft_buckets, sequence_length, control_size, depth, ratio)
         
-        vae_layers = get_vae_layers(stft_buckets, sequence_length, control_size, depth, ratio, latent_size, vae_depth, vae_ratio)
+        display(self.stepwise)
+        
+        vae_layers = StepWiseVAEMLPAutoEncoder.get_vae_layers(stft_buckets, sequence_length, control_size, depth, ratio, latent_size, vae_depth, vae_ratio)
         self.vae = VariationalAutoEncoder(vae_layers)
+        
+        display(self.vae)
 
 
     def encode(self, x):
@@ -281,7 +286,7 @@ class StepWiseVAEAutoEncoder:
         
         
     def forward_loss(self, inputs):
-        outputs, mus, logvars = self.forward(inputs, True)
+        outputs, mus, logvars = self.forward(inputs)
         loss = self.loss_function(inputs, outputs, mus, logvars)
         return loss, outputs
 
@@ -340,6 +345,17 @@ def make_model(model_params, max_params, verbose):
             
         model_text = f"{model_type}: control={control_size}, depth={depth}, ratio={ratio:.2f}"
         model = StepWiseMLPAutoEncoder(stft_buckets, sequence_length, control_size, depth, ratio)
+            
+    elif model_type == "StepWiseVAEMLP":
+        control_size, depth, ratio, latent_size, vae_depth, vae_ratio = model_params
+        approx_size = StepWiseVAEMLPAutoEncoder.approx_trainable_parameters(stft_buckets, sequence_length, control_size, depth, ratio, latent_size, vae_depth, vae_ratio)
+        if approx_size > max_params:
+            print(f"Model is too large: approx {size:,} parameters vs max={max_params:,}")
+            return invalid_model
+            
+        model_text = f"{model_type}: control={control_size}, depth={depth}, ratio={ratio:.2f}"
+        model = StepWiseVAEMLPAutoEncoder(stft_buckets, sequence_length, control_size, depth, ratio, latent_size, vae_depth, vae_ratio)
+            
             
     elif model_type == "Hybrid_CNN": # This didn't work
         kernel_count, kernel_size, rnn_hidden_size = model_params
