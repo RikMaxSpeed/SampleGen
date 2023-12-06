@@ -95,20 +95,24 @@ def optimise_hyper_parameters():
 
 
 def get_best_hyper_params():
-    set_model_type("VAE_MLP")
-    return [16, 0.0001, 5.151727534054279e-05, 6, 7.753192086063947, 7.411389428825689, 5.301401097330652]
-    #return [9, 0.0009685451968313163, 5.151727534054279e-05, 6, 7.753192086063947, 7.411389428825689, 5.301401097330652, ] # Converges too quickly
-    #return [9, 4.5017602108986394e-05, 1.767746772905285e-07, 8, 3.7266841851402606, 3.787922442988532, 8.189781767196333, ]
+    set_model_type("StepWiseVAEMLP")
+    return [32, 0.0003778450201583826, 3.4703673500392346e-08, 42, 3, 0.5642073310609655, 6, 4, 0.5032937921364286]
+    
+#    set_model_type("VAE_MLP")
+#    return [16, 0.0001, 5.151727534054279e-05, 6, 7.753192086063947, 7.411389428825689, 5.301401097330652]
     
     
 def get_best_filename():
-    return "Model latent=6, layer3=46, layer2=340, layer1=1802, loss=0.0063.wab"
+    return "StepWiseVAEMLP control=42, depth=3, ratio=0.56, latent=6, VAE depth=4, VAE ratio=0.50.wab"
+    #return "Model latent=6, layer3=46, layer2=340, layer1=1802, loss=0.0063.wab"
     #return "Model latent=8, layer3=29, layer2=109, layer1=892, loss=0.0026.wab" # Mu=1 (linear, no transform), small latent size
 
 
 def load_best_model():
-    set_model_type("VAE_MLP")
-    model = make_model(get_best_hyper_params(), None, True)
+    model_params = get_best_hyper_params()[3:]
+    max_params = 1000000000
+    verbose = True
+    model, model_text = make_model(model_params, max_params, verbose)
     model.load_state_dict(torch.load(get_best_filename()))
     model.eval() # Ensure the model is in evaluation mode
     model.to(device)
@@ -118,12 +122,12 @@ def load_best_model():
 
 def train_best_params():
     #generate_training_stfts(3000) # use a large number of samples with augmentation
-    generate_training_stfts(930) # No augmentation
+    generate_training_stfts(None) # No augmentation
     
     params = get_best_hyper_params()
-    
+
     max_time = 12 * 3600 # we should converge way before this!
-    max_overfit = 2.0 # we're aiming for max precision on the training set
+    max_overfit = 2.0 # we're aiming for high precision on the training set
     max_params = 1000000000
     
     verbose = True

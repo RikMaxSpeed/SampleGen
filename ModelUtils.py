@@ -143,7 +143,7 @@ def plot_multiple_losses(losses, names, min_count):
         isBest = (min(loss) == min_loss)
         Xs = [x+1 for x in range(len(loss))]
         if isBest:
-            plt.plot(Xs, loss, label = "best: " + name, linewidth=2, alpha=1, c="cyan")
+            plt.plot(Xs, loss, label = "best", linewidth=2, alpha=1, c="cyan")
         else:
             plt.plot(Xs, loss, linewidth=1, alpha=0.5)
             

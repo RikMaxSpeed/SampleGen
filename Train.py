@@ -33,7 +33,7 @@ def predict_stft(model, input_stft):
         loss, predicted_stft = model.forward_loss(input_stft)
 
     predicted_stft = predicted_stft.squeeze(0)
-    return convert_stft_to_output(predicted_stft), loss
+    return convert_stft_to_output(predicted_stft), loss.item()
 
 
 # Sample data
@@ -49,12 +49,10 @@ def generate_training_stfts(how_many):
     
     if how_many == count:
         return # no need to do this again
-        
-    count = how_many
-    
+            
      # Augmentation is used if this exceeds the number of real available samples
-    stfts, file_names = get_training_stfts(count)
-    assert(len(stfts) == count)
+    stfts, file_names = get_training_stfts(how_many)
+    count = len(stfts)
     
     print(f"Using {count} STFTs")
     
@@ -96,7 +94,7 @@ def train_model(hyper_params, max_time, max_params, max_overfit, verbose):
     
     # Optmiser parameters:
     batch_size, learning_rate, weight_decay = opt_params
-    batch_size = 7 # debug hack
+    #batch_size = 7 # debug hack
     batch_size = int(batch_size) # required even though it's declared integer in the search-space :(
     optimiser_text = f"batch={batch_size}, learning_rate={learning_rate:.1g}, weight_decay={weight_decay:.1g}"
     print(f"optimiser: {optimiser_text}")
@@ -203,6 +201,7 @@ def train_model(hyper_params, max_time, max_params, max_overfit, verbose):
         # Early stopping based on average convergence:
         # Note: this should really be time-based rather than epoch as models run at different speeds depending on batch size, learning rate and model size.
         # ie: if after 1mn the model is worse than the average at 1mn then give up...
+        # In practice, the current implementation doesn't work too well, the stdev can be very high. Could try mean - 0.1 x stdev ? ...
         if epoch > 40 and epoch % 25 == 0:
             mean, stdev = compute_epoch_stats(all_test_losses, epoch, 10)
             loss = test_losses[-1]
@@ -243,43 +242,3 @@ def display_custom_link(file_path, display_text=None):
 
 
 
-def test_all():
-    model = load_best_model()
-        
-    stfts, file_names = load_STFTs()
-    
-    names=[]
-    losses=[]
-    
-    noisy = False
-    graphs = False
-    
-    for i in range(len(stfts)):
-        stft = stfts[i]
-        name = file_names[i][:-4]
-        
-        stft = adjust_stft_length(stft, sequence_length)
-        
-        if graphs:
-            plot_stft(name, stft, sample_rate)
-        
-        if noisy:
-            save_and_play_audio_from_stft(stft.cpu().numpy(), sample_rate, stft_hop, None, True)
-        
-        resynth, loss = predict_stft(model, stft)
-        names.append(name)
-        losses.append(loss)
-        
-        if graphs:
-            plot_stft("Resynth " + name, resynth, sample_rate)
-        
-        save_and_play_audio_from_stft(resynth, sample_rate, stft_hop, "Results/" + name + " - resynth.wav", noisy)
-        
-    indices = [i[0] for i in sorted(enumerate(losses), key=lambda x:x[1])]
-    pad = max([len(x) for x in names])
-    for i in indices:
-        loss = losses[i]
-        name = names[i]
-        display_custom_link("Results/" + name + " - resynth.wav", "{}: loss={:.6f}".format(name, loss))
-        
-    plot_multiple_histograms_vs_gaussian([losses], ["Resynthesis Loss"])

@@ -239,7 +239,7 @@ codec = MuLawCodec(2) # Yet another hyper-parameter but we can't tune this one a
 
 # We normalise all amplitudes to [0, 1] on input.
 # But when we convert back to audio we need to amplify the signal again.
-maxAmp = 600 # Observed across all samples.
+maxAmp = 278 # Average across all training samples - this is just to get a reasonable playback level.
 
 def complex_to_mulaw(complex_tensor):
     global maxAmp
@@ -248,11 +248,9 @@ def complex_to_mulaw(complex_tensor):
     
     max = torch.max(magnitude)
     
-    if max > maxAmp:
-        maxAmp = max
-        print("*** warning: max={:.1f} --> {:.1f} !!".format(max, maxAmp))
-#    else:
-#        print("max={:.1f} vs maxAmp={:.1f}".format(max, maxAmp))
+#    if max > maxAmp:
+#        maxAmp = max
+#        print("*** warning: max={:.1f} --> {:.1f} !!".format(max, maxAmp))
 
     return codec.encode(magnitude / max)
     

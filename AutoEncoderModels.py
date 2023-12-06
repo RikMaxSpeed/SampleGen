@@ -335,7 +335,7 @@ def make_model(model_params, max_params, verbose):
             print(f"Model is too large: approx {size:,} parameters vs max={max_params:,}")
             return invalid_model
             
-        model_text = f"{model_type}: latent={layers[4]}, layer3={layers[3]}, layer2={layers[2]}, layer1={layers[1]}"
+        model_text = f"{model_type} latent={layers[4]}, layer3={layers[3]}, layer2={layers[2]}, layer1={layers[1]}"
         model = STFTVariationalAutoEncoder(sequence_length, stft_buckets, layers[1:], nn.ReLU())
         
     elif model_type == "StepWiseMLP":
@@ -345,7 +345,7 @@ def make_model(model_params, max_params, verbose):
             print(f"Model is too large: approx {size:,} parameters vs max={max_params:,}")
             return invalid_model
             
-        model_text = f"{model_type}: control={control_size}, depth={depth}, ratio={ratio:.2f}"
+        model_text = f"{model_type} control={control_size}, depth={depth}, ratio={ratio:.2f}"
         model = StepWiseMLPAutoEncoder(stft_buckets, sequence_length, control_size, depth, ratio)
             
     elif model_type == "StepWiseVAEMLP":
@@ -355,7 +355,7 @@ def make_model(model_params, max_params, verbose):
             print(f"Model is too large: approx {size:,} parameters vs max={max_params:,}")
             return invalid_model
             
-        model_text = f"{model_type}: control={control_size}, depth={depth}, ratio={ratio:.2f}, latent={latent_size}, VAE depth={vae_depth}, VAE ratio={vae_ratio:.2f}"
+        model_text = f"{model_type} control={control_size}, depth={depth}, ratio={ratio:.2f}, latent={latent_size}, VAE depth={vae_depth}, VAE ratio={vae_ratio:.2f}"
         model = StepWiseVAEMLPAutoEncoder(stft_buckets, sequence_length, control_size, depth, ratio, latent_size, vae_depth, vae_ratio)
     
             
@@ -373,7 +373,7 @@ def make_model(model_params, max_params, verbose):
             print(f"Model is too large: approx {size:,} parameters vs max={max_params:,}")
             return invalid_model
             
-        model_text = f"{model_type}: kernels={kernel_count}, kernel_size={kernel_size}, rnn_hidden={rnn_hidden_size}"
+        model_text = f"{model_type} kernels={kernel_count}, kernel_size={kernel_size}, rnn_hidden={rnn_hidden_size}"
         print(model_text)
         model = HybridCNNAutoEncoder(stft_buckets, sequence_length, kernel_count, kernel_size, rnn_hidden_size)
 

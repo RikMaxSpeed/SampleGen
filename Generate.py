@@ -2,6 +2,7 @@ from MakeSTFTs import *
 from Train import *
 from AudioUtils import *
 from Graph import *
+from HyperParameterTuning import *
 
 
 def numpify(tensor):
@@ -149,7 +150,7 @@ class Sample_Generator():
         encodes=[]
         for stft in stfts:
             input_stft = convert_stft_to_input(stft).unsqueeze(0).to(device)
-            encodes.append(numpify(self.model.encode(input_stft, False)))
+            encodes.append(numpify(self.model.encode(input_stft)[0]))
         plot_bar_charts(encodes, names, f"{len(names)} {pattern} encodings")
     
     
@@ -173,6 +174,48 @@ class Sample_Generator():
                 self.decode_and_save(encode, f"{encode[0]}", play_sound)
                 
             
+            
+    def test_all(self):
+        names=[]
+        losses=[]
+    
+        noisy = False
+        graphs = False
+    
+        for i in range(len(self.stfts)):
+            stft = self.stfts[i]
+            name = self.file_names[i][:-4]
+            
+            stft = adjust_stft_length(stft, sequence_length)
+            
+            if graphs:
+                plot_stft(name, stft, sample_rate)
+            
+            if noisy:
+                save_and_play_audio_from_stft(stft.cpu().numpy(), sample_rate, stft_hop, None, True)
+            
+            resynth, loss = predict_stft(self.model, stft)
+            names.append(name)
+            losses.append(loss)
+            
+            if graphs:
+                plot_stft("Resynth " + name, resynth, sample_rate)
+            
+            save_and_play_audio_from_stft(resynth, sample_rate, stft_hop, "Results/" + name + " - resynth.wav", noisy)
+
+
+        plot_multiple_histograms_vs_gaussian([losses], ["Resynthesis Loss"])
+
+
+        indices = [i[0] for i in sorted(enumerate(losses), key=lambda x:x[1])]
+        pad = max([len(x) for x in names])
+        for i in indices:
+            loss = losses[i]
+            name = names[i]
+            display_custom_link("Results/" + name + " - resynth.wav", "{}: loss={:.6f}".format(name, loss))
+            
+
+
 #EPiano Mrk II C3: loss=0.000102
 #Kawai-K11-Dulcimer-C4: loss=0.000103
 #E-Mu-Proteus-FX-Kalimba-C4: loss=0.000107
@@ -218,29 +261,28 @@ examples = [
 ]
 
 
-def generate_morphs():
-    g = Sample_Generator()
+g = Sample_Generator()
 
+
+def generate_morphs():
     for i in range(0, len(examples)-1, 2):
         g.interpolate_vae(examples[i], examples[i+1])
         #g.interpolate_no_ai(examples[i], examples[i+1]) # Linear interpolation over STFTs.
 
 
 def generate_variations():
-    g = Sample_Generator()
-
     for sample in examples[:5]:
         g.randomise_sample(sample)
 
 
 def plot_encodings():
-    g = Sample_Generator()
     for type in ["organ", "piano", "epiano", "string", "acoustic guitar", "marimba", "pad", "fm", "voice", "moog", ""]:
         g.plot_encodings(type, 1000)
 
 
 def generate_main_encodings():
-    g = Sample_Generator()
     g.generate_main_encodings([-2, -1, 0, +1, +2])
 
+def test_all():
+    g.test_all()
 
