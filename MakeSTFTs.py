@@ -40,9 +40,9 @@ def lowest_frequency(stft, sample_rate):
     raise Exception("This should never happen!")
 
 
-def compute_stft_from_file(filename):
+def compute_stft_from_file(file_name):
     """Computes the STFT of the audio file and returns it as a tensor"""
-    sr, stft = compute_stft_for_file(filename, 2*stft_buckets, stft_hop)
+    sr, stft = compute_stft_for_file(file_name, 2*stft_buckets, stft_hop)
     #debug("compute_stft_from_file.stft", stft)
     assert(stft.shape[0] == stft_buckets + 1)
     
@@ -104,13 +104,13 @@ def gather_stfts_from_directory(directory, notes, requiredSR):
     return stft_tensors, file_names
 
 
-def save_to_file(obj, filename):
-    with open(filename, 'wb') as file:
+def save_to_file(obj, file_name):
+    with open(file_name, 'wb') as file:
         pickle.dump(obj, file)
 
 
-def load_from_file(filename):
-    with open(filename, 'rb') as file:
+def load_from_file(file_name):
+    with open(file_name, 'rb') as file:
         return pickle.load(file)
 
 
@@ -194,8 +194,8 @@ def convert_stft_to_output(stft):
     return output_stft
         
 
-def test_stft_conversions(filename):
-    sr, stft = compute_stft_for_file(filename, 2*stft_buckets, stft_hop)
+def test_stft_conversions(file_name):
+    sr, stft = compute_stft_for_file(file_name, 2*stft_buckets, stft_hop)
     debug("stft", stft)
     
     if False: # Generate a synthetic spectrum
@@ -203,15 +203,15 @@ def test_stft_conversions(filename):
             for t in range(stft.shape[1]):
                 stft[f, t] = 75*np.sin(f*t) if f>=2*t and f <= 3*t else 0
     
-    plot_stft(filename, stft, sr, stft_hop)
+    plot_stft(file_name, stft, sr, stft_hop)
     stft = np.abs(stft) # because we discard the phases, everything becomes positive amplitudes
     
     tensor = torch.tensor(stft)
     input = convert_stft_to_input(tensor).to(device)
     output = convert_stft_to_output(input)
     
-    plot_stft("Resynth " + filename, output, sr, stft_hop)
-    save_and_play_audio_from_stft(output, sr, stft_hop, "Results/resynth-mulaw-" + os.path.basename(filename), True)
+    plot_stft("Resynth " + file_name, output, sr, stft_hop)
+    save_and_play_audio_from_stft(output, sr, stft_hop, "Results/resynth-mulaw-" + os.path.basename(file_name), True)
 
     diff = np.abs(output - stft)
     debug("diff", diff)
@@ -226,3 +226,6 @@ def test_stft_conversions(filename):
 #test_stft_conversions("Samples/Piano C4 Major 13.wav")
 #test_stft_conversions("/Users/Richard/Coding/WaveFiles/FreeWaveSamples/Alesis-S4-Plus-Clean-Gtr-C4.wav")
 #sys.exit(1)
+
+
+

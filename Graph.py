@@ -94,7 +94,7 @@ def plot_losses(train_losses, test_losses):
         l = losses[i]
         
         plt.scatter(i+1, l, label=None, c=colour, s=8)
-        plt.text(i+1, l*(1+offset), "{:.2f}".format(l), color = colour)
+        plt.text(i+1, l*(1+offset), "{:.4f}".format(l), color = colour)
 
 
     count = len(train_losses)

@@ -174,6 +174,7 @@ def random_exponential_decay_list(N):
     decay_rate = np.random.uniform(0.01, 0.05)
     return start_value * np.exp(-decay_rate * np.arange(N)) #* (1 + noise * np.random.uniform(0, 1, N)))
 
+
 def test_loss_chart():
     lengths = range(10, 200, 5)
     examples = [random_exponential_decay_list(n) for n in lengths]
@@ -226,3 +227,14 @@ def interpolate_layer_sizes(start, end, depth, ratio):
     
     #print(f"start={start}, end={end}, depth={depth}, ratio={ratio:.2f} --> layers={layers}")
     return layers
+
+
+# Number of trainaible parameters in an RNN
+def rnn_size(input_size, hidden_size, num_layers):
+    first_layer_params = (input_size * hidden_size) + (hidden_size ** 2) + (2 * hidden_size)
+
+    additional_layer_params = (hidden_size ** 2) + (hidden_size ** 2) + (2 * hidden_size)
+
+    total_params = first_layer_params + ((num_layers - 1) * additional_layer_params)
+    
+    return total_params

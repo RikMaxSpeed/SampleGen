@@ -7,6 +7,11 @@
 	objects = {
 
 /* Begin PBXFileReference section */
+		790556802B2071DF00D65A0A /* VariationalAutoEncoder.py */ = {isa = PBXFileReference; lastKnownFileType = text.script.python; path = VariationalAutoEncoder.py; sourceTree = "<group>"; };
+		790556812B20723600D65A0A /* STFT_VAE.py */ = {isa = PBXFileReference; lastKnownFileType = text.script.python; path = STFT_VAE.py; sourceTree = "<group>"; };
+		790556822B2072C200D65A0A /* MLP_VAE.py */ = {isa = PBXFileReference; lastKnownFileType = text.script.python; path = MLP_VAE.py; sourceTree = "<group>"; };
+		790556832B2073C100D65A0A /* RNN_VAE.py */ = {isa = PBXFileReference; lastKnownFileType = text.script.python; path = RNN_VAE.py; sourceTree = "<group>"; };
+		790556842B20831800D65A0A /* SampleCategory.py */ = {isa = PBXFileReference; lastKnownFileType = text.script.python; path = SampleCategory.py; sourceTree = "<group>"; };
 		7929AC2E2ADD81AA006851A3 /* AudioUtils.py */ = {isa = PBXFileReference; lastKnownFileType = text.script.python; path = AudioUtils.py; sourceTree = "<group>"; };
 		7929AC2F2ADDBB84006851A3 /* AutoEncoderModels.py */ = {isa = PBXFileReference; lastKnownFileType = text.script.python; path = AutoEncoderModels.py; sourceTree = "<group>"; };
 		7929AC302ADDBBB2006851A3 /* Train.py */ = {isa = PBXFileReference; lastKnownFileType = text.script.python; path = Train.py; sourceTree = "<group>"; };
@@ -41,10 +46,15 @@
 				79E291582B19190600EF046D /* HyperParameterTuning.py */,
 				79E291572B18EB8500EF046D /* LegacyModels.py */,
 				79E2915A2B1BAC5000EF046D /* MakeAndTrain.ipynb */,
-				7929AC332AE05D49006851A3 /* ModelUtils.py */,
 				7929AC312ADDBCFF006851A3 /* MakeSTFTs.py */,
+				790556822B2072C200D65A0A /* MLP_VAE.py */,
+				7929AC332AE05D49006851A3 /* ModelUtils.py */,
 				79E2915C2B1BB01400EF046D /* README.md */,
+				790556832B2073C100D65A0A /* RNN_VAE.py */,
+				790556842B20831800D65A0A /* SampleCategory.py */,
+				790556812B20723600D65A0A /* STFT_VAE.py */,
 				7929AC302ADDBBB2006851A3 /* Train.py */,
+				790556802B2071DF00D65A0A /* VariationalAutoEncoder.py */,
 				79E2915B2B1BAC5000EF046D /* WebScrape.ipynb */,
 				79E291552B18DE3200EF046D /* WeightedLoss.py */,
 			);

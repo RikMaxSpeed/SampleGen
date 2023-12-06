@@ -1,8 +1,33 @@
-import re
-from collections import Counter
-
 from MakeSTFTs import *
+import re
 
+
+def display_sample_categories():
+    stfts, file_names = load_STFTs()
+    others = []
+    
+    for name in file_names:
+        category = infer_sample_category(name)
+        #print(f"{category:>20}: {name}")
+        if category == "Other":
+            for term in split_text_into_words(name):
+                if not ignore_term(term):
+                    others.append(term)
+
+    print("Common unmatched terms:")
+    display_top_words(others, 0.0)
+    
+    infer_sample_categories(file_names)
+    
+
+#display_sample_categories()
+
+
+
+# Augment the dataset by mixing two random samples:
+keywords = "guitar bass pad oh saw strings plect string pluck voice bell choir piano bandura epiano mini sweep vox buzz banjo brass chime harp human sync lead organ sitar vocoder water bowed dulcimer ensemble mellotron sine"
+
+keywords = re.split(' ', keywords)
 
 def add_tensors(tensor1, tensor2):
     # Ensure the first dimensions are equal
@@ -24,34 +49,6 @@ def add_tensors(tensor1, tensor2):
     return padded_tensor1 + padded_tensor2
 
 
-def get_sorted_words_by_frequency(strings):
-    # Use a regular expression to split strings into words using non-alpha characters as delimiters
-    words = [word.lower() for s in strings for word in re.split(r'[^a-zA-Z]+', s) if word]
-    
-    # Count the frequency of each word
-    word_counts = Counter(words)
-    
-    # Sort words by frequency in decreasing order
-    sorted_words = sorted(word_counts.keys(), key=lambda x: (-word_counts[x], x))
-    
-    return sorted_words
-
-
-def display_common_words():
-    stfts, file_names = load_STFTs()
-
-    frequent_words = get_sorted_words_by_frequency(file_names)
-    use = len(frequent_words) // 4
-    print("Top {} words:".format(use))
-    for i in range(use):
-        print("#{}: {}".format(i+1, frequent_words[i]))
-
-
-keywords = "guitar bass pad oh saw strings plect string pluck voice bell choir piano bandura epiano mini sweep vox buzz banjo brass chime harp human sync lead organ sitar vocoder water bowed dulcimer ensemble mellotron sine"
-
-keywords = re.split(' ', keywords)
-
-
 def random_stft(file_names, count):
     assert(count <= len(file_names))
     
@@ -64,6 +61,7 @@ def random_stft(file_names, count):
                 return i
 
 
+# TODO: apply augmentation to the training set only otherwise we have cross-contamination
 def get_training_stfts(total = None):
     stfts, file_names = load_STFTs()
     count = len(stfts)

@@ -3,6 +3,8 @@ from Train import *
 from AudioUtils import *
 from Graph import *
 from HyperParameterTuning import *
+from SampleCategory import *
+import matplotlib.patches as patches
 
 
 def numpify(tensor):
@@ -26,7 +28,9 @@ class Sample_Generator():
     def load_data(self):
         self.model = load_best_model()
         self.stfts, self.file_names = load_STFTs()
-        
+        self.categories = infer_sample_categories(self.file_names)
+
+    def plot_amplitudes():
         amps =[]
         for stft in self.stfts:
             amps.append(max_amp(stft))
@@ -214,38 +218,85 @@ class Sample_Generator():
             name = names[i]
             display_custom_link("Results/" + name + " - resynth.wav", "{}: loss={:.6f}".format(name, loss))
             
+            
+    def display_terms_in_file_names():
+        all_words = [w for file_name in self.file_names for w in split_text_into_words(file_name) if not ignore_term(w)]
+        print("Top words found in file names:")
+        display_top_words(all_words, 0.005)
 
 
-#EPiano Mrk II C3: loss=0.000102
-#Kawai-K11-Dulcimer-C4: loss=0.000103
-#E-Mu-Proteus-FX-Kalimba-C4: loss=0.000107
-#Zither C3: loss=0.000107
-#Analog 102 C4: loss=0.000110
-#Electric Fat Fingers 1 C3: loss=0.000111
-#Electric Fat Fingers 3 C4: loss=0.000113
-#E-Piano C4: loss=0.000114
-#80s Analog Solid Bass C3: loss=0.000114
-#80s Analog Solid Bass C4: loss=0.000117
-#Masterpiece Pluck C3: loss=0.000119
-#Electric Fat Fingers 2 C4: loss=0.000120
-#Electric Fat Fingers 4 C4: loss=0.000123
-#Bottle Hit 17 C4: loss=0.000123
-#Kalimba C4: loss=0.000125
-#Electric Fat Fingers 2 C3: loss=0.000125
-#Korg-M3R-Rock-Mutes-C3: loss=0.000125
-#Piano St C4: loss=0.000125
-#Electric Fat Fingers 4 C3: loss=0.000126
-#Kithara_C3: loss=0.000126
-#Guitar Attack C4: loss=0.000128
-#Trad Harp C4: loss=0.000129
-#Marimba C3: loss=0.000129
-#Electric Fat Plect 3 C3: loss=0.000129
-#Electric Fat Fingers 1 C4: loss=0.000130
-#Piano Baby G C4: loss=0.000130
-#Kawai-PHm-Contrabass-C3: loss=0.000133
-#Mini m Dark Decay C4: loss=0.000133
-#Electric Fat Plect 1 C4: loss=0.000133
-#High Granular Harmonic C3: loss=0.000134
+    def plot_categories(self, category_filter, colour_map = 'Set1'):
+        # Build up a list of encoded STFTs
+        encoded_dict = {}
+        for category in category_filter:
+            encoded_dict[category] = []
+            
+        encode_size = None
+        for i in range(len(self.stfts)):
+            if self.categories[i] in category_filter:
+                input_stft = convert_stft_to_input(self.stfts[i]).unsqueeze(0).to(device)
+                encode = numpify(self.model.encode(input_stft)[0])
+                if encode_size is None:
+                    encode_size = len(encode)
+                    #print(f"Encode size={encode_size}")
+                assert(len(encode) == encode_size)
+                encoded_dict[self.categories[i]].append(encode)
+        
+        
+        print("Encoded samples:")
+        for category in category_filter:
+            print(f"{len(encoded_dict[category]):>4} x {category}")
+
+        cols = 3
+        rows = encode_size // cols
+        if cols * rows < encode_size:
+            rows += 1
+
+        fig, axs = plt.subplots(rows, cols, figsize=(5*cols, 5*rows))
+        #fig.subplots_adjust(left=0.1, right=0.9, bottom=0.1, top=0.9, wspace=0.4, hspace=0.4)
+        fig.subplots_adjust(wspace=0.3, hspace=0.3)
+        cmap = plt.cm.get_cmap(colour_map)
+        dot_size = 15
+        for e in range(encode_size):
+            plt.subplot(rows, cols, e + 1) # 1-based
+            ne = (e + 1) % encode_size # wrap-around so we plot x6 vs x1
+            plt.title(f"encode {e+1} & {ne+1}")
+
+            for c in range(len(category_filter)):
+                category = category_filter[c]
+                encodes = encoded_dict[category]
+                e1 = [x[e] for x in encodes]
+                e2 = [x[ne] for x in encodes]
+                colour = cmap(c / cmap.N)
+                plt.scatter(e1, e2, label = category, s=dot_size, color=[colour], zorder=1, alpha = 0.5)
+                ellipse = patches.Ellipse((np.mean(e1), np.mean(e2)), 2*np.std(e1), 2*np.std(e2), color=colour, alpha = 0.2, zorder=0)
+                ax = plt.gca()
+                ax.add_patch(ellipse)
+                
+                r = 3.0
+                ax.set_xlim(-r, r)
+                ax.set_ylim(-r, r)
+
+            # Draw the X & Y axis explicitly
+            plt.axhline(0, color='black', linewidth=1, zorder=2)
+            plt.axvline(0, color='black', linewidth=1, zorder=2)
+
+            # Move the axes to the centre
+            plt.gca().spines['left'].set_position('zero')
+            plt.gca().spines['bottom'].set_position('zero')
+
+            # Hide the other lines:
+            plt.gca().spines['right'].set_color('none')
+            plt.gca().spines['top'].set_color('none')
+
+            if e == 0:
+                legend = plt.legend()
+                for handle in legend.legendHandles:
+                    handle.set_sizes([4 * dot_size])
+        
+        #plt.tight_layout()
+        plt.show()
+        
 
 examples = [
     "EPiano Mrk II C3",
@@ -278,6 +329,15 @@ def generate_variations():
 def plot_encodings():
     for type in ["organ", "piano", "epiano", "string", "acoustic guitar", "marimba", "pad", "fm", "voice", "moog", ""]:
         g.plot_encodings(type, 1000)
+
+
+def plot_categories(categories = None):
+    if categories is None:
+        g.plot_categories(["Vocal", "Synth", "Guitar"], "Set1")
+        g.plot_categories(["Bass", "Plucked", "Bell"], "Set2")
+        g.plot_categories(["Other", "Synth Makes", "Piano", "Bell"], "Dark2")
+    else:
+        g.plot_categories(categories)
 
 
 def generate_main_encodings():

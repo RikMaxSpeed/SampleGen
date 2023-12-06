@@ -45,7 +45,7 @@ sanity_test_name = None
 
 
 def generate_training_stfts(how_many):
-    global stfts, filenames, count, sanity_test_stft, sanity_test_name
+    global stfts, file_names, count, sanity_test_stft, sanity_test_name
     
     if how_many == count:
         return # no need to do this again
@@ -161,12 +161,12 @@ def train_model(hyper_params, max_time, max_params, max_overfit, verbose):
             last_saved_loss = train_losses[-1]
             
             # Save the model:
-            filename = model_text # keep over-writing the same file as the loss improves
+            file_name = model_text # keep over-writing the same file as the loss improves
             print("*** Best! loss={:.4f}, model={}, hyper={}".format(last_saved_loss, model_text, optimiser_text))
-            torch.save(model.state_dict(), filename + ".wab")
+            torch.save(model.state_dict(), file_name + ".wab")
             
             # Write the parameters to file:
-            with open(filename+".txt", 'w') as file:
+            with open(file_name+".txt", 'w') as file:
                 file.write(model_text + "\n")
                 file.write(f"optimiser: {optimiser_text}\n")
                 file.write("\n")

@@ -66,10 +66,10 @@ def normalise_sample_to_mono_floats(data):
     return data
 
 
-def read_wav_file(filename):
+def read_wav_file(file_name):
     """Reads a .wav file and returns the sample rate and data"""
-    sr, data = wavfile.read(filename)
-    #print("loaded file={}, sample rate={} Hz, data={} x {}".format(filename, sr, type(data.dtype), data.shape))
+    sr, data = wavfile.read(file_name)
+    #print("loaded file={}, sample rate={} Hz, data={} x {}".format(file_name, sr, type(data.dtype), data.shape))
     return sr, data
 
 
@@ -90,10 +90,10 @@ def plot_stft(name, stft_result, sr, hop_length):
     plt.show()
 
 
-def save_to_wav(filename, data, sr):
+def save_to_wav(file_name, data, sr):
     """Saves the data to a .wav file"""
     data_int16 = (data * 32767).astype(np.int16)
-    wavfile.write(filename, sr, data_int16)
+    wavfile.write(file_name, sr, data_int16)
 
 
 def istft_to_audio(stft, hop_length, win_length=None, window='hann'):
@@ -126,8 +126,8 @@ def save_and_play_audio_from_stft(stft, sr, hop_length, write_to_file, playAudio
         play_audio(audio, sr)
 
 
-def compute_stft_for_file(filename, n_fft, hop_length):
-    sr, data = read_wav_file(filename)
+def compute_stft_for_file(file_name, n_fft, hop_length):
+    sr, data = read_wav_file(file_name)
     #print("sr={} Hz, duration={:.1f} sec, hop={} -> {:.1f} windows".format(sr, len(data)/sr, hop_length, len(data)/hop_length))
     
     data = normalise_sample_to_mono_floats(data)
@@ -138,12 +138,12 @@ def compute_stft_for_file(filename, n_fft, hop_length):
     return sr, stft
 
 
-def demo_stft(filename, n_fft, hop_length):
-    sr, stft = compute_stft_for_file(filename, n_fft, hop_length)
+def demo_stft(file_name, n_fft, hop_length):
+    sr, stft = compute_stft_for_file(file_name, n_fft, hop_length)
     
-    plot_stft(filename, stft, sr, hop_length)
+    plot_stft(file_name, stft, sr, hop_length)
     
-    save_and_play_audio_from_stft(stft, sr, hop_length, "Results/resynth-" + os.path.basename(filename), True)
+    save_and_play_audio_from_stft(stft, sr, hop_length, "Results/resynth-" + os.path.basename(file_name), True)
     
 
 def print_default_audio_device_info():

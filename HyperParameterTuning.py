@@ -3,6 +3,8 @@
 from skopt import gp_minimize
 from skopt.space import Integer, Real, Categorical
 from Train import *
+from AutoEncoderModels import *
+
 
 # skopt creates some unhelpful warnings...
 #import warnings
@@ -61,7 +63,7 @@ def optimise_hyper_parameters():
         search_space.append(Integer(2,         4,   'uniform',      name='depth'))
         search_space.append(Real   (0.1,     2.0,   'log-uniform',  name='ratio'))
         
-    if True:
+    if False:
         # Train the StepWiseVAEMLPAutoEncoder
         set_model_type("StepWiseVAEMLP")
         
@@ -75,14 +77,13 @@ def optimise_hyper_parameters():
         search_space.append(Integer(1,         5,   'uniform',      name='vae_depth'))
         search_space.append(Real   (0.1,       4,   'log-uniform',  name='vae_ratio'))
     
+    if True:
+        # Train the RNNAutoEncoder
+        set_model_type("RNNAutoEncoder")
+        search_space.append(Integer(10,       60,   'uniform',      name='hidden_size'))
+        search_space.append(Integer(1,         5,   'uniform',      name='encode_depth'))
+        search_space.append(Real   (1,         5,   'uniform',      name='decode_depth'))
 
-#    if False: # didn't work well
-#        set_model_type("Hybrid_CNN")
-#        search_space.append(Integer(3,      4,      'uniform',      name='kernel_count'))
-#        search_space.append(Integer(5,      6,      'uniform',      name='kernel_size'))
-#        search_space.append(Integer(30,    31,      'uniform',      name='rnn_hidden_size'))
-
-        
     print("Optimising hyper-parameters:")
     display(search_space)
 
@@ -103,8 +104,9 @@ def get_best_hyper_params():
 #    return [16, 0.0001, 5.151727534054279e-05, 6, 7.753192086063947, 7.411389428825689, 5.301401097330652]
     
     
-def get_best_filename():
-    return "StepWiseVAEMLP control=42, depth=3, ratio=0.56, latent=6, VAE depth=4, VAE ratio=0.50.wab"
+def get_best_file_name():
+    return "StepWiseVAEMLP control=48, depth=2, ratio=0.50, latent=6, VAE depth=4, VAE ratio=1.43.wab"
+    #return "StepWiseVAEMLP control=42, depth=3, ratio=0.56, latent=6, VAE depth=4, VAE ratio=0.50.wab"
     #return "Model latent=6, layer3=46, layer2=340, layer1=1802, loss=0.0063.wab"
     #return "Model latent=8, layer3=29, layer2=109, layer1=892, loss=0.0026.wab" # Mu=1 (linear, no transform), small latent size
 
@@ -114,9 +116,13 @@ def load_best_model():
     max_params = 1000000000
     verbose = True
     model, model_text = make_model(model_params, max_params, verbose)
-    model.load_state_dict(torch.load(get_best_filename()))
+    file_name = get_best_file_name()
+    
+    print(f"Loading weights & biases from file '{file_name}'")
+    model.load_state_dict(torch.load(file_name))
     model.eval() # Ensure the model is in evaluation mode
     model.to(device)
+    print(f"{model.__class__.__name__} has {count_trainable_parameters(model):,} weights & biases")
     
     return model
 
