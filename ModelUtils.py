@@ -43,7 +43,7 @@ def compute_average_loss(model, dataset, batch_size):
     total_samples = 0
 
     with torch.no_grad():  # Disable gradient computations during evaluation
-        for batch_idx, (inputs,) in enumerate(data_loader):
+        for batch_idx, inputs in enumerate(data_loader):
             inputs = inputs.to(device)
             loss, _ = model.forward_loss(inputs)
             loss = loss.item()
@@ -118,18 +118,34 @@ def stop_condition(train_losses, test_losses, window, min_change, max_overfit, t
     return  test_loss / train_loss > max_overfit
 
 
+def compute_stats_without_outliers(data, min_count):
+
+    if len(data) == 0:
+        return None, None
+
+    data = np.array(data)
+
+    Q1 = np.percentile(data, 25)
+    Q3 = np.percentile(data, 75)
+    IQR = Q3 - Q1
+
+    lower_bound = Q1 - 1.5 * IQR
+    upper_bound = Q3 + 1.5 * IQR
+
+    filtered_data = data[(data >= lower_bound) & (data <= upper_bound)]
+    
+    if len(filtered_data) < min_count:
+        return None, None
+        
+    return np.mean(filtered_data), np.std(filtered_data)
+
+
 # Compute the mean & stdev for a given epoch across multiple runs
 def compute_epoch_stats(losses, epoch, min_count):
-    # Extract the losses for the given epoch from each list, if available
-    epoch_losses = [loss_list[epoch] for loss_list in losses if len(loss_list) > epoch]
 
-    # Compute average and standard deviation if there are any losses for this epoch
-    if len(epoch_losses) >= min_count:
-        avg_loss = np.mean(epoch_losses)
-        stdev_loss = np.std(epoch_losses)
-        return avg_loss, stdev_loss
-    else:
-        return None, None
+    epoch_losses = [loss_list[epoch] for loss_list in losses if len(loss_list) > epoch]
+    
+    return compute_stats_without_outliers(epoch_losses, min_count)
 
 
 def plot_multiple_losses(losses, names, min_count):

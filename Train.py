@@ -37,39 +37,41 @@ def predict_stft(model, input_stft):
 
 
 # Sample data
-stfts = []
-file_names = []
-count = -1
+train_dataset    = None
+test_dataset     = None
 sanity_test_stft = None
 sanity_test_name = None
 
 
 def generate_training_stfts(how_many):
-    global stfts, file_names, count, sanity_test_stft, sanity_test_name
-    
-    if how_many == count:
-        return # no need to do this again
-            
+    global sanity_test_stft, sanity_test_name, train_dataset, test_dataset
+                
      # Augmentation is used if this exceeds the number of real available samples
     stfts, file_names = get_training_stfts(how_many)
-    count = len(stfts)
-    
-    print(f"Using {count} STFTs")
-    
-    # Here we pick an example file to sanity check that everything is behaving from A-Z
+
+    lengths = np.array([x.shape[1] for x in stfts])
+    plot_multiple_histograms_vs_gaussian([lengths * stft_hop / sample_rate], ["Sample Durations (seconds)"])
+
+    # Pick an example file to sanity check that everything is behaving from A-Z
     for i in range(len(file_names)):
         if "grand piano c3" in file_names[i].lower():
             sanity_test_stft = stfts[i]
             sanity_test_name = file_names[i]
             break
+
+    stfts = convert_stfts_to_inputs(stfts)
+    train_stfts, test_stfts = split_dataset(stfts, 0.8)
     
-    lengths = np.array([x.shape[1] for x in stfts])
-    plot_multiple_histograms_vs_gaussian([lengths * stft_hop / sample_rate], ["Sample Durations (seconds)"])
-    stfts = torch.stack([convert_stft_to_input(stft) for stft in stfts])
-    print("Input STFTs: {} x {}".format(stfts.shape, stfts.dtype))
-    assert(stfts.shape[0] == count)
-    assert(stfts.shape[1] == stft_buckets)
-    assert(stfts.shape[2] == sequence_length)
+    # Training set is kept completely separate from Test when augmenting.
+    if how_many is not None and len(train_stfts) < how_many:
+        train_sfts = augment_stfts(train_stfts, how_many)
+    
+    train_dataset = train_sfts
+    test_dataset  = test_stfts
+    
+    print(f"Using train={len(train_dataset)} samples, test={len(test_dataset)} samples.")
+    
+    
 
 
 # Hyper-parameter optimisation
@@ -84,7 +86,7 @@ all_test_names = []
     
     
 # Main entry point for training the model
-def train_model(hyper_params, max_time, max_params, max_overfit, verbose):
+def train_model(hyper_params, max_epochs, max_time, max_params, max_overfit, verbose):
     print(f"train_model: hyper-parameters={hyper_params}")
     
     # We split the hyper-params into optimiser parameters & model parameters:
@@ -94,8 +96,7 @@ def train_model(hyper_params, max_time, max_params, max_overfit, verbose):
     
     # Optmiser parameters:
     batch_size, learning_rate, weight_decay = opt_params
-    #batch_size = 7 # debug hack
-    batch_size = int(batch_size) # required even though it's declared integer in the search-space :(
+    batch_size = int(batch_size) # convert int64 to int32
     optimiser_text = f"batch={batch_size}, learning_rate={learning_rate:.1g}, weight_decay={weight_decay:.1g}"
     print(f"optimiser: {optimiser_text}")
     
@@ -106,8 +107,6 @@ def train_model(hyper_params, max_time, max_params, max_overfit, verbose):
     print(f"model: {model_text}")
     
     # Train/Test & DataLoader
-    dataset = TensorDataset(stfts)
-    train_dataset, test_dataset = split_dataset(dataset, 0.8)
     dataloader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
     print(f"train={len(train_dataset)} samples, batch={batch_size} --> {len(train_dataset)/batch_size:.1f} batches/epoch")
 
@@ -126,12 +125,11 @@ def train_model(hyper_params, max_time, max_params, max_overfit, verbose):
 
     graph_interval = 5
     
-    max_epochs = 10000 # currently irrelevant
-    
     for epoch in range(1, max_epochs):
         model.train() # ensure we compute gradients
         
-        for batch_idx, (inputs,) in enumerate(dataloader):
+        #for batch_idx, (inputs,) in enumerate(dataloader):
+        for batch_idx, inputs in enumerate(dataloader):
             inputs = inputs.to(device)
         
             # Forward pass
@@ -202,7 +200,7 @@ def train_model(hyper_params, max_time, max_params, max_overfit, verbose):
         # Note: this should really be time-based rather than epoch as models run at different speeds depending on batch size, learning rate and model size.
         # ie: if after 1mn the model is worse than the average at 1mn then give up...
         # In practice, the current implementation doesn't work too well, the stdev can be very high. Could try mean - 0.1 x stdev ? ...
-        if epoch > 40 and epoch % 25 == 0:
+        if epoch > 30 and epoch % 10 == 0:
             mean, stdev = compute_epoch_stats(all_test_losses, epoch, 10)
             loss = test_losses[-1]
             if mean is not None and loss > mean: # we could make this more aggressive, for example: mean - 0.5 * stdev

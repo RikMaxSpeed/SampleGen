@@ -13,26 +13,27 @@ from AutoEncoderModels import *
 # The huge MLP_VAE needs order of 120M parameters.
 #max_params = 1000 * stft_buckets * sequence_length # Approx size of 1000 STFTs in the training set
 # But the StepWiseMLP and RNN are much more memory efficient
-max_params = 10 * stft_buckets * sequence_length
+max_params = stft_buckets * sequence_length
 
 count = 0
-break_on_exceptions = False # Set this to False to allow the process to continue even if the model blows up (useful for long tuning runs!)
+break_on_exceptions = True # Set this to False to allow the process to continue even if the model blows up (useful for long tuning runs!)
+
 
 def evaluate_model(params):
     global count
     count += 1
     print(f"\n\n\nHyper-Parameter tuning#{count}\n")
     
-    max_time = 500
-    max_ratio = 4.0
+    max_time = 300
     max_overfit = 1.1
+    max_epochs = 100 # This is sufficient to figure out which model will converge best if we let it run for longer.
     verbose = False
     
     if break_on_exceptions: # this is easier when debugging
-        return train_model(params, max_time, max_params, max_overfit, verbose)
+        return train_model(params, max_epochs, max_time, max_params, max_overfit, verbose)
     else: # we need this for long overnight runs in case something weird happens
         try:
-            return train_model(params, max_time, max_params, max_overfit, verbose)
+            return train_model(params, max_epochs, max_time, max_params, max_overfit, verbose)
         except Exception as e:
             print(f"*** Exception: {e}")
         except:
@@ -42,8 +43,13 @@ def evaluate_model(params):
 
 
 def optimise_hyper_parameters():
-    generate_training_stfts(200) # use a smaller data-set here to speed things up?
-
+    count = 200  # use a smaller data-set here to speed things up? Not a good idea as the model may be too limited in size
+    count = 1100
+    generate_training_stfts(count)
+    
+    global max_params
+    max_params = (stft_buckets * sequence_length * count) // 20
+    
     # Optimiser:
     search_space = list()
     search_space.append(Integer(  16,    256,    'log-uniform',  name='batch_size'))
@@ -112,29 +118,29 @@ def optimise_hyper_parameters():
     print("Best parameters={}".format(result.x))
 
 
+best_models = {
 
-def get_best_hyper_params():
-    set_model_type("StepWiseVAEMLP")
-    return [28, 0.000257541325218376, 2.002069396636439e-08, 48, 2, 0.5002532704787946, 6, 4, 1.4277438221372638]
-    #return [32, 0.0003778450201583826, 3.4703673500392346e-08, 42, 3, 0.5642073310609655, 6, 4, 0.5032937921364286]
+    "RNN_VAE": ([18, 0.00016409427656154815, 1.9378132418753713e-05, 24, 1, 1, 6, 2, 3.359267821929004],
+    "RNN_VAE hidden=24, encode_depth=1, decode_depth=1, latent=6, VAE depth=2, VAE ratio=3.36.wab"),
     
-#    set_model_type("VAE_MLP")
-#    return [16, 0.0001, 5.151727534054279e-05, 6, 7.753192086063947, 7.411389428825689, 5.301401097330652]
-    
-    
-def get_best_file_name():
-    return "StepWiseVAEMLP control=48, depth=2, ratio=0.50, latent=6, VAE depth=4, VAE ratio=1.43.wab"
-    #return "StepWiseVAEMLP control=42, depth=3, ratio=0.56, latent=6, VAE depth=4, VAE ratio=0.50.wab"
-    #return "Model latent=6, layer3=46, layer2=340, layer1=1802, loss=0.0063.wab"
-    #return "Model latent=8, layer3=29, layer2=109, layer1=892, loss=0.0026.wab" # Mu=1 (linear, no transform), small latent size
+    "StepWiseVAEMLP": ([28, 0.000257541325218376, 2.002069396636439e-08, 48, 2, 0.5002532704787946, 6, 4, 1.4277438221372638],
+    "StepWiseVAEMLP control=48, depth=2, ratio=0.50, latent=6, VAE depth=4, VAE ratio=1.43.wab")
+}
+
+
+def get_best_model_configuration():
+    #best = "RNN_VAE"
+    best = "StepWiseVAEMLP"
+    set_model_type(best)
+    return best_models[best]
 
 
 def load_best_model():
-    model_params = get_best_hyper_params()[3:]
-    max_params = 1000000000
+    params, file_name = get_best_model_configuration()
+    model_params = params[3:]
+    max_params = +1e99 # ignore
     verbose = True
     model, model_text = make_model(model_params, max_params, verbose)
-    file_name = get_best_file_name()
     
     print(f"Loading weights & biases from file '{file_name}'")
     model.load_state_dict(torch.load(file_name))
@@ -149,12 +155,13 @@ def train_best_params():
     #generate_training_stfts(3000) # use a large number of samples with augmentation
     generate_training_stfts(None) # No augmentation
     
-    params = get_best_hyper_params()
+    params, _ = get_best_model_configuration()
 
     max_time = 12 * 3600 # we should converge way before this!
     max_overfit = 2.0 # we're aiming for high precision on the training set
     max_params = 1000000000
+    max_epochs = 2000 # we don't hit this in practice.
     
     verbose = True
-    train_model(params, max_time, max_params, max_overfit, verbose)
+    train_model(params, max_epochs, max_time, max_params, max_overfit, verbose)
     #torch.save(model.state_dict(), model_file) # train_model does this.

@@ -164,18 +164,17 @@ def convert_stft_to_input(stft):
     
     stft = adjust_stft_length(stft, sequence_length)
     stft = complex_to_mulaw(stft)
-#    stft = transpose(stft)
-#    debug("stft.transpose", stft)
     
     return stft.contiguous()
 
 
+def convert_stfts_to_inputs(stfts):
+    return torch.stack([convert_stft_to_input(stft) for stft in stfts]).to(device)
+
+
 def convert_stft_to_output(stft):
-    #debug("convert_stft_to_output.stft", stft)
-    
     # Fix dimensions
     amplitudes = stft.squeeze(0)
-    #amplitudes = transpose(amplitudes)
     
     # Get rid of any silly values...
     amplitudes[amplitudes <= 0] = 0
@@ -193,6 +192,8 @@ def convert_stft_to_output(stft):
 
     return output_stft
         
+        
+
 
 def test_stft_conversions(file_name):
     sr, stft = compute_stft_for_file(file_name, 2*stft_buckets, stft_hop)
@@ -228,4 +229,27 @@ def test_stft_conversions(file_name):
 #sys.exit(1)
 
 
+
+from SampleCategory import *
+
+# Utility to help categorise samples:
+def display_sample_categories():
+    stfts, file_names = load_STFTs()
+    others = []
+    
+    for name in file_names:
+        category = infer_sample_category(name)
+        #print(f"{category:>20}: {name}")
+        if category == "Other":
+            for term in split_text_into_words(name):
+                if not ignore_term(term):
+                    others.append(term)
+
+    print("Common unmatched terms:")
+    display_top_words(others, 0.0)
+    
+    infer_sample_categories(file_names)
+    
+
+#display_sample_categories()
 
