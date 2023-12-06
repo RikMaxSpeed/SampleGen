@@ -162,7 +162,7 @@ def train_model(hyper_params, max_time, max_params, max_overfit, verbose):
             
             # Save the model:
             file_name = model_text # keep over-writing the same file as the loss improves
-            print("*** Best! loss={:.4f}, model={}, hyper={}".format(last_saved_loss, model_text, optimiser_text))
+            print("*** Best! loss={:.4f}, model={}, optimiser={}".format(last_saved_loss, model_text, optimiser_text))
             torch.save(model.state_dict(), file_name + ".wab")
             
             # Write the parameters to file:

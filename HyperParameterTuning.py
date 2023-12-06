@@ -10,10 +10,13 @@ from AutoEncoderModels import *
 #import warnings
 #warnings.filterwarnings("ignore", category=DeprecationWarning)
 
-max_params = 120000000 # Approx size of 1000 STFTs in the trainin set
+# The huge MLP_VAE needs order of 120M parameters.
+#max_params = 1000 * stft_buckets * sequence_length # Approx size of 1000 STFTs in the training set
+# But the StepWiseMLP and RNN are much more memory efficient
+max_params = 10 * stft_buckets * sequence_length
 
 count = 0
-break_on_exceptions = False # Set this to False to allow the process to continue even if the model blows up.
+break_on_exceptions = False # Set this to False to allow the process to continue even if the model blows up (useful for long tuning runs!)
 
 def evaluate_model(params):
     global count
@@ -77,12 +80,27 @@ def optimise_hyper_parameters():
         search_space.append(Integer(1,         5,   'uniform',      name='vae_depth'))
         search_space.append(Real   (0.1,       4,   'log-uniform',  name='vae_ratio'))
     
-    if True:
+    if False:
         # Train the RNNAutoEncoder
         set_model_type("RNNAutoEncoder")
         search_space.append(Integer(10,       60,   'uniform',      name='hidden_size'))
-        search_space.append(Integer(1,         5,   'uniform',      name='encode_depth'))
-        search_space.append(Real   (1,         5,   'uniform',      name='decode_depth'))
+        search_space.append(Integer(1,         4,   'uniform',      name='encode_depth'))
+        search_space.append(Integer(1,         4,   'uniform',      name='decode_depth'))
+
+    if True:
+        # Train the RNN_VAE
+        set_model_type("RNN_VAE")
+        # RNN parameters
+        search_space.append(Integer(10,       60,   'uniform',      name='hidden_size'))
+        search_space.append(Integer(1,         2,   'uniform',      name='encode_depth'))
+        search_space.append(Integer(1,         2,   'uniform',      name='decode_depth'))
+        
+        # VAE parameters
+        search_space.append(Integer(4,         8,   'uniform',      name='latent_size'))
+        search_space.append(Integer(1,         5,   'uniform',      name='vae_depth'))
+        search_space.append(Real   (0.1,       4,   'log-uniform',  name='vae_ratio'))
+
+
 
     print("Optimising hyper-parameters:")
     display(search_space)

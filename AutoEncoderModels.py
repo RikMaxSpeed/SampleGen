@@ -28,7 +28,13 @@ def get_layers(model_params):
     layers = [stft_buckets * sequence_length, layer1_size, layer2_size, layer3_size, latent_size]
 
     return layers
-    
+
+def is_too_large(approx_size, max_params):
+    if approx_size > max_params:
+            print(f"Model is too large: approx {approx_size:,} parameters vs max={max_params:,}")
+            return True
+    else:
+        return False
 
 def make_model(model_params, max_params, verbose):
     invalid_model = None, None
@@ -37,8 +43,7 @@ def make_model(model_params, max_params, verbose):
         latent_size, layer3_ratio, layer2_ratio, layer1_ratio = model_params
         layers = get_layers(model_params)
         approx_size = 2 * fully_connected_size(layers)
-        if approx_size > max_params:
-            print(f"Model is too large: approx {size:,} parameters vs max={max_params:,}")
+        if is_too_large(approx_size, max_params):
             return invalid_model
             
         model_text = f"{model_type} latent={layers[4]}, layer3={layers[3]}, layer2={layers[2]}, layer1={layers[1]}"
@@ -47,8 +52,7 @@ def make_model(model_params, max_params, verbose):
     elif model_type == "StepWiseMLP":
         control_size, depth, ratio = model_params
         approx_size = StepWiseMLPAutoEncoder.approx_trainable_parameters(stft_buckets, control_size, depth, ratio)
-        if approx_size > max_params:
-            print(f"Model is too large: approx {size:,} parameters vs max={max_params:,}")
+        if is_too_large(approx_size, max_params):
             return invalid_model
             
         model_text = f"{model_type} control={control_size}, depth={depth}, ratio={ratio:.2f}"
@@ -57,50 +61,39 @@ def make_model(model_params, max_params, verbose):
     elif model_type == "StepWiseVAEMLP":
         control_size, depth, ratio, latent_size, vae_depth, vae_ratio = model_params
         approx_size = StepWiseVAEMLPAutoEncoder.approx_trainable_parameters(stft_buckets, sequence_length, control_size, depth, ratio, latent_size, vae_depth, vae_ratio)
-        if approx_size > max_params:
-            print(f"Model is too large: approx {size:,} parameters vs max={max_params:,}")
+        if is_too_large(approx_size, max_params):
             return invalid_model
             
         model_text = f"{model_type} control={control_size}, depth={depth}, ratio={ratio:.2f}, latent={latent_size}, VAE depth={vae_depth}, VAE ratio={vae_ratio:.2f}"
         model = StepWiseVAEMLPAutoEncoder(stft_buckets, sequence_length, control_size, depth, ratio, latent_size, vae_depth, vae_ratio)
     
-    elif model == "RNNAutoEncoder":
+    elif model_type == "RNNAutoEncoder":
         hidden_size, encode_depth, decode_depth = model_params
         dropout = 0 # will explore this later.
-        approx_size = StepWiseVAEMLPAutoEncoder.approx_trainable_parameters(stft_buckets, hidden_size, encode_depth, decode_depth)
-        if approx_size > max_params:
-            print(f"Model is too large: approx {size:,} parameters vs max={max_params:,}")
+        approx_size = RNNAutoEncoder.approx_trainable_parameters(stft_buckets, hidden_size, encode_depth, decode_depth)
+        if is_too_large(approx_size, max_params):
             return invalid_model
             
         model_text = f"{model_type} hidden={hidden_size}, encode_depth={encode_depth}, decode_depth={decode_depth}"
         model = RNNAutoEncoder(stft_buckets, sequence_length, hidden_size, encode_depth, decode_depth, dropout)
     
-            
-    elif model_type == "Hybrid_CNN": # This didn't work
-        kernel_count, kernel_size, rnn_hidden_size = model_params
-        
-        # for some reason we get int64 here which upsets PyTorch...
-        kernel_count    = int(kernel_count)
-        kernel_size     = int(kernel_size)
-        rnn_hidden_size = int(rnn_hidden_size)
-        
-        approx_size = HybridCNNAutoEncoder.approx_trainable_parameters(stft_buckets, sequence_length, kernel_count, kernel_size, rnn_hidden_size)
-        print(f"approx_size={approx_size:,} parameters")
-        if approx_size > max_params:
-            print(f"Model is too large: approx {size:,} parameters vs max={max_params:,}")
+    elif model_type == "RNN_VAE":
+        hidden_size, encode_depth, decode_depth, latent_size, vae_depth, vae_ratio = model_params
+        dropout = 0 # will explore this later.
+        approx_size = RNN_VAE.approx_trainable_parameters(stft_buckets, sequence_length, hidden_size, encode_depth, decode_depth, latent_size, vae_depth, vae_ratio)
+        if is_too_large(approx_size, max_params):
             return invalid_model
             
-        model_text = f"{model_type} kernels={kernel_count}, kernel_size={kernel_size}, rnn_hidden={rnn_hidden_size}"
-        print(model_text)
-        model = HybridCNNAutoEncoder(stft_buckets, sequence_length, kernel_count, kernel_size, rnn_hidden_size)
+        model_text = f"{model_type} hidden={hidden_size}, encode_depth={encode_depth}, decode_depth={decode_depth}, latent={latent_size}, VAE depth={vae_depth}, VAE ratio={vae_ratio:.2f}"
+        model = RNN_VAE(stft_buckets, sequence_length, hidden_size, encode_depth, decode_depth, dropout, latent_size, vae_depth, vae_ratio)
 
     else:
         raise Exception(f"Unknown model: {model_type}")
-        
+
     
     # Check the real size:
     size = count_trainable_parameters(model)
-    print(f"model={model_type}, approx size={approx_size:,} parameters, exact={size:,}, error={100*(approx_size/size - 1):.2f}%")
+    print(f"model={model_type}, approx size={approx_size:,} parameters, exact={size:,}, difference={100*(approx_size / size - 1):.4f}%")
     
     if size > max_params:
         print(f"Model is too large: {size:,} parameters vs max={max_params:,}")
@@ -114,4 +107,3 @@ def make_model(model_params, max_params, verbose):
         print("model={}".format(model))
     
     return model, model_text
-
