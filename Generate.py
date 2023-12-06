@@ -253,7 +253,6 @@ class Sample_Generator():
             rows += 1
 
         fig, axs = plt.subplots(rows, cols, figsize=(5*cols, 5*rows))
-        #fig.subplots_adjust(left=0.1, right=0.9, bottom=0.1, top=0.9, wspace=0.4, hspace=0.4)
         fig.subplots_adjust(wspace=0.3, hspace=0.3)
         cmap = plt.cm.get_cmap(colour_map)
         dot_size = 15
@@ -294,7 +293,6 @@ class Sample_Generator():
                 for handle in legend.legendHandles:
                     handle.set_sizes([4 * dot_size])
         
-        #plt.tight_layout()
         plt.show()
         
 

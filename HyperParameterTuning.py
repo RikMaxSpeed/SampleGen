@@ -105,7 +105,7 @@ def optimise_hyper_parameters():
     print("Optimising hyper-parameters:")
     display(search_space)
 
-    result = gp_minimize(evaluate_model, search_space, n_calls=1000, n_initial_points=16, initial_point_generator='sobol', noise='gaussian')
+    result = gp_minimize(evaluate_model, search_space, n_calls=1000, n_initial_points=16, initial_point_generator='sobol', noise='gaussian', verbose=True)
 
     print("\n\nHyper Parameter Optimisation Done!!")
     print("Best result={:.2f}".format(result.fun))
