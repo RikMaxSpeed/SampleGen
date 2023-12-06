@@ -107,7 +107,7 @@ def plot_losses(train_losses, test_losses):
     plot_loss("Test",  test_losses,  "blue", +0.00)
 
     plt.xlabel('Epoch')
-    plt.ylabel('Loss')
+    plt.ylabel('Loss (log)')
     plt.gca().set_yscale('log')
     plt.title("Loss after {} epochs".format(count))
     plt.legend()

@@ -18,7 +18,7 @@ def evaluate_model(params):
     count += 1
     print(f"\n\n\nHyper-Parameter tuning#{count}\n")
     
-    max_time = 300
+    max_time = 500
     max_ratio = 4.0
     max_overfit = 1.1
     verbose = False
@@ -37,11 +37,11 @@ def evaluate_model(params):
 
 
 def optimise_hyper_parameters():
-    generate_training_stfts(100) # we could use a smaller data-set here to speed things up?
+    generate_training_stfts(200) # use a smaller data-set here to speed things up?
 
     # Optimiser:
     search_space = list()
-    search_space.append(Integer(16,     512,    'log-uniform',  name='batch_size'))
+    search_space.append(Integer(  16,    256,    'log-uniform',  name='batch_size'))
     search_space.append(Real   (1e-6,   1e-2,   'log-uniform',  name='learning_rate'))
     search_space.append(Real   (1e-8,   1e-2,   'log-uniform',  name='weight_decay'))
 
@@ -96,7 +96,8 @@ def optimise_hyper_parameters():
 
 def get_best_hyper_params():
     set_model_type("StepWiseVAEMLP")
-    return [32, 0.0003778450201583826, 3.4703673500392346e-08, 42, 3, 0.5642073310609655, 6, 4, 0.5032937921364286]
+    return [28, 0.000257541325218376, 2.002069396636439e-08, 48, 2, 0.5002532704787946, 6, 4, 1.4277438221372638]
+    #return [32, 0.0003778450201583826, 3.4703673500392346e-08, 42, 3, 0.5642073310609655, 6, 4, 0.5032937921364286]
     
 #    set_model_type("VAE_MLP")
 #    return [16, 0.0001, 5.151727534054279e-05, 6, 7.753192086063947, 7.411389428825689, 5.301401097330652]
