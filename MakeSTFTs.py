@@ -9,8 +9,9 @@ import sys
 
 # Bunch of nasty global variables...
 sample_rate = 44100
-stft_buckets = 1024
-stft_hop = int(1024 * 3 / 4)
+stft_size = 512 # was 1024
+stft_buckets = 2 * stft_size
+stft_hop = int(stft_size * 3 / 4)
 
 sample_duration = 2.0 # seconds
 sequence_length = int(sample_duration * sample_rate / stft_hop)
@@ -42,9 +43,9 @@ def lowest_frequency(stft, sample_rate):
 
 def compute_stft_from_file(file_name):
     """Computes the STFT of the audio file and returns it as a tensor"""
-    sr, stft = compute_stft_for_file(file_name, 2*stft_buckets, stft_hop)
+    sr, stft = compute_stft_for_file(file_name, stft_buckets, stft_hop)
     #debug("compute_stft_from_file.stft", stft)
-    assert(stft.shape[0] == stft_buckets + 1)
+    assert(stft.shape[0] == stft_size + 1)
     
     low_hz = lowest_frequency(stft, sr)
 
@@ -134,7 +135,7 @@ def load_STFTs():
 
 def adjust_stft_length(stft_tensor, target_length):
     
-    assert(stft_buckets <= stft_tensor.shape[0] <= stft_buckets + 1)
+    assert(stft_size <= stft_tensor.shape[0] <= stft_size + 1)
     current_length = stft_tensor.shape[1]
     
     # If the current length is equal to the target, return the tensor as is
@@ -158,14 +159,15 @@ def transpose(tensor):
 
 def convert_stft_to_input(stft):
     assert(len(stft.shape) == 2)
-    assert(stft.shape[0] == stft_buckets + 1)
+    assert(stft.shape[0] == stft_size + 1)
     stft = stft[1:, :]
-    assert(stft.shape[0] == stft_buckets)
+    assert(stft.shape[0] == stft_size)
     
     stft = adjust_stft_length(stft, sequence_length)
-    stft = complex_to_mulaw(stft)
-    
-    return stft.contiguous()
+    maxAmp = torch.max(stft.abs())
+    stft /= maxAmp
+    stft = torch.view_as_real(stft).reshape(stft_buckets, sequence_length)
+    return stft.to(device)
 
 
 def convert_stfts_to_inputs(stfts):
@@ -173,31 +175,22 @@ def convert_stfts_to_inputs(stfts):
 
 
 def convert_stft_to_output(stft):
-    # Fix dimensions
-    amplitudes = stft.squeeze(0)
+    global maxAmp
     
-    # Get rid of any silly values...
-    amplitudes[amplitudes <= 0] = 0
-    
-    # Add back the constant bucket = 0
-    assert(amplitudes.shape[0] == stft_buckets)
-    zeros = torch.zeros(amplitudes.size(1)).unsqueeze(0).to(device)
-    amplitudes = torch.cat((zeros, amplitudes), dim=0)
-    assert(amplitudes.shape[0] == stft_buckets + 1)
-    
-    # Convert back to complex with 0 phase
-    output_stft = mulaw_to_zero_phase_complex(amplitudes)
-    assert(output_stft.shape[0] == stft_buckets + 1)
-    output_stft = output_stft.cpu().detach().numpy()
-
-    return output_stft
-        
-        
+    stft = stft.reshape(stft_size, sequence_length, 2)
+    stft *= maxAmp
+    zeros = torch.zeros(1, sequence_length, 2, device=device)
+    stft = torch.cat((zeros, stft), dim = 0)
+    stft = torch.view_as_complex(stft)
+    return stft.cpu().detach().numpy()
 
 
 def test_stft_conversions(file_name):
-    sr, stft = compute_stft_for_file(file_name, 2*stft_buckets, stft_hop)
+    sr, stft = compute_stft_for_file(file_name, stft_buckets, stft_hop)
     debug("stft", stft)
+    stft = stft[:, :sequence_length] # truncate
+    debug("truncated", stft)
+    amp = np.max(np.abs(stft))
     
     if False: # Generate a synthetic spectrum
         for f in range(stft.shape[0]):
@@ -205,11 +198,16 @@ def test_stft_conversions(file_name):
                 stft[f, t] = 75*np.sin(f*t) if f>=2*t and f <= 3*t else 0
     
     plot_stft(file_name, stft, sr, stft_hop)
-    stft = np.abs(stft) # because we discard the phases, everything becomes positive amplitudes
     
     tensor = torch.tensor(stft)
-    input = convert_stft_to_input(tensor).to(device)
+    debug("tensor", tensor)
+    input = convert_stft_to_input(tensor)
+    debug("input", input)
     output = convert_stft_to_output(input)
+    debug("output", output)
+    
+    global maxAmp
+    output *= amp / maxAmp
     
     plot_stft("Resynth " + file_name, output, sr, stft_hop)
     save_and_play_audio_from_stft(output, sr, stft_hop, "Results/resynth-mulaw-" + os.path.basename(file_name), True)
@@ -217,7 +215,7 @@ def test_stft_conversions(file_name):
     diff = np.abs(output - stft)
     debug("diff", diff)
     plot_stft("Diff", diff, sr, stft_hop)
-    for f in range(stft.shape[0]):
+    for f in range(1, stft.shape[0]):
         for t in range(stft.shape[1]):
             d = diff[f, t]
             if d > 0.1:

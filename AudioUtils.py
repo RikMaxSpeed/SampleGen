@@ -142,6 +142,8 @@ def demo_stft(file_name, n_fft, hop_length):
     sr, stft = compute_stft_for_file(file_name, n_fft, hop_length)
     
     plot_stft(file_name, stft, sr, hop_length)
+
+    debug("stft", stft)
     
     save_and_play_audio_from_stft(stft, sr, hop_length, "Results/resynth-" + os.path.basename(file_name), True)
     
@@ -239,7 +241,7 @@ codec = MuLawCodec(2) # Yet another hyper-parameter but we can't tune this one a
 
 # We normalise all amplitudes to [0, 1] on input.
 # But when we convert back to audio we need to amplify the signal again.
-maxAmp = 278 # Average across all training samples - this is just to get a reasonable playback level.
+maxAmp = 278.0 # Average across all training samples - this is just to get a reasonable playback level.
 
 def complex_to_mulaw(complex_tensor):
     global maxAmp
@@ -258,7 +260,7 @@ def complex_to_mulaw(complex_tensor):
 def mulaw_to_zero_phase_complex(mulaw_tensor):
     # Create a complex tensor with the linear amplitude as the real part and 0 as the imaginary part
     magnitude = codec.decode(mulaw_tensor) * maxAmp
-    magnitude[magnitude < maxAmp/100] = 0 # hack! remove noisy low values
+    #magnitude[magnitude < maxAmp/100] = 0 # hack! remove noisy low values
     stacked = torch.stack([magnitude, torch.zeros_like(magnitude).to(magnitude.device)], dim=-1)
     return torch.view_as_complex(stacked)
 
@@ -295,4 +297,55 @@ def test_mulaw_conversion():
     
     
 #test_mulaw_conversion()
+
+
+def complex_to_normalised_polar(complex_tensor):
+    amplitudes = torch.abs(complex_tensor)
+    phases = torch.angle(complex_tensor)
+
+    # normalise
+    amplitudes /= torch.max(amplitudes)
+    phases /= torch.pi
+
+    return torch.stack((amplitudes, phases), dim=-1)
+
+def normalised_polar_to_complex(interleaved_tensor):
+    debug("normalised_polar_to_complex", interleaved_tensor)
+    amplitudes = interleaved_tensor[..., 0] * maxAmp
+    debug("amplitudes", amplitudes)
+    phases = interleaved_tensor[..., 1] * torch.pi
+    debug("phases", phases)
+    return torch.polar(amplitudes, phases)
+
+
+def test_complex_to_polar_and_back():
+    N = 10
+    magnitudes = torch.rand(N) * 100
+    phases     = (torch.rand(N) - 0.5) * 2 * torch.pi
+    #phases = torch.zeros(N)
+
+    complex = magnitudes * torch.exp(1j * phases)
+    print(f"complex={complex}")
+    amp = torch.max(torch.abs(complex))
+    print(f"amp={amp:.3f}")
+    
+    polar = complex_to_normalised_polar(complex)
+    print(f"polar={polar}")
+    debug("polar", polar)
+    
+    back = normalised_polar_to_complex(polar)
+    print(f"back={back}")
+    debug("back", back)
+    
+    back *= amp / maxAmp
+    print(f"scaled={back}")
+    
+    delta = back - complex
+    norm = torch.norm(delta, p=2)
+    print(f"delta={delta}, norm={norm:.5f}")
+    
+    assert(norm < 1e-4) # we expect some numeric noise with float32
+
+
+#test_complex_to_polar_and_back()
 

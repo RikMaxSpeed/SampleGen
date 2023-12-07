@@ -75,7 +75,6 @@ def generate_training_stfts(how_many):
 
 
 # Hyper-parameter optimisation
-max_loss = 100 # large value to tel the hyper-parameter optimiser not to go here.
 last_saved_loss = 0.02 # don't bother saving models above this threshold
 
 # Keep track of all the test-losses over multiple runs, so we can learn how to terminate early on poor hyper-parameters.
@@ -160,7 +159,7 @@ def train_model(hyper_params, max_epochs, max_time, max_params, max_overfit, ver
             
             # Save the model:
             file_name = model_text # keep over-writing the same file as the loss improves
-            print("*** Best! loss={:.4f}, model={}, optimiser={}".format(last_saved_loss, model_text, optimiser_text))
+            print("*** Best! loss={:.2f}, model={}, optimiser={}".format(last_saved_loss, model_text, optimiser_text))
             print(f"hyper-parameters: [hyper_params]")
             torch.save(model.state_dict(), file_name + ".wab")
             
@@ -180,7 +179,7 @@ def train_model(hyper_params, max_epochs, max_time, max_params, max_overfit, ver
             save_and_play_audio_from_stft(resynth, sample_rate, stft_hop, f"Results/{sanity_test_name} {model_text} - resynth.wav", False)
             
 
-        if verbose and now - lastGraph > graph_interval:
+        if verbose and now - lastGraph > graph_interval and len(train_losses) > 1:
             plot_losses(train_losses, test_losses)
             lastGraph = now
             graph_interval = int(min(3600, 1.5*graph_interval))

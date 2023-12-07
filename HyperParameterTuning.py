@@ -24,9 +24,10 @@ def evaluate_model(params):
     count += 1
     print(f"Hyper-Parameter tuning#{count}: [params]\n")
     
-    max_time = 5 * 60 # seconds
+    #max_time = 5 * 60 # seconds
     max_overfit = 1.1
     max_epochs = 100 # This is sufficient to figure out which model will converge best if we let it run for longer.
+    max_time = max_epochs * 20 # we hopefully won't bump into this.
     verbose = False
     
     if break_on_exceptions: # this is easier when debugging
@@ -39,17 +40,19 @@ def evaluate_model(params):
         except:
             print(f"*** Breaking Bad :(")
         
-        return 100000 # return a high loss...
+        return max_loss # return a high loss...
 
 
 def optimise_hyper_parameters():
     #count = 200  # use a smaller data-set here to speed things up? Not a good idea as the model may be too limited in size
-    count = 1000
+    count = 950
     generate_training_stfts(count)
     
     global max_params
-    max_params = (stft_buckets * sequence_length * count) // 10
-    print(f"Size limit = max {max_params:,} parameters.")
+    one_sample = stft_buckets * sequence_length
+    train_data_size = count * one_sample
+    max_params = 20 * one_sample
+    print(f"{count} training samples, {stft_buckets} frequencies, {sequence_length} time-steps, maximum model size is {max_params:,} parameters.")
     
     # Optimiser:
     search_space = list()
@@ -57,57 +60,56 @@ def optimise_hyper_parameters():
     search_space.append(Real   (1e-6,   1e-2,   'log-uniform',  name='learning_rate'))
     search_space.append(Real   (1e-8,   1e-2,   'log-uniform',  name='weight_decay'))
 
-    # Model:
-    if False:
-        # Train the STFTVariationalAutoEncoder
-        set_model_type("VAE_MLP")
-        search_space.append(Integer(4,      8,      'uniform',      name='latent_size'))
-        search_space.append(Real   (1.0,    10.0,   'uniform',      name='layer3_ratio'))
-        search_space.append(Real   (1.0,    10.0,   'uniform',      name='layer2_ratio'))
-        search_space.append(Real   (1.0,    10.0,   'uniform',      name='layer1_ratio'))
-        
-    if False:
-        # Train just the StepWiseMLPAutoEncode (with no VAE)
-        set_model_type("StepWiseMLP")
-        search_space.append(Integer(10,       50,   'uniform',      name='control_size'))
-        search_space.append(Integer(2,         4,   'uniform',      name='depth'))
-        search_space.append(Real   (0.1,     2.0,   'log-uniform',  name='ratio'))
-        
-    if True:
-        # Train the StepWiseMLP_VAE
-        set_model_type("StepWiseVAEMLP")
-        
-        # StepWiseMLP parameters
-        search_space.append(Integer(40,       50,   'uniform',      name='control_size'))
-        search_space.append(Integer(2,         4,   'uniform',      name='depth'))
-        search_space.append(Real   (0.1,       4,   'log-uniform',  name='ratio'))
-        
-        # VAE parameters:
-        search_space.append(Integer(4,         8,   'uniform',      name='latent_size'))
-        search_space.append(Integer(1,         5,   'uniform',      name='vae_depth'))
-        search_space.append(Real   (0.1,       4,   'log-uniform',  name='vae_ratio'))
+    model_name = "StepWiseMLP"
+    set_model_type(model_name)
     
-    if False:
-        # Train the RNNAutoEncoder
-        set_model_type("RNNAutoEncoder")
-        search_space.append(Integer(10,       60,   'uniform',      name='hidden_size'))
-        search_space.append(Integer(1,         4,   'uniform',      name='encode_depth'))
-        search_space.append(Integer(1,         4,   'uniform',      name='decode_depth'))
-
-    if False:
-        # Train the RNN_VAE
-        set_model_type("RNN_VAE")
-        # RNN parameters
-        search_space.append(Integer(10,      100,   'uniform',      name='hidden_size'))
-        search_space.append(Integer(1,         4,   'uniform',      name='encode_depth'))
-        search_space.append(Integer(1,         4,   'uniform',      name='decode_depth'))
+    # Model:
+    match model_name:
         
-        # VAE parameters
-        search_space.append(Integer(4,         8,   'uniform',      name='latent_size'))
-        search_space.append(Integer(1,         5,   'uniform',      name='vae_depth'))
-        search_space.append(Real   (0.1,       5,   'log-uniform',  name='vae_ratio'))
+        case "VAE_MLP":
+            # Train the STFTVariationalAutoEncoder
+            search_space.append(Integer(4,      8,      'uniform',      name='latent_size'))
+            search_space.append(Real   (1.0,    10.0,   'uniform',      name='layer3_ratio'))
+            search_space.append(Real   (1.0,    10.0,   'uniform',      name='layer2_ratio'))
+            search_space.append(Real   (1.0,    10.0,   'uniform',      name='layer1_ratio'))
+            
+        case "StepWiseMLP":
+            # Train just the StepWiseMLPAutoEncode (with no VAE)
+            search_space.append(Integer(10,       50,   'uniform',      name='control_size'))
+            search_space.append(Integer(2,         4,   'uniform',      name='depth'))
+            search_space.append(Real   (0.1,     2.0,   'log-uniform',  name='ratio'))
+            
+        case "StepWiseVAEMLP":
+            # Train the StepWiseMLP_VAE
+            
+            # StepWiseMLP parameters
+            search_space.append(Integer(40,       50,   'uniform',      name='control_size'))
+            search_space.append(Integer(2,         4,   'uniform',      name='depth'))
+            search_space.append(Real   (0.1,       4,   'log-uniform',  name='ratio'))
+            
+            # VAE parameters:
+            search_space.append(Integer(4,         8,   'uniform',      name='latent_size'))
+            search_space.append(Integer(1,         5,   'uniform',      name='vae_depth'))
+            search_space.append(Real   (0.1,       4,   'log-uniform',  name='vae_ratio'))
+        
+        case "RNNAutoEncoder": # Train the RNNAutoEncoder (no VAE)
+            search_space.append(Integer(10,      120,   'uniform',      name='hidden_size'))
+            search_space.append(Integer(1,         5,   'uniform',      name='encode_depth'))
+            search_space.append(Integer(1,         5,   'uniform',      name='decode_depth'))
 
+        case "RNN_VAE": # Train the full RNN_VAE
+            # RNN parameters
+            search_space.append(Integer(10,      100,   'uniform',      name='hidden_size'))
+            search_space.append(Integer(1,         4,   'uniform',      name='encode_depth'))
+            search_space.append(Integer(1,         4,   'uniform',      name='decode_depth'))
+            
+            # VAE parameters
+            search_space.append(Integer(4,         8,   'uniform',      name='latent_size'))
+            search_space.append(Integer(1,         5,   'uniform',      name='vae_depth'))
+            search_space.append(Real   (0.1,       5,   'log-uniform',  name='vae_ratio'))
 
+        case _:
+            raise Exception(f"Invalid model type = {model_name}")
 
     print("Optimising hyper-parameters:")
     display(search_space)

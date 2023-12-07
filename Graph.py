@@ -38,7 +38,7 @@ def plot_multiple_histograms_vs_gaussian(series_list, series_names=None):
         
         name = series_names[i] if series_names else i+1  # Use provided name or index
         
-        plt.hist(series, bins=bins, density=True, alpha=0.6, color=color, label=f'{name} (mean={mu:.4f}, std={std:.4f})')
+        plt.hist(series, bins=bins, density=True, alpha=0.6, color=color, label=f'{name} (mean={mu:.2f}, std={std:.2f})')
         
         x = np.linspace(xmin, xmax, ticks)
         p = norm.pdf(x, mu, std)
@@ -94,7 +94,7 @@ def plot_losses(train_losses, test_losses):
         l = losses[i]
         
         plt.scatter(i+1, l, label=None, c=colour, s=8)
-        plt.text(i+1, l*(1+offset), "{:.4f}".format(l), color = colour)
+        plt.text(i+1, l*(1+offset), "{:.2f}".format(l), color = colour)
 
 
     count = len(train_losses)

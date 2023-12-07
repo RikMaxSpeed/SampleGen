@@ -33,6 +33,8 @@ def get_output_for_layer(name, layer, input):
         raise e
 
 
+max_loss = 10000 # A reasonably large value, to tell the hyper-parameter optimiser not to go there.
+
 def compute_average_loss(model, dataset, batch_size):
     
     model.eval()
@@ -51,7 +53,7 @@ def compute_average_loss(model, dataset, batch_size):
             if np.isnan(loss): # give-up
                 raise Exception("model.forward_loss returned NaN :(")
                 
-            if loss > 1e6: # also give up if the model explodes
+            if loss > max_loss: # also give up if the model explodes
                 raise Exception(f"model.forward_loss exploded: loss={loss:g} :(")
                 
             total_loss += loss * len(inputs)
@@ -88,7 +90,7 @@ def stop_condition(train_losses, test_losses, window, min_change, max_overfit, t
     now = time.time()
     if now - last_progress > progress_seconds:
         last_progress = now
-        print("total={:.0f} sec, epoch={} ({:.1f} sec/epoch), train={:.4f} ({:.2f}%), test={:.4f} ({:.2f}%), overfit={:.2f}"\
+        print("total={:.0f} sec, epoch={} ({:.1f} sec/epoch), train={:.2f} ({:.2f}%), test={:.2f} ({:.2f}%), overfit={:.2f}"\
         .format(total, epochs, total/epochs, train_losses[-1], delta(train_losses), test_losses[-1], delta(test_losses), test_losses[-1]/train_losses[-1]))
         
     if len(test_losses) < 2*window: # Too few epochs

@@ -48,7 +48,7 @@ class RNNAutoEncoder(nn.Module): # no VAE
                 
     def forward_loss(self, inputs):
         outputs = self.forward(inputs)
-        loss = reconstruction_loss(inputs, outputs) / inputs[0].numel()
+        loss = reconstruction_loss(inputs, outputs)
         return loss, outputs
 
 
