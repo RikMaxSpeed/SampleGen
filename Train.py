@@ -154,7 +154,7 @@ def train_model(hyper_params, max_epochs, max_time, max_params, max_overfit, ver
 
 
         # Save the best models (but not too often)
-        global last_saved_loss, best_train_losses
+        global last_saved_loss
         if epoch >= 10 and train_losses[-1] < last_saved_loss * 0.95:
             last_saved_loss = train_losses[-1]
             
@@ -167,11 +167,11 @@ def train_model(hyper_params, max_epochs, max_time, max_params, max_overfit, ver
             # Write the parameters to file:
             with open(file_name+".txt", 'w') as file:
                 file.write(model_text + "\n")
+                file.write(f"{count_trainable_parameters(model):,} weights & biases\n\n")
                 file.write(f"optimiser: {optimiser_text}\n")
                 file.write("\n")
+                file.write(f"train loss={train_losses[-1]:.5f}, test  loss={test_losses[-1]:.5f}, overfit={train_losses[-1]/test_losses[-1]:.2f}\n")
                 file.write(f"time={total:.0f} sec, train_size={len(train_dataset)}, batch_size={batch_size}, epoch={epoch} = {total/epoch:.1f} sec/epoch\n")
-                file.write(f"\ttrain loss={train_losses[-1]:.5f}\n")
-                file.write(f"\ttest  loss={test_losses[-1]:.5f}\n")
                 file.write("\n")
                 file.write(str(hyper_params))
             
@@ -198,6 +198,7 @@ def train_model(hyper_params, max_epochs, max_time, max_params, max_overfit, ver
             break
             
         # Early stopping based on average convergence:
+        # In practice this didn't work well: the mean can fluctuate to much, even when removing outliers, and it's not sufficiently aggressive.
         # Note: this should really be time-based rather than epoch as models run at different speeds depending on batch size, learning rate and model size.
         # ie: if after 1mn the model is worse than the average at 1mn then give up...
         # In practice, the current implementation doesn't work too well, the stdev can be very high. Could try mean - 0.1 x stdev ? ...
@@ -208,7 +209,12 @@ def train_model(hyper_params, max_epochs, max_time, max_params, max_overfit, ver
 #                print(f"Early stopping at epoch={epoch}, test loss={loss:.5f} vs mean={mean:.5f}")
 #                break
 
-        if epoch > 20 and epoch < len(best_train_losses) and train_loss[epoch] < best_train_losses[epoch] * 1.5:
+        # Early stopping: abort if a model is converging too slowly vs the best.
+        # Unfortunately this is not in time space, but in epochs.
+        # So we could miss out on a model that is slow to train but reaches a better optimal loss.
+        # That said, in practice the models with the lowest loss tend to be those that train quickly per epoch.
+        global best_train_losses
+        if epoch > 20 and epoch < len(best_train_losses) and train_loss[epoch] < best_train_losses[epoch] * 2.0:
             print(f"Early stopping at epoch={epoch}, train loss={train_loss[epoch]:.5f} vs best={best_train_losses[epoch]:.5f}")
             break
             

@@ -126,13 +126,10 @@ best_models = {
 
 #    "RNN_VAE": ([18, 0.00016409427656154815, 1.9378132418753713e-05, 24, 1, 1, 6, 2, 3.359267821929004],
 #    "RNN_VAE hidden=24, encode_depth=1, decode_depth=1, latent=6, VAE depth=2, VAE ratio=3.36.wab"),
-
-    "StepWiseVAEMLP": ([16, 0.00017371896764892885, 0.01, 42, 4, 0.1, 7, 3, 0.11123019115722409],
-    "not trained")
-
-
-#    "StepWiseVAEMLP": ([28, 0.000257541325218376, 2.002069396636439e-08, 48, 2, 0.5002532704787946, 6, 4, 1.4277438221372638],
-#    "StepWiseVAEMLP control=48, depth=2, ratio=0.50, latent=6, VAE depth=4, VAE ratio=1.43.wab")
+    
+    # This model achieves good losses, however it uses 8 variables in the latent space, and at least 3 of them appear highly correlated.
+    "StepWiseVAEMLP": ([16, 0.0008253527686277826, 2.8929226732001846e-06, 45, 4, 2.426466845325152, 8, 1, 0.7256301852268706],
+    "StepWiseVAEMLP control=45, depth=4, ratio=2.43, latent=8, VAE depth=1, VAE ratio=0.73.wab") # train loss=0.00768, test  loss=0.00862
 }
 
 
