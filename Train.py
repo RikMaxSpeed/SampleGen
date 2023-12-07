@@ -75,7 +75,7 @@ def generate_training_stfts(how_many):
 
 
 # Hyper-parameter optimisation
-last_saved_loss = 0.02 # don't bother saving models above this threshold
+last_saved_loss = 500 # don't bother saving models above this threshold
 
 # Keep track of all the test-losses over multiple runs, so we can learn how to terminate early on poor hyper-parameters.
 all_test_losses = []
@@ -213,7 +213,7 @@ def train_model(hyper_params, max_epochs, max_time, max_params, max_overfit, ver
         # So we could miss out on a model that is slow to train but reaches a better optimal loss.
         # That said, in practice the models with the lowest loss tend to be those that train quickly per epoch.
         global best_train_losses
-        if epoch > 20 and epoch < len(best_train_losses) and train_loss[epoch] < best_train_losses[epoch] * 2.0:
+        if epoch > 20 and epoch < len(best_train_losses) and train_losses[epoch] < best_train_losses[epoch] * 2.0:
             print(f"Early stopping at epoch={epoch}, train loss={train_loss[epoch]:.5f} vs best={best_train_losses[epoch]:.5f}")
             break
             

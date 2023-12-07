@@ -51,7 +51,7 @@ def optimise_hyper_parameters():
     global max_params
     one_sample = stft_buckets * sequence_length
     train_data_size = count * one_sample
-    max_params = 20 * one_sample
+    max_params = 20 * one_sample    
     print(f"{count} training samples, {stft_buckets} frequencies, {sequence_length} time-steps, maximum model size is {max_params:,} parameters.")
     
     # Optimiser:
