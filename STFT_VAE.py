@@ -15,7 +15,6 @@ class STFTVariationalAutoEncoder(nn.Module):
         self.sequence_length = sequence_length
         self.stft_buckets = stft_buckets
         sizes = [sequence_length * stft_buckets] + sizes
-        print("STFTVariationalAutoEncoder: sequence_length={}, stft_buckets={}, sizes={}, activation_fn={}".format(sequence_length, stft_buckets, sizes, activation_fn.__class__))
         self.vae = VariationalAutoEncoder(sizes, activation_fn)
         
         

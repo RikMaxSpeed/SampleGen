@@ -3,7 +3,7 @@
 from skopt import gp_minimize
 from skopt.space import Integer, Real, Categorical
 from Train import *
-from AutoEncoderModels import *
+from MakeModels import *
 
 
 # skopt creates some unhelpful warnings...
@@ -16,15 +16,15 @@ from AutoEncoderModels import *
 max_params = stft_buckets * sequence_length
 
 count = 0
-break_on_exceptions = True # Set this to False to allow the process to continue even if the model blows up (useful for long tuning runs!)
+break_on_exceptions = False # Set this to False to allow the process to continue even if the model blows up (useful for long tuning runs!)
 
 
 def evaluate_model(params):
     global count
     count += 1
-    print(f"\n\n\nHyper-Parameter tuning#{count}\n")
+    print(f"Hyper-Parameter tuning#{count}: [params]\n")
     
-    max_time = 300
+    max_time = 5 * 60 # seconds
     max_overfit = 1.1
     max_epochs = 100 # This is sufficient to figure out which model will converge best if we let it run for longer.
     verbose = False
@@ -37,18 +37,19 @@ def evaluate_model(params):
         except Exception as e:
             print(f"*** Exception: {e}")
         except:
-            print(f"*** Something broke :(")
+            print(f"*** Breaking Bad :(")
         
         return 100000 # return a high loss...
 
 
 def optimise_hyper_parameters():
-    count = 200  # use a smaller data-set here to speed things up? Not a good idea as the model may be too limited in size
-    count = 1100
+    #count = 200  # use a smaller data-set here to speed things up? Not a good idea as the model may be too limited in size
+    count = 1000
     generate_training_stfts(count)
     
     global max_params
-    max_params = (stft_buckets * sequence_length * count) // 20
+    max_params = (stft_buckets * sequence_length * count) // 10
+    print(f"Size limit = max {max_params:,} parameters.")
     
     # Optimiser:
     search_space = list()
@@ -72,8 +73,8 @@ def optimise_hyper_parameters():
         search_space.append(Integer(2,         4,   'uniform',      name='depth'))
         search_space.append(Real   (0.1,     2.0,   'log-uniform',  name='ratio'))
         
-    if False:
-        # Train the StepWiseVAEMLPAutoEncoder
+    if True:
+        # Train the StepWiseMLP_VAE
         set_model_type("StepWiseVAEMLP")
         
         # StepWiseMLP parameters
@@ -93,18 +94,18 @@ def optimise_hyper_parameters():
         search_space.append(Integer(1,         4,   'uniform',      name='encode_depth'))
         search_space.append(Integer(1,         4,   'uniform',      name='decode_depth'))
 
-    if True:
+    if False:
         # Train the RNN_VAE
         set_model_type("RNN_VAE")
         # RNN parameters
-        search_space.append(Integer(10,       60,   'uniform',      name='hidden_size'))
-        search_space.append(Integer(1,         2,   'uniform',      name='encode_depth'))
-        search_space.append(Integer(1,         2,   'uniform',      name='decode_depth'))
+        search_space.append(Integer(10,      100,   'uniform',      name='hidden_size'))
+        search_space.append(Integer(1,         4,   'uniform',      name='encode_depth'))
+        search_space.append(Integer(1,         4,   'uniform',      name='decode_depth'))
         
         # VAE parameters
         search_space.append(Integer(4,         8,   'uniform',      name='latent_size'))
         search_space.append(Integer(1,         5,   'uniform',      name='vae_depth'))
-        search_space.append(Real   (0.1,       4,   'log-uniform',  name='vae_ratio'))
+        search_space.append(Real   (0.1,       5,   'log-uniform',  name='vae_ratio'))
 
 
 
@@ -113,18 +114,25 @@ def optimise_hyper_parameters():
 
     result = gp_minimize(evaluate_model, search_space, n_calls=1000, n_initial_points=16, initial_point_generator='sobol', noise='gaussian', verbose=True)
 
+    # I've never reached this point! :)
     print("\n\nHyper Parameter Optimisation Done!!")
     print("Best result={:.2f}".format(result.fun))
     print("Best parameters={}".format(result.x))
 
 
 best_models = {
+    "RNN_VAE": ([18, 0.0005575544181212729, 5.294016993959888e-06, 29, 1, 2, 4, 4, 0.20679719844604053],
+                "StepWiseVAEMLP control=48, depth=2, ratio=0.50, latent=6, VAE depth=4, VAE ratio=1.43.wab"), # train loss=0.01244, test  loss=0.01417
 
-    "RNN_VAE": ([18, 0.00016409427656154815, 1.9378132418753713e-05, 24, 1, 1, 6, 2, 3.359267821929004],
-    "RNN_VAE hidden=24, encode_depth=1, decode_depth=1, latent=6, VAE depth=2, VAE ratio=3.36.wab"),
-    
-    "StepWiseVAEMLP": ([28, 0.000257541325218376, 2.002069396636439e-08, 48, 2, 0.5002532704787946, 6, 4, 1.4277438221372638],
-    "StepWiseVAEMLP control=48, depth=2, ratio=0.50, latent=6, VAE depth=4, VAE ratio=1.43.wab")
+#    "RNN_VAE": ([18, 0.00016409427656154815, 1.9378132418753713e-05, 24, 1, 1, 6, 2, 3.359267821929004],
+#    "RNN_VAE hidden=24, encode_depth=1, decode_depth=1, latent=6, VAE depth=2, VAE ratio=3.36.wab"),
+
+    "StepWiseVAEMLP": ([16, 0.00017371896764892885, 0.01, 42, 4, 0.1, 7, 3, 0.11123019115722409],
+    "not trained")
+
+
+#    "StepWiseVAEMLP": ([28, 0.000257541325218376, 2.002069396636439e-08, 48, 2, 0.5002532704787946, 6, 4, 1.4277438221372638],
+#    "StepWiseVAEMLP control=48, depth=2, ratio=0.50, latent=6, VAE depth=4, VAE ratio=1.43.wab")
 }
 
 

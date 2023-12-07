@@ -61,7 +61,6 @@ class RNN_VAE(nn.Module):
     def get_vae_layers(stft_buckets, sequence_length, hidden_size, latent_size, vae_depth, vae_ratio):
         rnn_output_size = hidden_size * sequence_length
         layers = interpolate_layer_sizes(rnn_output_size, latent_size, vae_depth, vae_ratio)
-        print(f"VAE_layers={layers}")
         return layers
 
 

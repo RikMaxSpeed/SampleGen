@@ -60,12 +60,12 @@ def make_model(model_params, max_params, verbose):
             
     elif model_type == "StepWiseVAEMLP":
         control_size, depth, ratio, latent_size, vae_depth, vae_ratio = model_params
-        approx_size = StepWiseVAEMLPAutoEncoder.approx_trainable_parameters(stft_buckets, sequence_length, control_size, depth, ratio, latent_size, vae_depth, vae_ratio)
+        approx_size = StepWiseMLP_VAE.approx_trainable_parameters(stft_buckets, sequence_length, control_size, depth, ratio, latent_size, vae_depth, vae_ratio)
         if is_too_large(approx_size, max_params):
             return invalid_model
             
         model_text = f"{model_type} control={control_size}, depth={depth}, ratio={ratio:.2f}, latent={latent_size}, VAE depth={vae_depth}, VAE ratio={vae_ratio:.2f}"
-        model = StepWiseVAEMLPAutoEncoder(stft_buckets, sequence_length, control_size, depth, ratio, latent_size, vae_depth, vae_ratio)
+        model = StepWiseMLP_VAE(stft_buckets, sequence_length, control_size, depth, ratio, latent_size, vae_depth, vae_ratio)
     
     elif model_type == "RNNAutoEncoder":
         hidden_size, encode_depth, decode_depth = model_params
@@ -90,7 +90,7 @@ def make_model(model_params, max_params, verbose):
     else:
         raise Exception(f"Unknown model: {model_type}")
 
-    
+
     # Check the real size:
     size = count_trainable_parameters(model)
     print(f"model={model_type}, approx size={approx_size:,} parameters, exact={size:,}, difference={100*(approx_size / size - 1):.4f}%")

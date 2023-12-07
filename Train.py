@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 from IPython.display import FileLink
 import math
 
-from AutoEncoderModels import *
+from MakeModels import *
 from MakeSTFTs import *
 from Graph import *
 from ModelUtils import *
@@ -64,9 +64,9 @@ def generate_training_stfts(how_many):
     
     # Training set is kept completely separate from Test when augmenting.
     if how_many is not None and len(train_stfts) < how_many:
-        train_sfts = augment_stfts(train_stfts, how_many)
+        train_stfts = augment_stfts(train_stfts, how_many)
     
-    train_dataset = train_sfts
+    train_dataset = train_stfts
     test_dataset  = test_stfts
     
     print(f"Using train={len(train_dataset)} samples, test={len(test_dataset)} samples.")
@@ -75,24 +75,24 @@ def generate_training_stfts(how_many):
 
 
 # Hyper-parameter optimisation
-max_loss = 1000 # large value to tel the hyper-parameter optimiser not to go here.
+max_loss = 100 # large value to tel the hyper-parameter optimiser not to go here.
 last_saved_loss = 0.02 # don't bother saving models above this threshold
 
 # Keep track of all the test-losses over multiple runs, so we can learn how to terminate early on poor hyper-parameters.
 all_test_losses = []
 all_test_names = []
 
+# Compare the training loss to the best we've found, and abort if it's too far off.
+best_train_losses = []
 
-    
-    
+
+
 # Main entry point for training the model
 def train_model(hyper_params, max_epochs, max_time, max_params, max_overfit, verbose):
-    print(f"train_model: hyper-parameters={hyper_params}")
     
     # We split the hyper-params into optimiser parameters & model parameters:
     opt_params   = hyper_params[0:3]
     model_params = hyper_params[3:]
-    print(f"opt_params={opt_params}, model_params={model_params}")
     
     # Optmiser parameters:
     batch_size, learning_rate, weight_decay = opt_params
@@ -120,7 +120,7 @@ def train_model(hyper_params, max_epochs, max_time, max_params, max_overfit, ver
     test_losses = []
     
     # Stopping condition
-    window     = 15 # check progress between two windows
+    window     = 10 # check progress between two windows
     min_change = 0.005 # stop if lossNew/lossOld - 1 < min_change
 
     graph_interval = 5
@@ -154,13 +154,14 @@ def train_model(hyper_params, max_epochs, max_time, max_params, max_overfit, ver
 
 
         # Save the best models (but not too often)
-        global last_saved_loss
-        if epoch > 20 and train_losses[-1] < last_saved_loss * 0.95:
+        global last_saved_loss, best_train_losses
+        if epoch >= 10 and train_losses[-1] < last_saved_loss * 0.95:
             last_saved_loss = train_losses[-1]
             
             # Save the model:
             file_name = model_text # keep over-writing the same file as the loss improves
             print("*** Best! loss={:.4f}, model={}, optimiser={}".format(last_saved_loss, model_text, optimiser_text))
+            print(f"hyper-parameters: [hyper_params]")
             torch.save(model.state_dict(), file_name + ".wab")
             
             # Write the parameters to file:
@@ -200,16 +201,24 @@ def train_model(hyper_params, max_epochs, max_time, max_params, max_overfit, ver
         # Note: this should really be time-based rather than epoch as models run at different speeds depending on batch size, learning rate and model size.
         # ie: if after 1mn the model is worse than the average at 1mn then give up...
         # In practice, the current implementation doesn't work too well, the stdev can be very high. Could try mean - 0.1 x stdev ? ...
-        if epoch > 30 and epoch % 10 == 0:
-            mean, stdev = compute_epoch_stats(all_test_losses, epoch, 10)
-            loss = test_losses[-1]
-            if mean is not None and loss > mean: # we could make this more aggressive, for example: mean - 0.5 * stdev
-                print(f"Early stopping at epoch={epoch}, test loss={loss:.5f} vs mean={mean:.5f}")
-                break
+#        if epoch > 30 and epoch % 10 == 0:
+#            mean, stdev = compute_epoch_stats(all_test_losses, epoch, 10)
+#            loss = test_losses[-1]
+#            if mean is not None and loss > mean: # we could make this more aggressive, for example: mean - 0.5 * stdev
+#                print(f"Early stopping at epoch={epoch}, test loss={loss:.5f} vs mean={mean:.5f}")
+#                break
+
+        if epoch > 20 and epoch < len(best_train_losses) and train_loss[epoch] < best_train_losses[epoch] * 1.5:
+            print(f"Early stopping at epoch={epoch}, train loss={train_loss[epoch]:.5f} vs best={best_train_losses[epoch]:.5f}")
+            break
+            
 
     # Done!
+    if len(best_train_losses) == 0 or np.min(train_losses) < np.min(best_train_losses):
+        best_train_losses = train_losses
+    
     trainL  = train_losses[-1]
-    testL   =  test_losses[-1]
+    testL   = test_losses[-1]
     elapsed = time.time() - start
     epochs  = len(train_losses)
     print("\n\nFinished Training after {} epochs in {:.1f} sec ({:.2f} sec/epoch), sample duration={:.1f} sec, test loss={:.2f}, train loss={:.2f}, overfit={:.1f}"\
