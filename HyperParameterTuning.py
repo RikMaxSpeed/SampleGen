@@ -5,16 +5,12 @@ from skopt.space import Integer, Real, Categorical
 from Train import *
 from MakeModels import *
 
-
-# skopt creates some unhelpful warnings...
-#import warnings
-#warnings.filterwarnings("ignore", category=DeprecationWarning)
-
 # The huge MLP_VAE needs order of 120M parameters.
 #max_params = 1000 * stft_buckets * sequence_length # Approx size of 1000 STFTs in the training set
 # But the StepWiseMLP and RNN are much more memory efficient
-max_params = stft_buckets * sequence_length
 
+one_sample = stft_buckets * sequence_length
+max_params = 1000 * one_sample
 count = 0
 break_on_exceptions = False # Set this to False to allow the process to continue even if the model blows up (useful for long tuning runs!)
 
@@ -49,9 +45,8 @@ def optimise_hyper_parameters():
     generate_training_stfts(count)
     
     global max_params
-    one_sample = stft_buckets * sequence_length
     train_data_size = count * one_sample
-    max_params = 20 * one_sample    
+    max_params = train_data_size / 10 # that means both the encode & decoder are approx half that size
     print(f"{count} training samples, {stft_buckets} frequencies, {sequence_length} time-steps, maximum model size is {max_params:,} parameters.")
     
     # Optimiser:

@@ -4,9 +4,9 @@ import torch.nn as nn
 from torch.utils.data import DataLoader, random_split
 import numpy as np
 from Device import *
-import matplotlib.pyplot as plt
+#import matplotlib.pyplot as plt
 from Debug import *
-
+from Graph import *
 
 # Interpolates N values exponentially in the range [start, end]
 def exponential_interpolation(start, end, N):
@@ -37,6 +37,8 @@ max_loss = 10000 # A reasonably large value, to tell the hyper-parameter optimis
 
 def compute_average_loss(model, dataset, batch_size):
     
+#    start = time.time()
+    
     model.eval()
 
     data_loader = DataLoader(dataset, batch_size=batch_size, shuffle=False)
@@ -53,12 +55,12 @@ def compute_average_loss(model, dataset, batch_size):
             if np.isnan(loss): # give-up
                 raise Exception("model.forward_loss returned NaN :(")
                 
-            if loss > max_loss: # also give up if the model explodes
-                raise Exception(f"model.forward_loss exploded: loss={loss:g} :(")
-                
             total_loss += loss * len(inputs)
             total_samples += len(inputs)
 
+#    elapsed = time.time() - start
+#    print(f"compute_average_loss took {elapsed:.2f} sec for {len(dataset)} samples")
+    
     return total_loss / total_samples
 
 
@@ -100,7 +102,7 @@ def stop_condition(train_losses, test_losses, window, min_change, max_overfit, t
 #    if delta(test_losses) < 100*min_change
 #        return False
     
-    test_loss, test_change = loss_and_change("Test", test_losses)
+    test_loss,  test_change  = loss_and_change("Test", test_losses)
     train_loss, train_change = loss_and_change("Train", train_losses)
     
     # Here we stop if BOTH scores have stopped changing.
@@ -159,11 +161,10 @@ def plot_multiple_losses(losses, names, min_count):
     
     for loss, name in zip(losses, names):
         isBest = (min(loss) == min_loss)
-        Xs = [x+1 for x in range(len(loss))]
         if isBest:
-            plt.plot(Xs, loss, label = "best", linewidth=2, alpha=1, c="cyan")
+            plot_loss(loss, "Best", "cyan", 2)
         else:
-            plt.plot(Xs, loss, linewidth=1, alpha=0.5)
+            plot_loss(loss)
             
     # Plot mean & stdev
     max_epochs = max([len(l) for l in losses])
@@ -214,14 +215,17 @@ def fully_connected_size(layer_sizes):
 
 
 # Builds multiple fully-connected layers with ReLU() in between:
-def build_sequential_model(layer_sizes):
+def build_sequential_model(layer_sizes, final_activation):
     layers = []
     
     for i in range(len(layer_sizes) - 1):
         layers.append(nn.Linear(layer_sizes[i], layer_sizes[i+1]))
         if i < len(layer_sizes) - 2:  # Add ReLU activation for all but the last layer
             layers.append(nn.ReLU())
-            
+    
+    if final_activation is not None:
+        layers.append(final_activation)
+    
     return nn.Sequential(*layers)
     
 # Interpolates a list of layer sizes form start input to and end output, with a given depth layers and a power ratio

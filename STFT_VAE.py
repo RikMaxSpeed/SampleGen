@@ -30,6 +30,8 @@ class STFTVariationalAutoEncoder(nn.Module):
         
     def decode(self, x):
         x = self.vae.decode(x)
+        print("Check this code!")
+        x = torch.nn.Tanh(x) # Restrict to [-1, 1]
         x = x.reshape(x.size(0), self.sequence_length, self.stft_buckets)
         return x
         

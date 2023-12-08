@@ -84,32 +84,30 @@ def plot_series(arrays, names, bar_chart=False, log_scale=False):
     plt.show()
 
 
+def plot_loss(losses, name=None, colour=None, linewidth = 1):
+
+    epochs = 1 + np.array(range(len(losses)))
+    plt.plot(epochs, losses, label=name, color=colour)
+    
+    i = np.argmin(losses)
+    min_loss = losses[i]
+    
+    plt.scatter(i+1, min_loss, c=colour, s=8)
+    plt.text(i+1, min_loss, f"{min_loss:.2f}", color = colour)
+
 
 def plot_losses(train_losses, test_losses):
-
-    def plot_loss(name, losses, colour, offset):
-        plt.plot(epochs, losses, label = name, color=colour)
-        
-        i = np.argmin(losses)
-        l = losses[i]
-        
-        plt.scatter(i+1, l, label=None, c=colour, s=8)
-        plt.text(i+1, l*(1+offset), "{:.2f}".format(l), color = colour)
-
-
-    count = len(train_losses)
-    assert(count == len(test_losses))
+    assert(len(train_losses) == len(test_losses))
     
     plt.figure(figsize=(10, 5))
-    epochs = 1 + np.array(range(count))
-    
-    plot_loss("Train", train_losses, "cyan", -0.00)
-    plot_loss("Test",  test_losses,  "blue", +0.00)
+        
+    plot_loss(train_losses, "Train", "cyan")
+    plot_loss(test_losses,  "Test",  "blue")
 
     plt.xlabel('Epoch')
     plt.ylabel('Loss (log)')
     plt.gca().set_yscale('log')
-    plt.title("Loss after {} epochs".format(count))
+    plt.title("Loss after {} epochs".format(len(train_losses)))
     plt.legend()
     plt.show()
 

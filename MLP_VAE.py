@@ -35,8 +35,8 @@ class StepWiseMLPAutoEncoder(nn.Module):
         self.control_size = control_size
         encode_layer_sizes, decode_layer_sizes = StepWiseMLPAutoEncoder.get_layer_sizes(stft_buckets, control_size, depth, ratio)
         
-        self.encoder = build_sequential_model(encode_layer_sizes)
-        self.decoder = build_sequential_model(decode_layer_sizes)
+        self.encoder = build_sequential_model(encode_layer_sizes, None)
+        self.decoder = build_sequential_model(decode_layer_sizes, nn.Tanh())
 
         print(f"StepWiseMLPAutoEncoder compression: {stft_buckets/control_size:.1f} x smaller")
 

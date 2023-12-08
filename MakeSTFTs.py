@@ -9,9 +9,9 @@ import sys
 
 # Bunch of nasty global variables...
 sample_rate = 44100
-stft_size = 512 # was 1024
+stft_size = 1024
 stft_buckets = 2 * stft_size
-stft_hop = int(stft_size * 3 / 4)
+stft_hop = int(stft_buckets * 3 / 4) # with some overlap
 
 sample_duration = 2.0 # seconds
 sequence_length = int(sample_duration * sample_rate / stft_hop)
