@@ -2,7 +2,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from ModelUtils import rnn_size
-from VariationalAutoEncoder import reconstruction_loss
+from VariationalAutoEncoder import reconstruction_loss, VariationalAutoEncoder
+from ModelUtils import interpolate_layer_sizes
 from Graph import display_image_grid
 
 # Buildling on the experience of the rnnVAE, we now try using an RNN to extract the time hiddens of the signal.

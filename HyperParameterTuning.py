@@ -12,7 +12,7 @@ one_sample = stft_buckets * sequence_length
 max_params = None
 tuning_count = 0
 break_on_exceptions = True # Set this to False to allow the process to continue even if the model blows up (useful for long tuning runs!)
-max_loss = 10000 # default
+max_loss = 30000 # default
 
 hyper_losses = []
 hyper_names = []
@@ -85,7 +85,7 @@ def optimise_hyper_parameters():
     
     global max_params, max_loss
     train_data_size = samples * one_sample
-    max_params = train_data_size // 10 # that means both the encode & decoder are approx half that size
+    max_params = train_data_size // 5 # that means both the encode & decoder are approx half that size
     print(f"{tuning_count} training samples, {stft_buckets} frequencies, {sequence_length} time-steps, maximum model size is {max_params:,} parameters.")
     
     # Optimiser:
@@ -94,11 +94,9 @@ def optimise_hyper_parameters():
     search_space.append(Real   (1e-6,   1e-2,   'log-uniform',  name='learning_rate'))
     search_space.append(Real   (1e-8,   1e-2,   'log-uniform',  name='weight_decay'))
 
-    #model_name = "StepWiseMLP"
-    #model_name = "STFT_VAE"
-    model_name = "RNNAutoEncoder"
+    model_name = "StepWiseVAEMLP"
     set_model_type(model_name)
-    
+
     # Model:
     match model_name:
         
@@ -135,15 +133,16 @@ def optimise_hyper_parameters():
             search_space.append(Integer(1,        7,   'uniform',       name='decode_depth'))
 
         case "RNN_VAE": # Train the full RNN_VAE
+
             # RNN parameters
-            search_space.append(Integer(10,      100,   'uniform',      name='hidden_size'))
-            search_space.append(Integer(1,         4,   'uniform',      name='encode_depth'))
-            search_space.append(Integer(1,         4,   'uniform',      name='decode_depth'))
+            search_space.append(Integer(10,      300,   'uniform',      name='hidden_size'))
+            search_space.append(Integer(1,         7,   'uniform',      name='encode_depth'))
+            search_space.append(Integer(1,         7,   'uniform',      name='decode_depth'))
             
             # VAE parameters
             search_space.append(Integer(4,         8,   'uniform',      name='latent_size'))
-            search_space.append(Integer(1,         5,   'uniform',      name='vae_depth'))
-            search_space.append(Real   (0.1,       5,   'log-uniform',  name='vae_ratio'))
+            search_space.append(Integer(1,        10,   'uniform',      name='vae_depth'))
+            search_space.append(Real   (0.1,      10,   'log-uniform',  name='vae_ratio'))
 
         case _:
             raise Exception(f"Invalid model type = {model_name}")

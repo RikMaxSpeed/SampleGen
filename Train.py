@@ -258,8 +258,7 @@ def train_model(hyper_params, max_epochs, max_time, max_params, max_overfit, max
     all_test_losses.append(test_losses)
     all_test_names.append("loss={:.1f}, {}, {}".format(np.min(test_losses), model_text, optimiser_text))
     
-    if len(all_test_losses) % 5 == 0:
-        plot_multiple_losses(all_test_losses, all_test_names, 5) # this could become large...
+    plot_multiple_losses(all_test_losses, all_test_names, 5) # this could become large...
     
     if verbose:
         plot_train_test_losses(train_losses, test_losses)

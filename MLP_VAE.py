@@ -1,7 +1,8 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-
+from ModelUtils import interpolate_layer_sizes, fully_connected_size
+from VariationalAutoEncoder import *
 
 # Here we create 2 models: the first applies an MLP to each spectrogram frame, the second combines this with the VAE.
 # The first model can be trained and optimised independently. This is useful to prove that the model can work, and then determine its optimal configuration.
@@ -34,6 +35,7 @@ class StepWiseMLPAutoEncoder(nn.Module):
     def __init__(self, stft_buckets, sequence_length, control_size, depth, ratio):
         super(StepWiseMLPAutoEncoder, self).__init__()
         
+        self.stft_buckets = stft_buckets
         self.sequence_length = sequence_length
         self.control_size = control_size
         encode_layer_sizes, decode_layer_sizes = StepWiseMLPAutoEncoder.get_layer_sizes(stft_buckets, control_size, depth, ratio)
@@ -47,7 +49,7 @@ class StepWiseMLPAutoEncoder(nn.Module):
     def encode(self, x):
         batch_size = x.size(0)
         controls = torch.zeros(batch_size, self.sequence_length, self.control_size).to(device)
-        prev_stft = torch.zeros(batch_size, stft_buckets).to(device)
+        prev_stft = torch.zeros(batch_size, self.stft_buckets).to(device)
         
         # Process each time step
         for t in range(self.sequence_length):
@@ -71,8 +73,8 @@ class StepWiseMLPAutoEncoder(nn.Module):
     def decode(self, x):
         batch_size = x.size(0)
         controls = x.view(batch_size, self.sequence_length, self.control_size).to(device)
-        prev_stft = torch.zeros(batch_size, stft_buckets).to(device)
-        reconstructed = torch.zeros(batch_size, stft_buckets, self.sequence_length).to(device)
+        prev_stft = torch.zeros(batch_size, self.stft_buckets).to(device)
+        reconstructed = torch.zeros(batch_size, self.stft_buckets, self.sequence_length).to(device)
 
         # Process each time step
         for t in range(self.sequence_length):

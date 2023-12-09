@@ -307,6 +307,6 @@ def display_image_grid(images, title, colour_map = 'gray', min_width=15):
     plt.show()
 
 
-images = [torch.rand(57, 150).mul(np.random.uniform(x)) for x in range(11)]
-display_image_grid(images, "Example")
+#images = [torch.rand(57, 150).mul(np.random.uniform(x)) for x in range(11)]
+#display_image_grid(images, "Example")
 
