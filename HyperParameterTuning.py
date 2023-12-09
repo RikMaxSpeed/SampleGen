@@ -1,36 +1,40 @@
 # Use a GPR to adjust the hpyer-parameters.
 # The best models are saved to disk.
+
 from skopt import gp_minimize
 from skopt.space import Integer, Real, Categorical
+
 from Train import *
-from MakeModels import *
+#from MakeSTFTs import *
+
 
 # The huge MLP_VAE needs order of 120M parameters.
 #max_params = 1000 * stft_buckets * sequence_length # Approx size of 1000 STFTs in the training set
 # But the StepWiseMLP and RNN are much more memory efficient
 
 one_sample = stft_buckets * sequence_length
-max_params = 1000 * one_sample
-count = 0
-break_on_exceptions = False # Set this to False to allow the process to continue even if the model blows up (useful for long tuning runs!)
+max_params = None
+tuning_count = 0
+break_on_exceptions = True # Set this to False to allow the process to continue even if the model blows up (useful for long tuning runs!)
+max_loss = 10000 # default
 
 
 def evaluate_model(params):
-    global count
-    count += 1
-    print(f"Hyper-Parameter tuning#{count}: [params]\n")
+    global tuning_count
+    tuning_count += 1
+    print(f"Hyper-Parameter tuning#{tuning_count}: [params]\n")
     
     #max_time = 5 * 60 # seconds
     max_overfit = 1.1
     max_epochs = 100 # This is sufficient to figure out which model will converge best if we let it run for longer.
     max_time = max_epochs * 20 # we hopefully won't bump into this.
-    verbose = False
+    verbose = False # avoid printing lots of detail for each run
     
     if break_on_exceptions: # this is easier when debugging
-        return train_model(params, max_epochs, max_time, max_params, max_overfit, verbose)
+        return train_model(params, max_epochs, max_time, max_params, max_overfit, max_loss, verbose)
     else: # we need this for long overnight runs in case something weird happens
         try:
-            return train_model(params, max_epochs, max_time, max_params, max_overfit, verbose)
+            return train_model(params, max_epochs, max_time, max_params, max_overfit, max_loss, verbose)
         except Exception as e:
             print(f"*** Exception: {e}")
         except:
@@ -40,14 +44,14 @@ def evaluate_model(params):
 
 
 def optimise_hyper_parameters():
-    #count = 200  # use a smaller data-set here to speed things up? Not a good idea as the model may be too limited in size
-    count = 950
-    generate_training_stfts(count)
+    #tuning_count = 200  # use a smaller data-set here to speed things up? Not a good idea as the model may be too limited in size
+    tuning_count = 950
+    generate_training_stfts(tuning_count)
     
-    global max_params
-    train_data_size = count * one_sample
+    global max_params, max_loss
+    train_data_size = tuning_count * one_sample
     max_params = train_data_size / 10 # that means both the encode & decoder are approx half that size
-    print(f"{count} training samples, {stft_buckets} frequencies, {sequence_length} time-steps, maximum model size is {max_params:,} parameters.")
+    print(f"{tuning_count} training samples, {stft_buckets} frequencies, {sequence_length} time-steps, maximum model size is {max_params:,} parameters.")
     
     # Optimiser:
     search_space = list()
@@ -55,18 +59,20 @@ def optimise_hyper_parameters():
     search_space.append(Real   (1e-6,   1e-2,   'log-uniform',  name='learning_rate'))
     search_space.append(Real   (1e-8,   1e-2,   'log-uniform',  name='weight_decay'))
 
-    model_name = "StepWiseMLP"
+    #model_name = "StepWiseMLP"
+    model_name = "STFT_VAE"
     set_model_type(model_name)
     
     # Model:
     match model_name:
         
-        case "VAE_MLP":
-            # Train the STFTVariationalAutoEncoder
-            search_space.append(Integer(4,      8,      'uniform',      name='latent_size'))
-            search_space.append(Real   (1.0,    10.0,   'uniform',      name='layer3_ratio'))
-            search_space.append(Real   (1.0,    10.0,   'uniform',      name='layer2_ratio'))
-            search_space.append(Real   (1.0,    10.0,   'uniform',      name='layer1_ratio'))
+        case "STFT_VAE":
+            # Train the naive STFTVariationalAutoEncoder
+            max_params = train_data_size # this model needs way more parameters.
+            max_loss = 1e7
+            search_space.append(Integer(4,        10,   'uniform',      name='latent_size'))
+            search_space.append(Integer(1,         5,   'uniform',      name='vae_depth'))
+            search_space.append(Real   (0.1,       4,   'log-uniform',  name='vae_ratio'))
             
         case "StepWiseMLP":
             # Train just the StepWiseMLPAutoEncode (with no VAE)
@@ -109,7 +115,7 @@ def optimise_hyper_parameters():
     print("Optimising hyper-parameters:")
     display(search_space)
 
-    result = gp_minimize(evaluate_model, search_space, n_calls=1000, n_initial_points=16, initial_point_generator='sobol', noise='gaussian', verbose=True)
+    result = gp_minimize(evaluate_model, search_space, n_calls=1000, n_initial_points=16, initial_point_generator='sobol', noise='gaussian', verbose=False)
 
     # I've never reached this point! :)
     print("\n\nHyper Parameter Optimisation Done!!")
@@ -163,7 +169,7 @@ def train_best_params():
     max_overfit = 2.0 # we're aiming for high precision on the training set
     max_params = 1000000000
     max_epochs = 2000 # we don't hit this in practice.
+    max_loss = 1e9
     
     verbose = True
-    train_model(params, max_epochs, max_time, max_params, max_overfit, verbose)
-    #torch.save(model.state_dict(), model_file) # train_model does this.
+    train_model(params, max_epochs, max_time, max_params, max_overfit, max_loss, verbose)

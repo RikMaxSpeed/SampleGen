@@ -1,4 +1,7 @@
-from VariationalAutoEncoder import *
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+
 
 # Buildling on the experience of the rnnVAE, we now try using an RNN to extract the time hiddens of the signal.
 # We then combine that with the VAE to massively reduce the feature space.

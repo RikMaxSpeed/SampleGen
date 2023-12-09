@@ -1,8 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from Debug import *
-from MakeSTFTs import * # required for some global variables :(
+
 from ModelUtils import *
 
 
@@ -36,15 +35,13 @@ class VariationalAutoEncoder(nn.Module):
         self.fc_logvar = nn.Linear(sizes[-2], sizes[-1])
 
         # Decoder layers
-        self.decoder_layers = nn.ModuleList(
-            [nn.Linear(sizes[i], sizes[i-1]) for i in reversed(range(1, len(sizes)))]
-        )
+        self.decoder_layers = nn.ModuleList([nn.Linear(sizes[i], sizes[i-1]) for i in reversed(range(1, len(sizes)))])
 
         # Activation function
         self.activation_fn = activation_fn
 
         print(f"VariationalAutoEncoder compression: {sizes[0]/sizes[-1]:.1f} x smaller")
-
+        display(self)
 
     def encode(self, x):
         for layer in self.encoder_layers:

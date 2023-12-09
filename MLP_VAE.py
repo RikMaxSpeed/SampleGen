@@ -1,4 +1,7 @@
-from VariationalAutoEncoder import *
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+
 
 # Here we create 2 models: the first applies an MLP to each spectrogram frame, the second combines this with the VAE.
 # The first model can be trained and optimised independently. This is useful to prove that the model can work, and then determine its optimal configuration.

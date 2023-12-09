@@ -1,12 +1,15 @@
+from Device import *
+from Debug import *
+from Graph import *
+
 import time
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from torch.utils.data import DataLoader, random_split
 import numpy as np
-from Device import *
-#import matplotlib.pyplot as plt
-from Debug import *
-from Graph import *
+
+
 
 # Interpolates N values exponentially in the range [start, end]
 def exponential_interpolation(start, end, N):
@@ -32,8 +35,6 @@ def get_output_for_layer(name, layer, input):
         print(f"{name}: layer={layer}, input={input.shape} --> error:{e}")
         raise e
 
-
-max_loss = 10000 # A reasonably large value, to tell the hyper-parameter optimiser not to go there.
 
 def compute_average_loss(model, dataset, batch_size):
     
@@ -73,7 +74,7 @@ def split_dataset(dataset, ratio):
 last_progress = time.time()
 progress_seconds = 5
 
-def stop_condition(train_losses, test_losses, window, min_change, max_overfit, total, epochs, verbose = False):
+def stop_condition(train_losses, test_losses, window, min_change, max_overfit, total, verbose = False):
     global last_progress, progress_seconds
     
     def delta(losses):
@@ -89,6 +90,9 @@ def stop_condition(train_losses, test_losses, window, min_change, max_overfit, t
             
         return new, change
 
+    epochs = len(train_losses)
+    assert(epochs == len(test_losses))
+    
     now = time.time()
     if now - last_progress > progress_seconds:
         last_progress = now
@@ -106,18 +110,20 @@ def stop_condition(train_losses, test_losses, window, min_change, max_overfit, t
     train_loss, train_change = loss_and_change("Train", train_losses)
     
     # Here we stop if BOTH scores have stopped changing.
-    # This means we can allow overfitting if we want to (for proof of concept).
+    # This means we can allow overfitting which is helpful in some use-cases.
     # Use max_overfit to stop early once the test loss is stuck.
     if abs(train_change) < min_change and abs(test_change) < min_change:
+        print("Model stalled.")
         return True
     
     overfit = test_loss / train_loss
-    
-    if epochs > 30 and overfit < 0.5: # this model is garbage
-        return True
-    
     if verbose:
         print("overfit={:.1f}".format(overfit))
+    
+    if epochs > 30 and overfit < 0.5: # this model is garbage
+        print(f"Model doesn't generalise: overfit={overfit:.1f}")
+        return True
+    
     
     return  test_loss / train_loss > max_overfit
 

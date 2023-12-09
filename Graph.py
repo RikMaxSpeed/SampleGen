@@ -1,8 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
-#import matplotlib.tri as tri
 from scipy.stats import qmc, gmean, norm
-#from scipy.spatial import ConvexHull
 
 
 # Heuristic of number of buckets in a histogram
@@ -87,7 +85,7 @@ def plot_series(arrays, names, bar_chart=False, log_scale=False):
 def plot_loss(losses, name=None, colour=None, linewidth = 1):
 
     epochs = 1 + np.array(range(len(losses)))
-    plt.plot(epochs, losses, label=name, color=colour)
+    plt.plot(epochs, losses, label=name, color=colour, linewidth=linewidth)
     
     i = np.argmin(losses)
     min_loss = losses[i]

@@ -1,9 +1,6 @@
-from MakeSTFTs import *
-from Train import *
-from AudioUtils import *
-from Graph import *
-from HyperParameterTuning import *
-from SampleCategory import *
+import HyperParameterTuning
+import SampleCategory
+
 import matplotlib.patches as patches
 
 

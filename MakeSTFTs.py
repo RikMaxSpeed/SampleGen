@@ -3,9 +3,11 @@ import numpy as np
 import librosa
 import torch
 import pickle
-from AudioUtils import *
 import time
 import sys
+from AudioUtils import *
+from Device import *
+
 
 # Bunch of nasty global variables...
 sample_rate = 44100

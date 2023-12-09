@@ -7,9 +7,9 @@ import soundfile as sf
 import torch
 import math
 import os
-from Device import *
-from Debug import *
 
+import Device
+import Debug
 
 
 def is_power_of_2(n):

@@ -1,3 +1,6 @@
+from Debug import *
+from MakeSTFTs import *
+from ModelUtils import *
 from STFT_VAE import *
 from MLP_VAE import *
 from RNN_VAE import *
@@ -16,19 +19,6 @@ def set_model_type(name):
         print(f"Using model={model_type}")
 
 
-def get_layers(model_params):
-    latent_size, layer3_ratio, layer2_ratio, layer1_ratio = model_params
-
-    # Translate the ratios into actual sizes: this ensures we have increasing layer sizes
-    layer3_size = int(latent_size * layer3_ratio)
-    layer2_size = int(layer3_size * layer2_ratio)
-    layer1_size = int(layer2_size * layer1_ratio)
-    assert(latent_size <= layer3_size <= layer2_size <= layer1_size)
-    
-    layers = [stft_buckets * sequence_length, layer1_size, layer2_size, layer3_size, latent_size]
-
-    return layers
-
 def is_too_large(approx_size, max_params):
     if approx_size > max_params:
             print(f"Model is too large: approx {approx_size:,} parameters vs max={max_params:,}")
@@ -39,15 +29,15 @@ def is_too_large(approx_size, max_params):
 def make_model(model_params, max_params, verbose):
     invalid_model = None, None
     
-    if model_type == "VAE_MLP":
-        latent_size, layer3_ratio, layer2_ratio, layer1_ratio = model_params
-        layers = get_layers(model_params)
-        approx_size = 2 * fully_connected_size(layers)
+    if model_type == "STFT_VAE":
+        latent_size, depth, ratio = model_params
+        model_text = f"{model_type} latent={latent_size}, layers={depth}, ratio={ratio:.2f}"
+        print(model_text)
+        approx_size = STFTVariationalAutoEncoder.approx_trainable_parameters(stft_buckets, sequence_length, latent_size, depth, ratio)
         if is_too_large(approx_size, max_params):
             return invalid_model
             
-        model_text = f"{model_type} latent={layers[4]}, layer3={layers[3]}, layer2={layers[2]}, layer1={layers[1]}"
-        model = STFTVariationalAutoEncoder(sequence_length, stft_buckets, layers[1:], nn.ReLU())
+        model = STFTVariationalAutoEncoder(stft_buckets, sequence_length, latent_size, depth, ratio)
         
     elif model_type == "StepWiseMLP":
         control_size, depth, ratio = model_params

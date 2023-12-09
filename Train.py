@@ -5,10 +5,10 @@ import matplotlib.pyplot as plt
 from IPython.display import FileLink
 import math
 
+from ModelUtils import *
 from MakeModels import *
 from MakeSTFTs import *
 from Graph import *
-from ModelUtils import *
 from Augment import *
 
 
@@ -75,7 +75,7 @@ def generate_training_stfts(how_many):
 
 
 # Hyper-parameter optimisation
-last_saved_loss = 800 # don't bother saving models above this threshold
+last_saved_loss = 2000 # don't bother saving models above this threshold
 
 # Keep track of all the test-losses over multiple runs, so we can learn how to terminate early on poor hyper-parameters.
 all_test_losses = []
@@ -89,7 +89,7 @@ use_exact_train_loss = False # Setting to True is more accurate but very expensi
 
 
 # Main entry point for training the model
-def train_model(hyper_params, max_epochs, max_time, max_params, max_overfit, verbose):
+def train_model(hyper_params, max_epochs, max_time, max_params, max_overfit, max_loss, verbose):
     
     # We split the hyper-params into optimiser parameters & model parameters:
     opt_params   = hyper_params[0:3]
@@ -126,7 +126,7 @@ def train_model(hyper_params, max_epochs, max_time, max_params, max_overfit, ver
 
     graph_interval = 5
     
-    for epoch in range(1, max_epochs):
+    for epoch in range(0, max_epochs):
         model.train() # ensure we compute gradients
         
 #        epoch_start = time.time()
@@ -143,7 +143,7 @@ def train_model(hyper_params, max_epochs, max_time, max_params, max_overfit, ver
             sum_train_loss += numeric_loss * len(inputs)
             sum_batches += len(inputs)
             if np.isnan(numeric_loss) or numeric_loss > max_loss:
-                print(f"*** Aborting: model exploded, loss={loss:.2f}")
+                print(f"*** Aborting: model exploded, loss={loss:.2f} vs max={max_loss}")
                 return max_loss
             
             # Backward pass and optimization
@@ -154,9 +154,8 @@ def train_model(hyper_params, max_epochs, max_time, max_params, max_overfit, ver
 #        elapsed = time.time() - epoch_start
 #        print(f"Epoch took {elapsed:.2} sec")
         
-        # After each epoch
-            
-        approx_train_loss = sum_train_loss / sum_batches
+        # Store the loss after each epoch:
+        approx_train_loss = sum_train_loss / sum_batches # effectively the loss at the previous time step before the most recent back-propagation
         if use_exact_train_loss:
             exact_train_loss = compute_average_loss(model, train_dataset, batch_size) # expensive operation
             pct_error = 100 * (approx_train_loss/exact_train_loss - 1)
@@ -164,16 +163,15 @@ def train_model(hyper_params, max_epochs, max_time, max_params, max_overfit, ver
             approx_train_loss = exact_train_loss
             
         train_losses.append(approx_train_loss)
-        test_losses.append(compute_average_loss(model, test_dataset, batch_size))
+        test_losses.append(compute_average_loss(model, test_dataset, batch_size)) # this is an acceptable overhead if the test set is several times smaller than the train set.
         if np.isnan(train_losses[-1]) or np.isnan(test_losses[-1]):
             print("Aborting: model returns NaNs :(") # Happens when the learning rate is too high
             return max_loss
-            
+
         
         # Progress
         now = time.time()
-        total = now - start
-
+        total_time = now - start
 
         # Save the best models (but not too often)
         global last_saved_loss
@@ -193,14 +191,14 @@ def train_model(hyper_params, max_epochs, max_time, max_params, max_overfit, ver
                 file.write(f"optimiser: {optimiser_text}\n")
                 file.write("\n")
                 file.write(f"train loss={train_losses[-1]:.5f}, test  loss={test_losses[-1]:.5f}, overfit={train_losses[-1]/test_losses[-1]:.2f}\n")
-                file.write(f"time={total:.0f} sec, train_size={len(train_dataset)}, batch_size={batch_size}, epoch={epoch} = {total/epoch:.1f} sec/epoch\n")
+                file.write(f"time={total_time:.0f} sec, train_size={len(train_dataset)}, batch_size={batch_size}, epoch={epoch} = {total_time/epoch:.1f} sec/epoch\n")
                 file.write("\n")
                 file.write(str(hyper_params))
             
             # Generate a test tone:
             resynth, loss = predict_stft(model, sanity_test_stft)
             save_and_play_audio_from_stft(resynth, sample_rate, stft_hop, f"Results/{sanity_test_name} {model_text} - resynth.wav", False)
-            plot_stft("Resynth " + sanity_test_name, resynth, sr, stft_hop)
+            plot_stft("Resynth " + sanity_test_name, resynth, sample_rate, stft_hop)
             
 
         if verbose and now - lastGraph > graph_interval and len(train_losses) > 1:
@@ -209,15 +207,14 @@ def train_model(hyper_params, max_epochs, max_time, max_params, max_overfit, ver
             graph_interval = int(min(3600, 1.5*graph_interval))
 
 
-        if stop_condition(train_losses, test_losses, window, min_change, max_overfit, total, epoch):
-            print("Training is stalled...")
+        if stop_condition(train_losses, test_losses, window, min_change, max_overfit, total_time):
             break
     
         if epoch < 5: # Test a random sample to show that the code is working from A-Z
             resynth, loss = predict_stft(model, sanity_test_stft)
 
-        if total > max_time:
-            print("Total time={:.1f} sec exceeds max={:.0f} sec".format(total, max_time))
+        if total_time > max_time:
+            print("Total time={:.1f} sec exceeds max={:.0f} sec".format(total_time, max_time))
             break
             
         # Early stopping based on average convergence:
@@ -237,15 +234,20 @@ def train_model(hyper_params, max_epochs, max_time, max_params, max_overfit, ver
         # So we could miss out on a model that is slow to train but reaches a better optimal loss.
         # That said, in practice the models with the lowest loss tend to be those that train quickly per epoch.
         global best_train_losses
-        if epoch > 20 and epoch < len(best_train_losses) and train_losses[epoch-1] < best_train_losses[epoch-1] * 2.0:
-            print(f"Early stopping at epoch={epoch}, train loss={train_losses[epoch-1]:.5f} vs best={best_train_losses[epoch]:.5f}")
-            break
-            
+        if epoch >= 20 and epoch < len(best_train_losses):
+            ratio = train_losses[epoch] / best_train_losses[epoch]
+            if ratio > 3:
+                print(f"Early stopping at epoch={epoch}, train loss={train_losses[epoch-1]:.5f} vs best={best_train_losses[epoch]:.5f}, ratio={ratio:.1f}")
+                break
+
 
     # Done!
+    
+    # Store the best train loss curve, this will be used for early termination when hyper-tuning
     if len(best_train_losses) == 0 or np.min(train_losses) < np.min(best_train_losses):
         best_train_losses = train_losses
     
+    # Report the results
     trainL  = train_losses[-1]
     testL   = test_losses[-1]
     elapsed = time.time() - start
