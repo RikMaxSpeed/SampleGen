@@ -111,6 +111,34 @@ def plot_losses(train_losses, test_losses):
     plt.show()
 
 
+def plot_hypertrain_loss(loss):
+    if len(loss) < 2:
+        return
+    
+    plt.figure(figsize=(12, 6))
+    plt.yscale('log')
+    runs = [x+1 for x in range(len(loss))]
+    
+    plt.scatter(runs, loss, marker="o", s=8, c='b', label = "loss")
+    i = np.argmin(loss)
+    min_loss = loss[i]
+    plt.scatter(i+1, min_loss, marker="o", s=12, c='r')
+    plt.text(i+1, min_loss, f"{min_loss:.1f}")
+    
+    # running average
+    N = int(1 + len(loss)/5)
+    mean = [np.mean(loss[max(0, i - N + 1):i + 1]) for i in range(len(loss))]
+    plt.plot(runs, mean, c='cyan', label = f"running average {N}")
+    
+    plt.xlabel("Run")
+    plt.ylabel("Loss")
+    plt.legend()
+    plt.title(f"Hyper-Parameter Optimisation: loss over {len(loss)} runs")
+    plt.show()
+    
+    
+#plot_hypertrain_loss([np.random.uniform(0, 1) * 1/t for t in range(1, 100)])
+
 
 def plot_bar_charts(encodings, names, title):
     assert(len(encodings) == len(names))

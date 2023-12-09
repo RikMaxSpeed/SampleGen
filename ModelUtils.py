@@ -173,20 +173,25 @@ def plot_multiple_losses(losses, names, min_count):
             plot_loss(loss)
             
     # Plot mean & stdev
-    max_epochs = max([len(l) for l in losses])
-    step = 5
-    epochs = [e for e in range(0, max_epochs, step)]
-    stats = [compute_epoch_stats(losses, e, min_count) for e in epochs]
-    stats = [s for s in stats if s[0] is not None]
-    Ms  = np.array([s[0] for s in stats])
-#    SDs = np.array([s[1] for s in stats])
-#    assert(len(Ms) == len(SDs))
-    Xs  = [x+1 for x in range(0, len(Ms)*step, step)]
-    assert(len(Xs) == len(Ms))
-    plt.plot(Xs, Ms, label = "Mean loss", linewidth=2, c="blue")
-#    plt.fill_between(Xs, Ms - SDs, Ms + SDs, color='gray', alpha=0.2, label='±1 SD')
+    if len(losses) >= min_count:
+        max_epochs = max([len(l) for l in losses])
+        step = 5
+        epochs = [e for e in range(0, max_epochs, step)]
+        stats = [compute_epoch_stats(losses, e, min_count) for e in epochs]
+        stats = [s for s in stats if s[0] is not None]
+        Ms  = np.array([s[0] for s in stats])
+        Xs  = [x+1 for x in range(0, len(Ms)*step, step)]
+        assert(len(Xs) == len(Ms))
+        plt.plot(Xs, Ms, label = "Mean loss", linewidth=2, c="blue")
+        # Ploting the standard-deviations proved too noisy
+    #    SDs = np.array([s[1] for s in stats])
+    #    assert(len(Ms) == len(SDs))
+    #    plt.fill_between(Xs, Ms - SDs, Ms + SDs, color='gray', alpha=0.2, label='±1 SD')
         
-    plt.title(f"Test Loss vs Epoch for {len(losses)} runs")
+    title = "Loss vs Epoch"
+    if len(losses) > 1:
+        title += f" for {len(losses)} runs"
+    plt.title(title)
     plt.ylabel("Loss")
     plt.xlabel("Epoch")
     plt.legend(loc='upper right')

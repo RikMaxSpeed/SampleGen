@@ -181,7 +181,7 @@ def train_model(hyper_params, max_epochs, max_time, max_params, max_overfit, max
             # Save the model:
             file_name = model_text # keep over-writing the same file as the loss improves
             print("*** Best! loss={:.2f}, model={}, optimiser={}".format(last_saved_loss, model_text, optimiser_text))
-            print(f"hyper-parameters: [hyper_params]")
+            print(f"hyper-parameters: {hyper_params}")
             torch.save(model.state_dict(), file_name + ".wab")
             
             # Write the parameters to file:
@@ -233,12 +233,13 @@ def train_model(hyper_params, max_epochs, max_time, max_params, max_overfit, max
         # Unfortunately this is not in time space, but in epochs.
         # So we could miss out on a model that is slow to train but reaches a better optimal loss.
         # That said, in practice the models with the lowest loss tend to be those that train quickly per epoch.
-        global best_train_losses
-        if epoch >= 20 and epoch < len(best_train_losses):
-            ratio = train_losses[epoch] / best_train_losses[epoch]
-            if ratio > 10:
-                print(f"Early stopping at epoch={epoch}, train loss={train_losses[epoch-1]:.1f} vs best={best_train_losses[epoch]:.1f}, ratio={ratio:.1f}")
-                break
+        if False:
+            global best_train_losses
+            if epoch >= 20 and epoch < len(best_train_losses):
+                ratio = train_losses[epoch] / best_train_losses[epoch]
+                if ratio > 10:
+                    print(f"Early stopping at epoch={epoch}, train loss={train_losses[epoch-1]:.1f} vs best={best_train_losses[epoch]:.1f}, ratio={ratio:.1f}")
+                    break
 
 
     # Done!

@@ -12,6 +12,7 @@
 		790556822B2072C200D65A0A /* MLP_VAE.py */ = {isa = PBXFileReference; lastKnownFileType = text.script.python; path = MLP_VAE.py; sourceTree = "<group>"; };
 		790556832B2073C100D65A0A /* RNN_VAE.py */ = {isa = PBXFileReference; lastKnownFileType = text.script.python; path = RNN_VAE.py; sourceTree = "<group>"; };
 		790556842B20831800D65A0A /* SampleCategory.py */ = {isa = PBXFileReference; lastKnownFileType = text.script.python; path = SampleCategory.py; sourceTree = "<group>"; };
+		790556852B2483BF00D65A0A /* PCA.py */ = {isa = PBXFileReference; lastKnownFileType = text.script.python; path = PCA.py; sourceTree = "<group>"; };
 		7929AC2E2ADD81AA006851A3 /* AudioUtils.py */ = {isa = PBXFileReference; lastKnownFileType = text.script.python; path = AudioUtils.py; sourceTree = "<group>"; };
 		7929AC2F2ADDBB84006851A3 /* MakeModels.py */ = {isa = PBXFileReference; lastKnownFileType = text.script.python; path = MakeModels.py; sourceTree = "<group>"; };
 		7929AC302ADDBBB2006851A3 /* Train.py */ = {isa = PBXFileReference; lastKnownFileType = text.script.python; path = Train.py; sourceTree = "<group>"; };
@@ -34,6 +35,7 @@
 		7929AC272ADD810F006851A3 = {
 			isa = PBXGroup;
 			children = (
+				790556852B2483BF00D65A0A /* PCA.py */,
 				79E291592B1BAC0100EF046D /* .gitignore */,
 				7929AC2E2ADD81AA006851A3 /* AudioUtils.py */,
 				792DEDDB2AE584CA00DE1F74 /* Augment.py */,

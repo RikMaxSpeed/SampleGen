@@ -7,6 +7,7 @@ import time
 import sys
 from AudioUtils import *
 from Device import *
+from Debug import *
 
 
 # Bunch of nasty global variables...
@@ -205,8 +206,12 @@ def test_stft_conversions(file_name):
     debug("tensor", tensor)
     input = convert_stft_to_input(tensor)
     debug("input", input)
+    print(f"input: min={input.min():.5f}, max={input.max():.5f}")
+    
     output = convert_stft_to_output(input)
     debug("output", output)
+    print(f"output: min={input.min():.5f}, max={output.max():.5f}")
+    
     
     global maxAmp
     output *= amp / maxAmp

@@ -21,7 +21,7 @@ class VariationalAutoEncoder(nn.Module):
     @staticmethod
     def approx_trainable_parameters(sizes):
         encode = fully_connected_size(sizes) + fully_connected_size([sizes[-2], sizes[-1]])
-        decode = fully_connected_size(sizes.reversed)
+        decode = fully_connected_size(list(reversed(sizes)))
         return encode + decode
         
     def __init__(self, sizes, activation_fn=F.relu):
@@ -41,7 +41,7 @@ class VariationalAutoEncoder(nn.Module):
         self.activation_fn = activation_fn
 
         print(f"VariationalAutoEncoder compression: {sizes[0]/sizes[-1]:.1f} x smaller")
-        display(self)
+
 
     def encode(self, x):
         for layer in self.encoder_layers:
@@ -77,8 +77,11 @@ class VariationalAutoEncoder(nn.Module):
     def loss_function(self, inputs, outputs, mu, logvar):
         error  = reconstruction_loss(inputs, outputs)
         kl_div = kl_divergence(mu, logvar)
-
-        #print("error={:.1f}, kl_divergence={:.1f}, ratio={:.1f}".format(error, kl_div, kl_div/error))
+        
+#        latent = len(mu[0])
+#        kl_div /= latent # normalise
+        
+        #print(f"error={error:.1f}, kl_divergence={kl_div:.1f}, ratio={error/kl_div:.1f}")
         
         # The optimiser appears to be able to efficiently minimise the KL loss, so it's unneccesary to weight it vs the reconstruction loss.
         kl_weight = 1.0

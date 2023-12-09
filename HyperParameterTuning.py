@@ -18,6 +18,7 @@ tuning_count = 0
 break_on_exceptions = True # Set this to False to allow the process to continue even if the model blows up (useful for long tuning runs!)
 max_loss = 10000 # default
 
+hyper_losses = []
 
 def evaluate_model(params):
     global tuning_count
@@ -31,26 +32,35 @@ def evaluate_model(params):
     verbose = False # avoid printing lots of detail for each run
     
     if break_on_exceptions: # this is easier when debugging
-        return train_model(params, max_epochs, max_time, max_params, max_overfit, max_loss, verbose)
+        loss = train_model(params, max_epochs, max_time, max_params, max_overfit, max_loss, verbose)
+        
     else: # we need this for long overnight runs in case something weird happens
         try:
-            return train_model(params, max_epochs, max_time, max_params, max_overfit, max_loss, verbose)
+            loss = train_model(params, max_epochs, max_time, max_params, max_overfit, max_loss, verbose)
+            
         except Exception as e:
             print(f"*** Exception: {e}")
+            return max_loss
         except:
             print(f"*** Breaking Bad :(")
+            return max_loss
         
-        return max_loss # return a high loss...
+    global hyper_losses
+    if loss < max_loss:
+        hyper_losses.append(loss)
+        plot_hypertrain_loss(hyper_losses)
+    
+    return loss
 
 
 def optimise_hyper_parameters():
     #tuning_count = 200  # use a smaller data-set here to speed things up? Not a good idea as the model may be too limited in size
-    tuning_count = 950
-    generate_training_stfts(tuning_count)
+    samples = 950
+    generate_training_stfts(samples)
     
     global max_params, max_loss
-    train_data_size = tuning_count * one_sample
-    max_params = train_data_size / 10 # that means both the encode & decoder are approx half that size
+    train_data_size = samples * one_sample
+    max_params = train_data_size / 50 # that means both the encode & decoder are approx half that size
     print(f"{tuning_count} training samples, {stft_buckets} frequencies, {sequence_length} time-steps, maximum model size is {max_params:,} parameters.")
     
     # Optimiser:
