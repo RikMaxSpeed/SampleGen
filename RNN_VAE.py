@@ -1,7 +1,9 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-
+from ModelUtils import rnn_size
+from VariationalAutoEncoder import reconstruction_loss
+from Graph import display_image_grid
 
 # Buildling on the experience of the rnnVAE, we now try using an RNN to extract the time hiddens of the signal.
 # We then combine that with the VAE to massively reduce the feature space.
@@ -30,16 +32,24 @@ class RNNAutoEncoder(nn.Module): # no VAE
         # Important: in the rnnVAE I gave the model the previous and the current frame at each time step + the time itself.
         # In this version I'm only giving the model the individual time-steps... I don't know whether this will work.
         
+        self.count = 0
+        
     def encode(self, x):
         batch_size = x.size(0)
         x = x.transpose(2, 1) # Swap from [batch, stft, seq] to [batch, seq, stft] which is what the RNN expects
         hiddens, _ = self.encoder(x) # also returns the last internal state
+        
+        if False: # this is interesting to visualise the hidden output
+            self.count += 1
+            if self.count % 400 == 0:
+                display_image_grid(hiddens.detach().cpu().transpose(2, 1), f"RNN hidden outputs {self.sequence_length} x {self.hidden_size}", "magma")
+
         hiddens = hiddens.flatten(-2)
         return hiddens
 
     def decode(self, x):
         batch_size = x.size(0)
-        hiddens = x.view(batch_size, self.sequence_length, self.hidden_size).to(device)
+        hiddens = x.view(batch_size, self.sequence_length, self.hidden_size)#.to(device)
         reconstructed, _ = self.decoder(hiddens) # Note: RNN uses Tanh by default so all our outputs will be constrained to [-1, 1]
         reconstructed = reconstructed.transpose(2, 1)
         return reconstructed

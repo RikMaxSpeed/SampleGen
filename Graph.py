@@ -1,7 +1,8 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.stats import qmc, gmean, norm
-
+import torch
+from Debug import *
 
 # Heuristic of number of buckets in a histogram
 def sturges(N):
@@ -82,6 +83,37 @@ def plot_series(arrays, names, bar_chart=False, log_scale=False):
     plt.show()
 
 
+
+def compute_stats_without_outliers(data, min_count):
+
+    if len(data) == 0:
+        return None, None
+
+    data = np.array(data)
+
+    Q1 = np.percentile(data, 25)
+    Q3 = np.percentile(data, 75)
+    IQR = Q3 - Q1
+
+    lower_bound = Q1 - 1.5 * IQR
+    upper_bound = Q3 + 1.5 * IQR
+
+    filtered_data = data[(data >= lower_bound) & (data <= upper_bound)]
+    
+    if len(filtered_data) < min_count:
+        return None, None
+        
+    return np.mean(filtered_data), np.std(filtered_data)
+
+
+# Compute the mean & stdev for a given epoch across multiple runs
+def compute_epoch_stats(losses, epoch, min_count):
+
+    epoch_losses = [loss_list[epoch] for loss_list in losses if len(loss_list) > epoch]
+    
+    return compute_stats_without_outliers(epoch_losses, min_count)
+
+
 def plot_loss(losses, name=None, colour=None, linewidth = 1):
 
     epochs = 1 + np.array(range(len(losses)))
@@ -95,7 +127,7 @@ def plot_loss(losses, name=None, colour=None, linewidth = 1):
         plt.text(i+1, min_loss, f"{min_loss:.1f}", color = colour)
 
 
-def plot_losses(train_losses, test_losses):
+def plot_train_test_losses(train_losses, test_losses):
     assert(len(train_losses) == len(test_losses))
     
     plt.figure(figsize=(10, 5))
@@ -111,24 +143,75 @@ def plot_losses(train_losses, test_losses):
     plt.show()
 
 
-def plot_hypertrain_loss(loss):
+def plot_multiple_losses(losses, names, min_count):
+    plt.figure(figsize=(12, 6))
+    plt.yscale('log')
+    
+    # Plot all the loss curves
+    min_loss = min([min(l) for l in losses])
+    
+    for loss, name in zip(losses, names):
+        isBest = (min(loss) == min_loss)
+        if isBest:
+            plot_loss(loss, "Best", "cyan", 2)
+        else:
+            plot_loss(loss)
+            
+    # Plot mean & stdev
+    if len(losses) >= min_count:
+        max_epochs = max([len(l) for l in losses])
+        step = 5
+        epochs = [e for e in range(0, max_epochs, step)]
+        stats = [compute_epoch_stats(losses, e, min_count) for e in epochs]
+        stats = [s for s in stats if s[0] is not None]
+        Ms  = np.array([s[0] for s in stats])
+        Xs  = [x+1 for x in range(0, len(Ms)*step, step)]
+        assert(len(Xs) == len(Ms))
+        plt.plot(Xs, Ms, label = "Mean loss", linewidth=2, c="blue")
+        # Plotting the standard-deviations proved too noisy
+        if False:
+            SDs = np.array([s[1] for s in stats])
+            assert(len(Ms) == len(SDs))
+            plt.fill_between(Xs, Ms - SDs, Ms + SDs, color='gray', alpha=0.2, label='±1 SD')
+        
+    title = "Loss vs Epoch"
+    if len(losses) > 1:
+        title += f" for {len(losses)} runs"
+    plt.title(title)
+    plt.ylabel("Loss")
+    plt.xlabel("Epoch")
+    plt.legend(loc='upper right')
+    plt.tight_layout()
+    plt.show()
+
+
+def plot_hypertrain_loss(loss, names):
     if len(loss) < 2:
         return
+    
+    assert(len(loss) == len(names))
+    loss = np.array(loss)
     
     plt.figure(figsize=(12, 6))
     plt.yscale('log')
     runs = [x+1 for x in range(len(loss))]
     
     plt.scatter(runs, loss, marker="o", s=8, c='b', label = "loss")
-    i = np.argmin(loss)
-    min_loss = loss[i]
-    plt.scatter(i+1, min_loss, marker="o", s=12, c='r')
-    plt.text(i+1, min_loss, f"{min_loss:.1f}")
+    order = np.argsort(loss)
+    top = 3
+    if len(loss) >= top:
+        print("\n\nBest Models:")
+        for rank in range(top):
+            i = order[rank]
+            plt.scatter(i+1, loss[i], marker="o", s=12, c='r')
+            plt.text(i+1, loss[i], f"#{rank+1} = {loss[i]:.1f}")
+            print(f"\t{rank+1}: loss={loss[i]:.1f}, for {names[i]}")
     
     # running average
-    N = int(1 + len(loss)/5)
-    mean = [np.mean(loss[max(0, i - N + 1):i + 1]) for i in range(len(loss))]
-    plt.plot(runs, mean, c='cyan', label = f"running average {N}")
+    window = int(1 + len(loss)/5)
+    if window > 1:
+        mean = [np.mean(loss[max(0, i - window + 1):i + 1]) for i in range(len(loss))]
+        plt.plot(runs, mean, c='cyan', label = f"average of last {window}")
     
     plt.xlabel("Run")
     plt.ylabel("Loss")
@@ -137,7 +220,10 @@ def plot_hypertrain_loss(loss):
     plt.show()
     
     
-#plot_hypertrain_loss([np.random.uniform(0, 1) * 1/t for t in range(1, 100)])
+if False:
+    from num2words import num2words
+    N = 100
+    plot_hypertrain_loss([np.random.uniform(0, 1) * np.exp(-t/N) for t in range(N)], [num2words(n+1) for n in range(N)])
 
 
 def plot_bar_charts(encodings, names, title):
@@ -171,4 +257,56 @@ def plot_bar_charts(encodings, names, title):
 
 
 #plot_bar_charts([[1, 2, 3], [2, 4, 8], [-3, 6, 9]], ["counting", "powers", "threes"], "demo")
+
+
+def normalize_tensor(tensor):
+    tensor_min = tensor.min()
+    tensor_max = tensor.max()
+    normalized_tensor = (tensor - tensor_min) / (tensor_max - tensor_min)
+    return normalized_tensor
+
+def display_image(ax, image, title, colour_map = 'gray'):
+    image = normalize_tensor(image)
+    ax.imshow(image, cmap=colour_map)
+    ax.axis('off')  # Turn off axis numbers and labels
+    ax.set_xticks([])  # Remove x-axis ticks
+    ax.set_yticks([])  # Remove y-axis ticks
+    ax.set_frame_on(False)  # Remove frame around the image
+    if title:
+        ax.set_title(title)
+
+def display_image_grid(images, title, colour_map = 'gray', min_width=15):
+    count = len(images)
+    cols = int(np.sqrt(count))
+    rows = count // cols
+    if rows * cols < count:
+        cols += 1
+
+    # Ensure the entire grid is at least `min_width` units wide
+    iw = images[0].size(0)
+    ih = images[0].size(1)
+    
+    fig_width = max(min_width, cols)
+    fig_height = (fig_width / cols) * rows * iw / ih  # Scale height to maintain square pixels
+
+    fig, axs = plt.subplots(rows, cols, figsize=(fig_width, fig_height))
+    fig.suptitle(title)
+    fig.subplots_adjust(wspace=0.1, hspace=0.1)
+
+    for i in range(count):
+        ax = axs[i // cols, i % cols] if rows > 1 else axs[i]
+        display_image(ax, images[i], None, colour_map) #f"Image {i+1}")
+
+    # Hide any unused subplots
+    for i in range(count, rows*cols):
+        axs.flatten()[i].axis('off')
+        axs.flatten()[i].set_xticks([])  # Remove x-axis ticks
+        axs.flatten()[i].set_yticks([])  # Remove y-axis ticks
+        axs.flatten()[i].set_frame_on(False)  # Remove frame around the image
+
+    plt.show()
+
+
+images = [torch.rand(57, 150).mul(np.random.uniform(x)) for x in range(11)]
+display_image_grid(images, "Example")
 

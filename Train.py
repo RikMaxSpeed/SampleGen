@@ -104,7 +104,7 @@ def train_model(hyper_params, max_epochs, max_time, max_params, max_overfit, max
     # Create the model
     model, model_text = make_model(model_params, max_params, verbose)
     if model is None:
-        return max_loss
+        return max_loss, model_text
     print(f"model: {model_text}")
     
     # Train/Test & DataLoader
@@ -144,7 +144,7 @@ def train_model(hyper_params, max_epochs, max_time, max_params, max_overfit, max
             sum_batches += len(inputs)
             if np.isnan(numeric_loss) or numeric_loss > max_loss:
                 print(f"*** Aborting: model exploded, loss={loss:.2f} vs max={max_loss}")
-                return max_loss
+                return max_loss, model_text
             
             # Backward pass and optimization
             optimizer.zero_grad()
@@ -166,7 +166,7 @@ def train_model(hyper_params, max_epochs, max_time, max_params, max_overfit, max
         test_losses.append(compute_average_loss(model, test_dataset, batch_size)) # this is an acceptable overhead if the test set is several times smaller than the train set.
         if np.isnan(train_losses[-1]) or np.isnan(test_losses[-1]):
             print("Aborting: model returns NaNs :(") # Happens when the learning rate is too high
-            return max_loss
+            return max_loss, model_text
 
         
         # Progress
@@ -175,7 +175,7 @@ def train_model(hyper_params, max_epochs, max_time, max_params, max_overfit, max
 
         # Save the best models (but not too often)
         global last_saved_loss
-        if epoch >= 10 and train_losses[-1] < last_saved_loss * 0.95:
+        if epoch >= 5 and train_losses[-1] < last_saved_loss * 0.95:
             last_saved_loss = train_losses[-1]
             
             # Save the model:
@@ -202,7 +202,7 @@ def train_model(hyper_params, max_epochs, max_time, max_params, max_overfit, max
             
 
         if verbose and now - lastGraph > graph_interval and len(train_losses) > 1:
-            plot_losses(train_losses, test_losses)
+            plot_train_test_losses(train_losses, test_losses)
             lastGraph = now
             graph_interval = int(min(3600, 1.5*graph_interval))
 
@@ -233,13 +233,12 @@ def train_model(hyper_params, max_epochs, max_time, max_params, max_overfit, max
         # Unfortunately this is not in time space, but in epochs.
         # So we could miss out on a model that is slow to train but reaches a better optimal loss.
         # That said, in practice the models with the lowest loss tend to be those that train quickly per epoch.
-        if False:
-            global best_train_losses
-            if epoch >= 20 and epoch < len(best_train_losses):
-                ratio = train_losses[epoch] / best_train_losses[epoch]
-                if ratio > 10:
-                    print(f"Early stopping at epoch={epoch}, train loss={train_losses[epoch-1]:.1f} vs best={best_train_losses[epoch]:.1f}, ratio={ratio:.1f}")
-                    break
+        global best_train_losses
+        if epoch >= 20 and epoch < len(best_train_losses):
+            ratio = train_losses[epoch] / best_train_losses[epoch]
+            if ratio > 5:
+                print(f"Early stopping at epoch={epoch}, train loss={train_losses[epoch-1]:.1f} vs best={best_train_losses[epoch]:.1f}, ratio={ratio:.1f}")
+                break
 
 
     # Done!
@@ -258,12 +257,14 @@ def train_model(hyper_params, max_epochs, max_time, max_params, max_overfit, max
     
     all_test_losses.append(test_losses)
     all_test_names.append("loss={:.1f}, {}, {}".format(np.min(test_losses), model_text, optimiser_text))
-    plot_multiple_losses(all_test_losses, all_test_names, 5) # this could become large...
+    
+    if len(all_test_losses) % 5 == 0:
+        plot_multiple_losses(all_test_losses, all_test_names, 5) # this could become large...
     
     if verbose:
-        plot_losses(train_losses, test_losses)
+        plot_train_test_losses(train_losses, test_losses)
     
-    return np.min(test_losses)
+    return np.min(test_losses), model_text
 
 
 

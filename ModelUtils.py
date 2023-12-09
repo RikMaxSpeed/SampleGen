@@ -124,79 +124,16 @@ def stop_condition(train_losses, test_losses, window, min_change, max_overfit, t
         print(f"Model doesn't generalise: overfit={overfit:.1f}")
         return True
     
-    
-    return  test_loss / train_loss > max_overfit
-
-
-def compute_stats_without_outliers(data, min_count):
-
-    if len(data) == 0:
-        return None, None
-
-    data = np.array(data)
-
-    Q1 = np.percentile(data, 25)
-    Q3 = np.percentile(data, 75)
-    IQR = Q3 - Q1
-
-    lower_bound = Q1 - 1.5 * IQR
-    upper_bound = Q3 + 1.5 * IQR
-
-    filtered_data = data[(data >= lower_bound) & (data <= upper_bound)]
-    
-    if len(filtered_data) < min_count:
-        return None, None
+    if test_loss / train_loss > max_overfit:
+        print(f"Model is overfitting: overfit={overfit:.2f} vs max={max_overfit:.1f}")
+        return True
         
-    return np.mean(filtered_data), np.std(filtered_data)
+    # Keep going...
+    return False
 
 
-# Compute the mean & stdev for a given epoch across multiple runs
-def compute_epoch_stats(losses, epoch, min_count):
-
-    epoch_losses = [loss_list[epoch] for loss_list in losses if len(loss_list) > epoch]
-    
-    return compute_stats_without_outliers(epoch_losses, min_count)
 
 
-def plot_multiple_losses(losses, names, min_count):
-    plt.figure(figsize=(12, 6))
-    plt.yscale('log')
-    
-    # Plot all the loss curves
-    min_loss = min([min(l) for l in losses])
-    
-    for loss, name in zip(losses, names):
-        isBest = (min(loss) == min_loss)
-        if isBest:
-            plot_loss(loss, "Best", "cyan", 2)
-        else:
-            plot_loss(loss)
-            
-    # Plot mean & stdev
-    if len(losses) >= min_count:
-        max_epochs = max([len(l) for l in losses])
-        step = 5
-        epochs = [e for e in range(0, max_epochs, step)]
-        stats = [compute_epoch_stats(losses, e, min_count) for e in epochs]
-        stats = [s for s in stats if s[0] is not None]
-        Ms  = np.array([s[0] for s in stats])
-        Xs  = [x+1 for x in range(0, len(Ms)*step, step)]
-        assert(len(Xs) == len(Ms))
-        plt.plot(Xs, Ms, label = "Mean loss", linewidth=2, c="blue")
-        # Ploting the standard-deviations proved too noisy
-    #    SDs = np.array([s[1] for s in stats])
-    #    assert(len(Ms) == len(SDs))
-    #    plt.fill_between(Xs, Ms - SDs, Ms + SDs, color='gray', alpha=0.2, label='±1 SD')
-        
-    title = "Loss vs Epoch"
-    if len(losses) > 1:
-        title += f" for {len(losses)} runs"
-    plt.title(title)
-    plt.ylabel("Loss")
-    plt.xlabel("Epoch")
-    plt.legend(loc='upper right')
-    plt.tight_layout()
-    plt.show()
 
 
 def random_exponential_decay_list(N):
