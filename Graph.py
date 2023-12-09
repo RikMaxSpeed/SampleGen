@@ -91,7 +91,8 @@ def plot_loss(losses, name=None, colour=None, linewidth = 1):
     min_loss = losses[i]
     
     plt.scatter(i+1, min_loss, c=colour, s=8)
-    plt.text(i+1, min_loss, f"{min_loss:.2f}", color = colour)
+    if name is not None:
+        plt.text(i+1, min_loss, f"{min_loss:.1f}", color = colour)
 
 
 def plot_losses(train_losses, test_losses):

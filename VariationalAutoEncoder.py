@@ -20,9 +20,9 @@ def kl_divergence(mu, logvar):
 class VariationalAutoEncoder(nn.Module):
     @staticmethod
     def approx_trainable_parameters(sizes):
-        return fully_connected_size(sizes) * 2 # encode + decode
-        # Note: approximate but good enough in practice
-        
+        encode = fully_connected_size(sizes) + fully_connected_size([sizes[-2], sizes[-1]])
+        decode = fully_connected_size(sizes.reversed)
+        return encode + decode
         
     def __init__(self, sizes, activation_fn=F.relu):
         super(VariationalAutoEncoder, self).__init__()
@@ -78,7 +78,7 @@ class VariationalAutoEncoder(nn.Module):
         error  = reconstruction_loss(inputs, outputs)
         kl_div = kl_divergence(mu, logvar)
 
-        #print("error={:.3f}, kl_divergence={:.3f}, ratio={:.1f}".format(error, kl_div, kl_div/error))
+        #print("error={:.1f}, kl_divergence={:.1f}, ratio={:.1f}".format(error, kl_div, kl_div/error))
         
         # The optimiser appears to be able to efficiently minimise the KL loss, so it's unneccesary to weight it vs the reconstruction loss.
         kl_weight = 1.0

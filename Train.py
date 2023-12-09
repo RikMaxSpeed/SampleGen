@@ -121,7 +121,7 @@ def train_model(hyper_params, max_epochs, max_time, max_params, max_overfit, max
     test_losses = []
     
     # Stopping condition
-    window     = 10 # check progress between two windows
+    window     = 5 # check average progress between two windows
     min_change = 0.005 # stop if lossNew/lossOld - 1 < min_change
 
     graph_interval = 5
@@ -190,7 +190,7 @@ def train_model(hyper_params, max_epochs, max_time, max_params, max_overfit, max
                 file.write(f"{count_trainable_parameters(model):,} weights & biases\n\n")
                 file.write(f"optimiser: {optimiser_text}\n")
                 file.write("\n")
-                file.write(f"train loss={train_losses[-1]:.5f}, test  loss={test_losses[-1]:.5f}, overfit={train_losses[-1]/test_losses[-1]:.2f}\n")
+                file.write(f"train loss={train_losses[-1]:.1f}, test  loss={test_losses[-1]:.1f}, overfit={train_losses[-1]/test_losses[-1]:.2f}\n")
                 file.write(f"time={total_time:.0f} sec, train_size={len(train_dataset)}, batch_size={batch_size}, epoch={epoch} = {total_time/epoch:.1f} sec/epoch\n")
                 file.write("\n")
                 file.write(str(hyper_params))
@@ -226,7 +226,7 @@ def train_model(hyper_params, max_epochs, max_time, max_params, max_overfit, max
 #            mean, stdev = compute_epoch_stats(all_test_losses, epoch, 10)
 #            loss = test_losses[-1]
 #            if mean is not None and loss > mean: # we could make this more aggressive, for example: mean - 0.5 * stdev
-#                print(f"Early stopping at epoch={epoch}, test loss={loss:.5f} vs mean={mean:.5f}")
+#                print(f"Early stopping at epoch={epoch}, test loss={loss:.1f} vs mean={mean:.1f}")
 #                break
 
         # Early stopping: abort if a model is converging too slowly vs the best.
@@ -236,8 +236,8 @@ def train_model(hyper_params, max_epochs, max_time, max_params, max_overfit, max
         global best_train_losses
         if epoch >= 20 and epoch < len(best_train_losses):
             ratio = train_losses[epoch] / best_train_losses[epoch]
-            if ratio > 3:
-                print(f"Early stopping at epoch={epoch}, train loss={train_losses[epoch-1]:.5f} vs best={best_train_losses[epoch]:.5f}, ratio={ratio:.1f}")
+            if ratio > 10:
+                print(f"Early stopping at epoch={epoch}, train loss={train_losses[epoch-1]:.1f} vs best={best_train_losses[epoch]:.1f}, ratio={ratio:.1f}")
                 break
 
 
@@ -256,7 +256,7 @@ def train_model(hyper_params, max_epochs, max_time, max_params, max_overfit, max
     .format(epochs, elapsed, elapsed/epochs, sample_duration, testL, trainL, testL/trainL))
     
     all_test_losses.append(test_losses)
-    all_test_names.append("loss={:.5f}, {}, {}".format(np.min(test_losses), model_text, optimiser_text))
+    all_test_names.append("loss={:.1f}, {}, {}".format(np.min(test_losses), model_text, optimiser_text))
     plot_multiple_losses(all_test_losses, all_test_names, 5) # this could become large...
     
     if verbose:

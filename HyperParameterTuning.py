@@ -68,9 +68,9 @@ def optimise_hyper_parameters():
         
         case "STFT_VAE":
             # Train the naive STFTVariationalAutoEncoder
-            max_params = train_data_size # this model needs way more parameters.
+            max_params = 10*train_data_size # this model needs way more parameters.
             max_loss = 1e7
-            search_space.append(Integer(4,        10,   'uniform',      name='latent_size'))
+            search_space.append(Integer(4,       500,   'uniform',      name='latent_size'))
             search_space.append(Integer(1,         5,   'uniform',      name='vae_depth'))
             search_space.append(Real   (0.1,       4,   'log-uniform',  name='vae_ratio'))
             
