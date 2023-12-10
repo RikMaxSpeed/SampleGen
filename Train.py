@@ -96,9 +96,10 @@ def train_model(hyper_params, max_epochs, max_time, max_params, max_overfit, max
     model_params = hyper_params[3:]
     
     # Optmiser parameters:
-    batch_size, learning_rate, weight_decay = opt_params
-    batch_size = int(batch_size) # convert int64 to int32
-    optimiser_text = f"batch={batch_size}, learning_rate={learning_rate:.1g}, weight_decay={weight_decay:.1g}"
+    batch, learning_rate, weight_decay = opt_params
+    batch_size = int(2 ** batch) # convert int64 to int32
+    learning_rate *= batch_size # see https://www.baeldung.com/cs/learning-rate-batch-size
+    optimiser_text = f"Adam batch={batch_size}, learning_rate={learning_rate:.2g}, weight_decay={weight_decay:.2g}"
     print(f"optimiser: {optimiser_text}")
     
     # Create the model
@@ -106,6 +107,8 @@ def train_model(hyper_params, max_epochs, max_time, max_params, max_overfit, max
     if model is None:
         return max_loss, model_text
     print(f"model: {model_text}")
+    
+    description = model_text + " | " + optimiser_text
     
     # Train/Test & DataLoader
     dataloader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
@@ -180,7 +183,7 @@ def train_model(hyper_params, max_epochs, max_time, max_params, max_overfit, max
             
             # Save the model:
             file_name = model_text # keep over-writing the same file as the loss improves
-            print("*** Best! loss={:.2f}, model={}, optimiser={}".format(last_saved_loss, model_text, optimiser_text))
+            print(f"*** Best! loss={last_saved_loss:.2f}, {model_text}, {optimiser_text}")
             print(f"hyper-parameters: {hyper_params}")
             torch.save(model.state_dict(), file_name + ".wab")
             
@@ -232,12 +235,13 @@ def train_model(hyper_params, max_epochs, max_time, max_params, max_overfit, max
         # Early stopping: abort if a model is converging too slowly vs the best.
         # Unfortunately this is not in time space, but in epochs.
         # So we could miss out on a model that is slow to train but reaches a better optimal loss.
-        # That said, in practice the models with the lowest loss tend to be those that train quickly per epoch.
+        # That said, in practice, the models with the lowest loss are those that train quickest at the outset.
         global best_train_losses
         if epoch >= 20 and epoch < len(best_train_losses):
             ratio = train_losses[epoch] / best_train_losses[epoch]
-            if ratio > 5:
+            if ratio > 3:
                 print(f"Early stopping at epoch={epoch}, train loss={train_losses[epoch-1]:.1f} vs best={best_train_losses[epoch]:.1f}, ratio={ratio:.1f}")
+                return min(best_train_losses) * ratio, description # approximation in order not to mess up the GPR too much.
                 break
 
 
@@ -263,7 +267,7 @@ def train_model(hyper_params, max_epochs, max_time, max_params, max_overfit, max
     if verbose:
         plot_train_test_losses(train_losses, test_losses)
     
-    return np.min(test_losses), model_text
+    return np.min(test_losses), description
 
 
 

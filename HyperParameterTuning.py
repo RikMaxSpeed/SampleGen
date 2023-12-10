@@ -90,11 +90,11 @@ def optimise_hyper_parameters():
     
     # Optimiser:
     search_space = list()
-    search_space.append(Integer(  16,    256,    'log-uniform',  name='batch_size'))
-    search_space.append(Real   (1e-6,   1e-2,   'log-uniform',  name='learning_rate'))
-    search_space.append(Real   (1e-8,   1e-2,   'log-uniform',  name='weight_decay'))
+    search_space.append(Integer(  4,    8,       'uniform',      name='batch')) # batch_size = 2^batch
+    search_space.append(Real   (1e-7,   1e-2,    'log-uniform',  name='learning_rate')) # scaled by the batch_size
+    search_space.append(Real   (1e-9,   1e-2,    'log-uniform',  name='weight_decay'))
 
-    model_name = "StepWiseVAEMLP"
+    model_name = 'StepWiseMLP' #"StepWiseVAEMLP"
     set_model_type(model_name)
 
     # Model:
@@ -106,26 +106,26 @@ def optimise_hyper_parameters():
             max_loss = 1e7
             search_space.append(Integer(4,       500,   'uniform',      name='latent_size'))
             search_space.append(Integer(1,         5,   'uniform',      name='vae_depth'))
-            search_space.append(Real   (0.1,       4,   'log-uniform',  name='vae_ratio'))
+            search_space.append(Real   (0.1,      10,   'log-uniform',  name='vae_ratio'))
             
         case "StepWiseMLP":
             # Train just the StepWiseMLPAutoEncode (with no VAE)
-            search_space.append(Integer(10,       50,   'uniform',      name='control_size'))
-            search_space.append(Integer(2,         4,   'uniform',      name='depth'))
-            search_space.append(Real   (0.1,     2.0,   'log-uniform',  name='ratio'))
+            search_space.append(Integer(10,      200,   'uniform',      name='control_size'))
+            search_space.append(Integer(1,         7,   'uniform',      name='depth'))
+            search_space.append(Real   (0.1,      10,   'log-uniform',  name='ratio'))
             
         case "StepWiseVAEMLP":
             # Train the StepWiseMLP_VAE
             
             # StepWiseMLP parameters
-            search_space.append(Integer(40,       50,   'uniform',      name='control_size'))
-            search_space.append(Integer(2,         4,   'uniform',      name='depth'))
-            search_space.append(Real   (0.1,       4,   'log-uniform',  name='ratio'))
+            search_space.append(Integer(40,      100,   'uniform',      name='control_size'))
+            search_space.append(Integer(2,         6,   'uniform',      name='depth'))
+            search_space.append(Real   (0.1,       5,   'log-uniform',  name='ratio'))
             
             # VAE parameters:
             search_space.append(Integer(4,         8,   'uniform',      name='latent_size'))
-            search_space.append(Integer(1,         5,   'uniform',      name='vae_depth'))
-            search_space.append(Real   (0.1,       4,   'log-uniform',  name='vae_ratio'))
+            search_space.append(Integer(1,         7,   'uniform',      name='vae_depth'))
+            search_space.append(Real   (0.1,      10,   'log-uniform',  name='vae_ratio'))
         
         case "RNNAutoEncoder": # Train the RNNAutoEncoder (no VAE)
             search_space.append(Integer(10,     200,   'uniform',      name='hidden_size'))
@@ -166,6 +166,10 @@ def optimise_hyper_parameters():
 
 
 best_models = {
+#*** Best! loss=791.04
+#"StepWiseVAEMLP": ([64, 1e-5, 0.001, 43, 5, 0.13753954871555363, 8, 2, 0.18245971697542837], "No file"),
+"StepWiseVAEMLP": ([16, 1.4815996677501001e-05, 0.0016767313292796594, 43, 5, 0.13753954871555363, 8, 2, 0.18245971697542837], "No file"),
+
     "RNN_VAE": ([18, 0.0005575544181212729, 5.294016993959888e-06, 29, 1, 2, 4, 4, 0.20679719844604053],
                 "StepWiseVAEMLP control=48, depth=2, ratio=0.50, latent=6, VAE depth=4, VAE ratio=1.43.wab"), # train loss=0.01244, test  loss=0.01417
 
@@ -173,8 +177,8 @@ best_models = {
 #    "RNN_VAE hidden=24, encode_depth=1, decode_depth=1, latent=6, VAE depth=2, VAE ratio=3.36.wab"),
     
     # This model achieves good losses, however it uses 8 variables in the latent parameter, and at least 3 of them appear highly correlated.
-    "StepWiseVAEMLP": ([16, 0.0008253527686277826, 2.8929226732001846e-06, 45, 4, 2.426466845325152, 8, 1, 0.7256301852268706],
-    "StepWiseVAEMLP control=45, depth=4, ratio=2.43, latent=8, VAE depth=1, VAE ratio=0.73.wab") # train loss=0.00768, test  loss=0.00862
+#    "StepWiseVAEMLP": ([16, 0.0008253527686277826, 2.8929226732001846e-06, 45, 4, 2.426466845325152, 8, 1, 0.7256301852268706],
+#    "StepWiseVAEMLP control=45, depth=4, ratio=2.43, latent=8, VAE depth=1, VAE ratio=0.73.wab") # train loss=0.00768, test  loss=0.00862
 }
 
 

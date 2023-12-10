@@ -12,7 +12,7 @@ from Debug import *
 
 # Bunch of nasty global variables...
 sample_rate = 44100
-stft_size = 1024
+stft_size = 512 # was 1024
 stft_buckets = 2 * stft_size
 stft_hop = int(stft_buckets * 3 / 4) # with some overlap
 

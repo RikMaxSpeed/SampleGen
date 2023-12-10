@@ -88,7 +88,7 @@ def make_model(model_params, max_params, verbose):
     # Check the real size:
     size = count_trainable_parameters(model)
     print(f"model={model_type}, approx size={approx_size:,} parameters, exact={size:,}, difference={100*(approx_size / size - 1):.4f}%")
-    model_text += f" (size={size:,})"
+    model_text += f" ({size:,} w&b)"
     
     if size > max_params:
         print(f"Model is too large: {size:,} parameters vs max={max_params:,}")
