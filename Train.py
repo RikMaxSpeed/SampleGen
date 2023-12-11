@@ -62,6 +62,8 @@ def generate_training_stfts(how_many):
     stfts = convert_stfts_to_inputs(stfts)
     train_stfts, test_stfts = split_dataset(stfts, 0.8)
     
+    display_average_stft(stfts, True) # trying to debug why there's a bump at 1 sec
+    
     # Training set is kept completely separate from Test when augmenting.
     if how_many is not None and len(train_stfts) < how_many:
         train_stfts = augment_stfts(train_stfts, how_many)
@@ -127,6 +129,10 @@ def train_model(hyper_params, max_epochs, max_time, max_params, max_overfit, max
     window     = 5 # check average progress between two windows
     min_change = 0.005 # stop if lossNew/lossOld - 1 < min_change
 
+    if max_overfit >= 1.5:
+        window = 10 # allow the model longer to recover from any exploratory excursions.
+        
+    # Plot a graph of the loss vs epoch at regular intervals
     graph_interval = 5
     
     for epoch in range(0, max_epochs):
@@ -146,7 +152,7 @@ def train_model(hyper_params, max_epochs, max_time, max_params, max_overfit, max
             sum_train_loss += numeric_loss * len(inputs)
             sum_batches += len(inputs)
             if np.isnan(numeric_loss) or numeric_loss > max_loss:
-                print(f"*** Aborting: model exploded, loss={loss:.2f} vs max={max_loss}")
+                print(f"*** Aborting: model exploded! loss={loss:.2f} vs max={max_loss}")
                 return max_loss, model_text
             
             # Backward pass and optimization

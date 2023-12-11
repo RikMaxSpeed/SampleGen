@@ -48,7 +48,10 @@ class StepWiseMLPAutoEncoder(nn.Module):
 
     def encode(self, x):
         batch_size = x.size(0)
-        controls = torch.zeros(batch_size, self.sequence_length, self.hidden_size).to(device)
+        assert(x.size(1) == self.stft_buckets)
+        assert(x.size(2) == self.sequence_length)
+        
+        controls = torch.zeros(batch_size, self.hidden_size, self.sequence_length).to(device)
         prev_stft = torch.zeros(batch_size, self.stft_buckets).to(device)
         
         # Process each time step
@@ -59,19 +62,24 @@ class StepWiseMLPAutoEncoder(nn.Module):
             
             # Update control parameters
             result = self.encoder(combined_input)
-            controls[:, t, :] = result
+            controls[:, :, t] = result
 
             # Update previous STFT frame
             prev_stft = curr_stft #.clone() do we need to clone here??
 
 
         controls = controls.flatten(-2)
+        assert(controls.size(0) == batch_size)
+        assert(controls.size(1) == self.sequence_length * self.hidden_size)
+        
         return controls
 
 
     def decode(self, x):
         batch_size = x.size(0)
-        controls = x.view(batch_size, self.sequence_length, self.hidden_size).to(device)
+        assert(x.size(1) == self.sequence_length * self.hidden_size)
+        
+        controls = x.view(batch_size, self.hidden_size, self.sequence_length).to(device)
         prev_stft = torch.zeros(batch_size, self.stft_buckets).to(device)
         reconstructed = torch.zeros(batch_size, self.stft_buckets, self.sequence_length).to(device)
 
@@ -79,13 +87,13 @@ class StepWiseMLPAutoEncoder(nn.Module):
         for t in range(self.sequence_length):
 
             # Concatenate control parameters and previous STFT
-            combined_input = torch.cat([controls[:, t, :], prev_stft], dim=1)
+            combined_input = torch.cat([controls[:, :, t], prev_stft], dim=1)
             
             # Update previous STFT frame with the output of the decoder
             prev_stft = self.decoder(combined_input)
 
             # Store the reconstructed STFT frame
-            reconstructed[:, :, t] = prev_stft
+            reconstructed[:, :, t] = prev_stft # do we need .clone() here?
 
         return reconstructed
 

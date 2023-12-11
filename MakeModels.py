@@ -136,6 +136,8 @@ def make_model(model_params, max_params, verbose):
 
 # Dictionary of best models we've built
 best_models = {
+#"RNNAutoEncoder" ([4, 2.214254104518763e-05, 5.055883450850856e-08, 165, 4, 0.3187354618451725], "")
+
 "StepWiseMLP": ([4, 2.214254104518763e-05, 5.055883450850856e-08, 165, 4, 0.3187354618451725],
                 "StepWiseMLP control=165, depth=4, ratio=0.32 (5,292,057 parameters).wab"), # Small model with loss=85
 

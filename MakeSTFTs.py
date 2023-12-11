@@ -134,8 +134,6 @@ def load_STFTs():
     return stfts, file_names
 
 
-
-
 def adjust_stft_length(stft_tensor, target_length):
     
     assert(stft_size <= stft_tensor.shape[0] <= stft_size + 1)
@@ -160,6 +158,39 @@ def transpose(tensor):
     return tensor.transpose(0, 1) # Swap the SFTF bins and sequence length
 
 
+def convert_to_reals(complex):
+    output = torch.zeros(2 * complex.size(0), complex.size(1), dtype=torch.float32)
+    output[0::2] = complex.real
+    output[1::2] = complex.imag
+    return output
+
+def convert_to_complex(reals):
+    #return torch.complex(tensor[0::2], tensor[1::2]) # Not implemented on MPS :(
+    
+    # Alternative implementation: this was a pig to get right!
+    real_parts = reals[0::2]  # Even rows: real parts
+    imag_parts = reals[1::2]  # Odd rows: imaginary parts
+
+    N, M = real_parts.shape
+    combined_tensor = torch.zeros(N, M, 2, dtype=torch.float32)
+    combined_tensor[:, :, 0] = real_parts  # Real parts
+    combined_tensor[:, :, 1] = imag_parts  # Imaginary parts
+
+    output_tensor = torch.view_as_complex(combined_tensor)
+    return output_tensor
+
+
+x = torch.randn(5, 3, dtype=torch.complex32)
+print(f"x={x}\n")
+y = convert_to_reals(x)
+print(f"y={y}\n")
+z = convert_to_complex(y)
+print(f"z={z}\n")
+d = x - z
+print(f"diff={d}")
+assert(d.norm() < 1e-4)
+
+
 def convert_stft_to_input(stft):
     assert(len(stft.shape) == 2)
     assert(stft.shape[0] == stft_size + 1)
@@ -169,7 +200,7 @@ def convert_stft_to_input(stft):
     stft = adjust_stft_length(stft, sequence_length)
     maxAmp = torch.max(stft.abs())
     stft /= maxAmp
-    stft = torch.view_as_real(stft).reshape(stft_buckets, sequence_length)
+    stft = convert_to_reals(stft)
     return stft.to(device)
 
 
@@ -179,12 +210,10 @@ def convert_stfts_to_inputs(stfts):
 
 def convert_stft_to_output(stft):
     global maxAmp
-    
-    stft = stft.reshape(stft_size, sequence_length, 2)
     stft *= maxAmp
-    zeros = torch.zeros(1, sequence_length, 2, device=device)
+    zeros = torch.zeros(2, sequence_length, device=device)
     stft = torch.cat((zeros, stft), dim = 0)
-    stft = torch.view_as_complex(stft)
+    stft = convert_to_complex(stft)
     return stft.cpu().detach().numpy()
 
 
@@ -229,10 +258,16 @@ def test_stft_conversions(file_name):
                 print("f={}, t={}, diff={:.3f}, stft={:.3f}, output={:.3f}".format(f, t, d, stft[f, t], output[f, t]))
 
 
-#test_stft_conversions("Samples/Piano C4 Major 13.wav")
+test_stft_conversions("Samples/Piano C4 Major 13.wav")
 #test_stft_conversions("/Users/Richard/Coding/WaveFiles/FreeWaveSamples/Alesis-S4-Plus-Clean-Gtr-C4.wav")
 #sys.exit(1)
 
+
+def display_average_stft(stfts, playAudio):
+    mean = stfts.mean(dim=0)
+    output = convert_stft_to_output(mean)
+    plot_stft("Average STFT", output, sample_rate, stft_hop)
+    save_and_play_audio_from_stft(output, sample_rate, stft_hop, "Results/MeanSTFT.wav", playAudio)
 
 
 from SampleCategory import *

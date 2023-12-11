@@ -11,7 +11,7 @@ from Train import *
 one_sample = stft_buckets * sequence_length
 max_params = None
 tuning_count = 0
-break_on_exceptions = True # Set this to False to allow the process to continue even if the model blows up (useful for long tuning runs!)
+break_on_exceptions = False # Set this to False to allow the process to continue even if the model blows up (useful for long tuning runs!)
 max_loss = 30000 # default
 
 hyper_losses = []
@@ -94,7 +94,9 @@ def optimise_hyper_parameters():
     search_space.append(Real   (1e-7,   1e-2,    'log-uniform',  name='learning_rate')) # scaled by the batch_size
     search_space.append(Real   (1e-9,   1e-2,    'log-uniform',  name='weight_decay'))
 
-    model_name = "Incremental_StepWiseVAEMLP" #"StepWiseVAEMLP" #"StepWiseMLP" #"StepWiseVAEMLP"
+    model_name = "Incremental_StepWiseVAEMLP"
+    #"StepWiseVAEMLP" #"StepWiseMLP" #"StepWiseVAEMLP"
+    #model_name = "RNNAutoEncoder"
     set_model_type(model_name)
 
     # Model:
@@ -103,7 +105,7 @@ def optimise_hyper_parameters():
         case "STFT_VAE":
             # Train the naive STFTVariationalAutoEncoder
             max_params = 10*train_data_size # this model needs way more parameters.
-            max_loss = 1e7
+            max_loss = 1e7 # and the loss starts off extremely high
             search_space.append(Integer(4,       500,   'uniform',      name='latent_size'))
             search_space.append(Integer(1,         5,   'uniform',      name='vae_depth'))
             search_space.append(Real   (0.1,      10,   'log-uniform',  name='vae_ratio'))
@@ -142,9 +144,9 @@ def optimise_hyper_parameters():
         case "RNN_VAE": # Train the full RNN_VAE
 
             # RNN parameters
-            search_space.append(Integer(10,      300,   'uniform',      name='hidden_size'))
-            search_space.append(Integer(1,         7,   'uniform',      name='encode_depth'))
-            search_space.append(Integer(1,         7,   'uniform',      name='decode_depth'))
+            search_space.append(Integer(10,      200,   'uniform',      name='hidden_size'))
+            search_space.append(Integer(1,         8,   'uniform',      name='encode_depth'))
+            search_space.append(Integer(1,         8,   'uniform',      name='decode_depth'))
             
             # VAE parameters
             search_space.append(Integer(4,         8,   'uniform',      name='latent_size'))

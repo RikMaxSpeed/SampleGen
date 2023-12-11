@@ -77,13 +77,68 @@ class VariationalAutoEncoder(nn.Module):
     def loss_function(self, inputs, outputs, mu, logvar):
         error  = reconstruction_loss(inputs, outputs)
         kl_div = kl_divergence(mu, logvar)
-        
-#        latent = len(mu[0])
-#        kl_div /= latent # normalise
-        
+                
         #print(f"error={error:.1f}, kl_divergence={kl_div:.1f}, ratio={error/kl_div:.1f}")
         
-        # The optimiser appears to be able to efficiently minimise the KL loss, so it's unneccesary to weight it vs the reconstruction loss.
-        kl_weight = 1.0
+        # The optimiser appears to always efficiently minimise the KL loss, no need to weight this.
+        return error + kl_div
+
+
+#########################################################################################################################
+# Combined_VAE: take a standard auto-encoder and insert a VAE in the middle.
+# We can then train the auto-encoder independently, and then train the VAE around that.
+
+
+class CombinedVAE(nn.Module):
         
-        return (error + kl_weight * kl_div) # / inputs.size(0) # divide by the batch size
+    def __init__(self, auto_encoder, hidden_size, vae_latent_size, vae_depth, vae_ratio):
+        super(CombinedVAE, self).__init__()
+        
+        self.auto_encoder = auto_encoder
+        self.hidden_size  = hidden_size
+        
+        layers = interpolate_layer_sizes(basic_hidden_size, vae_latent_size, vae_depth, vae_ratio)
+        self.vae = VariationalAutoEncoder(layers)
+
+        print(f"CombinedVAE {count_trainable_parameters(self):,} parameters, compression={sizes[0]/sizes[-1]:.1f}")
+
+
+    def encode(self, x):
+        hiddens = self.auto_encoder.encode(x)
+        mu, logvar = self.vae.encode(hiddens)
+        return mu, logvar
+
+
+    def decode(self, z):
+        hiddens = self.vae.decode(z)
+        stft = self.auto_encoder.decode(hiddens)
+        return stft
+
+
+    def forward(self, x):
+        mu, logvar = self.encode(x)
+        z = self.vae.reparameterize(mu, logvar)
+        return self.decode(z), mu, logvar
+        
+        
+    def loss_function(self, inputs, outputs, mu, logvar):
+        return self.vae.loss_function(inputs, outputs, mu, logvar)
+        
+        
+    def forward_loss(self, inputs):
+        outputs, mus, logvars = self.forward(inputs)
+        loss = self.loss_function(inputs, outputs, mus, logvars)
+        return loss, outputs
+
+
+
+    def forward(self, x):
+        mu, logvar = self.encode(x)
+        z = self.reparameterize(mu, logvar)
+        
+        return self.decode(z), mu, logvar
+        
+        
+    def loss_function(self, inputs, outputs, mu, logvar):
+        return self.vae.loss_function(inputs, outputs, mu, logvar)
+
