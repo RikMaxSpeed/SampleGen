@@ -178,7 +178,7 @@ def plot_multiple_losses(losses, names, min_count):
     if len(losses) > 1:
         title += f" for {len(losses)} runs"
     plt.title(title)
-    plt.ylabel("Loss")
+    plt.ylabel("Loss (log scale)")
     plt.xlabel("Epoch")
     plt.legend(loc='upper right')
     plt.tight_layout()
@@ -214,7 +214,7 @@ def plot_hypertrain_loss(loss, names):
         plt.plot(runs, mean, c='cyan', label = f"average of last {window}")
     
     plt.xlabel("Run")
-    plt.ylabel("Loss")
+    plt.ylabel("Loss (log scale)")
     plt.legend()
     plt.title(f"Hyper-Parameter Optimisation: loss over {len(loss)} runs")
     plt.show()

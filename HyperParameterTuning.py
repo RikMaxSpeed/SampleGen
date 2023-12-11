@@ -20,10 +20,10 @@ hyper_names = []
 def evaluate_model(params):
     global tuning_count
     tuning_count += 1
-    print(f"Hyper-Parameter tuning#{tuning_count}: [params]\n")
+    print(f"Hyper-Parameter tuning#{tuning_count}: {params}\n")
     
     #max_time = 5 * 60 # seconds
-    max_overfit = 1.1 # Ensure we retain the models that generalise best.
+    max_overfit = 1.3 # Ensure we retain the models that generalise reasonably well.
     max_epochs = 100 # This is sufficient to figure out which model will converge best if we let it run for longer.
     max_time = max_epochs * 20 # we hopefully won't bump into this.
     verbose = False # avoid printing lots of detail for each run
@@ -86,15 +86,15 @@ def optimise_hyper_parameters():
     global max_params, max_loss
     train_data_size = samples * one_sample
     max_params = train_data_size // 5 # that means both the encode & decoder are approx half that size
-    print(f"{tuning_count} training samples, {stft_buckets} frequencies, {sequence_length} time-steps, maximum model size is {max_params:,} parameters.")
+    print(f"{stft_buckets} frequencies, {sequence_length} time-steps, maximum model size is {max_params:,} parameters.")
     
     # Optimiser:
     search_space = list()
-    search_space.append(Integer(  4,    8,       'uniform',      name='batch')) # batch_size = 2^batch
+    search_space.append(Integer(  2,    4,       'uniform',      name='batch')) # batch_size = 2^batch
     search_space.append(Real   (1e-7,   1e-2,    'log-uniform',  name='learning_rate')) # scaled by the batch_size
     search_space.append(Real   (1e-9,   1e-2,    'log-uniform',  name='weight_decay'))
 
-    model_name = 'StepWiseMLP' #"StepWiseVAEMLP"
+    model_name = "Incremental_StepWiseVAEMLP" #"StepWiseVAEMLP" #"StepWiseMLP" #"StepWiseVAEMLP"
     set_model_type(model_name)
 
     # Model:
@@ -110,23 +110,30 @@ def optimise_hyper_parameters():
             
         case "StepWiseMLP":
             # Train just the StepWiseMLPAutoEncode (with no VAE)
-            search_space.append(Integer(10,      200,   'uniform',      name='control_size'))
+            search_space.append(Integer(10,      200,   'uniform',      name='hidden_size'))
             search_space.append(Integer(1,         7,   'uniform',      name='depth'))
             search_space.append(Real   (0.1,      10,   'log-uniform',  name='ratio'))
             
         case "StepWiseVAEMLP":
             # Train the StepWiseMLP_VAE
+            max_params = train_data_size
             
             # StepWiseMLP parameters
-            search_space.append(Integer(40,      100,   'uniform',      name='control_size'))
-            search_space.append(Integer(2,         6,   'uniform',      name='depth'))
-            search_space.append(Real   (0.1,       5,   'log-uniform',  name='ratio'))
+            search_space.append(Integer(140,      180,   'uniform',     name='hidden_size'))
+            search_space.append(Integer(3,         7,   'uniform',      name='depth'))
+            search_space.append(Real   (0.2,       5,   'uniform',      name='ratio'))
             
             # VAE parameters:
-            search_space.append(Integer(4,         8,   'uniform',      name='latent_size'))
+            search_space.append(Integer(4,        20,   'uniform',      name='latent_size'))
             search_space.append(Integer(1,         7,   'uniform',      name='vae_depth'))
-            search_space.append(Real   (0.1,      10,   'log-uniform',  name='vae_ratio'))
+            search_space.append(Real   (0.2,       5,   'uniform',      name='vae_ratio'))
         
+        case "Incremental_StepWiseVAEMLP":
+            # VAE parameters:
+            search_space.append(Integer(4,        20,   'uniform',      name='latent_size'))
+            search_space.append(Integer(1,         7,   'uniform',      name='vae_depth'))
+            search_space.append(Real   (0.2,       5,   'uniform',      name='vae_ratio'))
+                    
         case "RNNAutoEncoder": # Train the RNNAutoEncoder (no VAE)
             search_space.append(Integer(10,     200,   'uniform',      name='hidden_size'))
             search_space.append(Integer(1,        7,   'uniform',       name='encode_depth'))
@@ -142,7 +149,7 @@ def optimise_hyper_parameters():
             # VAE parameters
             search_space.append(Integer(4,         8,   'uniform',      name='latent_size'))
             search_space.append(Integer(1,        10,   'uniform',      name='vae_depth'))
-            search_space.append(Real   (0.1,      10,   'log-uniform',  name='vae_ratio'))
+            search_space.append(Real   (0.1,      10,   'uniform',      name='vae_ratio'))
 
         case _:
             raise Exception(f"Invalid model type = {model_name}")
@@ -165,44 +172,7 @@ def optimise_hyper_parameters():
     print("Best parameters={}".format(result.x))
 
 
-best_models = {
-#*** Best! loss=791.04
-#"StepWiseVAEMLP": ([64, 1e-5, 0.001, 43, 5, 0.13753954871555363, 8, 2, 0.18245971697542837], "No file"),
-"StepWiseVAEMLP": ([16, 1.4815996677501001e-05, 0.0016767313292796594, 43, 5, 0.13753954871555363, 8, 2, 0.18245971697542837], "No file"),
 
-    "RNN_VAE": ([18, 0.0005575544181212729, 5.294016993959888e-06, 29, 1, 2, 4, 4, 0.20679719844604053],
-                "StepWiseVAEMLP control=48, depth=2, ratio=0.50, latent=6, VAE depth=4, VAE ratio=1.43.wab"), # train loss=0.01244, test  loss=0.01417
-
-#    "RNN_VAE": ([18, 0.00016409427656154815, 1.9378132418753713e-05, 24, 1, 1, 6, 2, 3.359267821929004],
-#    "RNN_VAE hidden=24, encode_depth=1, decode_depth=1, latent=6, VAE depth=2, VAE ratio=3.36.wab"),
-    
-    # This model achieves good losses, however it uses 8 variables in the latent parameter, and at least 3 of them appear highly correlated.
-#    "StepWiseVAEMLP": ([16, 0.0008253527686277826, 2.8929226732001846e-06, 45, 4, 2.426466845325152, 8, 1, 0.7256301852268706],
-#    "StepWiseVAEMLP control=45, depth=4, ratio=2.43, latent=8, VAE depth=1, VAE ratio=0.73.wab") # train loss=0.00768, test  loss=0.00862
-}
-
-
-def get_best_model_configuration():
-    #best = "RNN_VAE"
-    best = "StepWiseVAEMLP"
-    set_model_type(best)
-    return best_models[best]
-
-
-def load_best_model():
-    params, file_name = get_best_model_configuration()
-    model_params = params[3:]
-    max_params = +1e99 # ignore
-    verbose = True
-    model, model_text = make_model(model_params, max_params, verbose)
-    
-    print(f"Loading weights & biases from file '{file_name}'")
-    model.load_state_dict(torch.load(file_name))
-    model.eval() # Ensure the model is in evaluation mode
-    model.to(device)
-    print(f"{model.__class__.__name__} has {count_trainable_parameters(model):,} weights & biases")
-    
-    return model
 
 
 def train_best_params():
@@ -213,7 +183,7 @@ def train_best_params():
 
     max_time = 12 * 3600 # we should converge way before this!
     max_overfit = 100.0 # ignore: we're aiming for the highest precision possible on the training set
-    max_params = 1e9 # ignore
+    max_params = 1e9 # ignore - we want high fidelity on the training set, though this could result in less diversity on the generated audio... Mmm...
     max_epochs = 2000 # we don't hit this in practice.
     max_loss = 1e9
     

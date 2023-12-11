@@ -18,53 +18,52 @@ from VariationalAutoEncoder import *
 class StepWiseMLPAutoEncoder(nn.Module):
         
     @staticmethod
-    def get_layer_sizes(stft_buckets, control_size, depth, ratio):
-        encode_layer_sizes = interpolate_layer_sizes(1 + 2 * stft_buckets, control_size, depth, ratio)
-        decode_layer_sizes = interpolate_layer_sizes(1 + stft_buckets + control_size, stft_buckets, depth, ratio)
+    def get_layer_sizes(stft_buckets, hidden_size, depth, ratio):
+        encode_layer_sizes = interpolate_layer_sizes(2 * stft_buckets, hidden_size, depth, ratio)
+        decode_layer_sizes = interpolate_layer_sizes(stft_buckets + hidden_size, stft_buckets, depth, ratio)
         return encode_layer_sizes, decode_layer_sizes
         
     @staticmethod
-    def approx_trainable_parameters(stft_buckets, control_size, depth, ratio):
-        encode_layer_sizes, decode_layer_sizes = StepWiseMLPAutoEncoder.get_layer_sizes(stft_buckets, control_size, depth, ratio)
+    def approx_trainable_parameters(stft_buckets, hidden_size, depth, ratio):
+        encode_layer_sizes, decode_layer_sizes = StepWiseMLPAutoEncoder.get_layer_sizes(stft_buckets, hidden_size, depth, ratio)
         encode_size = fully_connected_size(encode_layer_sizes)
         decode_size = fully_connected_size(decode_layer_sizes)
         total = encode_size + decode_size
         return total
 
 
-    def __init__(self, stft_buckets, sequence_length, control_size, depth, ratio):
+    def __init__(self, stft_buckets, sequence_length, hidden_size, depth, ratio):
         super(StepWiseMLPAutoEncoder, self).__init__()
         
         self.stft_buckets = stft_buckets
         self.sequence_length = sequence_length
-        self.control_size = control_size
-        encode_layer_sizes, decode_layer_sizes = StepWiseMLPAutoEncoder.get_layer_sizes(stft_buckets, control_size, depth, ratio)
+        self.hidden_size = hidden_size
+        encode_layer_sizes, decode_layer_sizes = StepWiseMLPAutoEncoder.get_layer_sizes(stft_buckets, hidden_size, depth, ratio)
         
         self.encoder = build_sequential_model(encode_layer_sizes, None)
         self.decoder = build_sequential_model(decode_layer_sizes, None) #was nn.Tanh())
 
-        print(f"StepWiseMLPAutoEncoder compression: {stft_buckets/control_size:.1f} x smaller")
+        print(f"StepWiseMLPAutoEncoder {count_trainable_parameters(self):,} parameters, compression={stft_buckets/hidden_size:.1f}")
 
 
     def encode(self, x):
         batch_size = x.size(0)
-        controls = torch.zeros(batch_size, self.sequence_length, self.control_size).to(device)
+        controls = torch.zeros(batch_size, self.sequence_length, self.hidden_size).to(device)
         prev_stft = torch.zeros(batch_size, self.stft_buckets).to(device)
         
         # Process each time step
         for t in range(self.sequence_length):
-            t_tensor = torch.full((batch_size, 1), t / float(self.sequence_length), dtype=torch.float32).to(device)
-            
-            # Concatenate previous STFT, current STFT, and time step
+            # Concatenate previous STFT, current STFT
             curr_stft = x[:, :, t]
-            combined_input = torch.cat([prev_stft, curr_stft, t_tensor], dim=1)
+            combined_input = torch.cat([prev_stft, curr_stft], dim=1)
             
             # Update control parameters
             result = self.encoder(combined_input)
             controls[:, t, :] = result
 
             # Update previous STFT frame
-            prev_stft = curr_stft.clone()
+            prev_stft = curr_stft #.clone() do we need to clone here??
+
 
         controls = controls.flatten(-2)
         return controls
@@ -72,16 +71,15 @@ class StepWiseMLPAutoEncoder(nn.Module):
 
     def decode(self, x):
         batch_size = x.size(0)
-        controls = x.view(batch_size, self.sequence_length, self.control_size).to(device)
+        controls = x.view(batch_size, self.sequence_length, self.hidden_size).to(device)
         prev_stft = torch.zeros(batch_size, self.stft_buckets).to(device)
         reconstructed = torch.zeros(batch_size, self.stft_buckets, self.sequence_length).to(device)
 
         # Process each time step
         for t in range(self.sequence_length):
-            t_tensor = torch.full((batch_size, 1), t / float(self.sequence_length), dtype=torch.float32).to(device)
 
             # Concatenate control parameters and previous STFT
-            combined_input = torch.cat([controls[:, t, :], prev_stft, t_tensor], dim=1)
+            combined_input = torch.cat([controls[:, t, :], prev_stft], dim=1)
             
             # Update previous STFT frame with the output of the decoder
             prev_stft = self.decoder(combined_input)
@@ -104,6 +102,17 @@ class StepWiseMLPAutoEncoder(nn.Module):
         return loss, outputs
 
 
+    def load_outer_layers(self, file_name):
+        print(f"StepWiseMLPAutoEncoder: loading weights & biases from file '{file_name}'")
+        model.load_state_dict(torch.load(file_name))
+    
+    
+    def freeze_outer_layers(self):
+        for name, param in model.named_parameters():
+            print("\tfreezing: {name}")
+            param.requires_grad = False
+
+
 ##########################################################################################
 # Step-Wise MLP Auto-encoder with VAE
 # Here we combine the StepWiseMLP model with the VAE auto-encoder.
@@ -111,26 +120,26 @@ class StepWiseMLPAutoEncoder(nn.Module):
 
 class StepWiseMLP_VAE(nn.Module):
     @staticmethod
-    def get_vae_layers(stft_buckets, sequence_length, control_size, depth, ratio, latent_size, vae_depth, vae_ratio):
-        stepwise_output_size = control_size * sequence_length
+    def get_vae_layers(stft_buckets, sequence_length, hidden_size, depth, ratio, latent_size, vae_depth, vae_ratio):
+        stepwise_output_size = hidden_size * sequence_length
         layers = interpolate_layer_sizes(stepwise_output_size, latent_size, vae_depth, vae_ratio)
         return layers
 
 
     @staticmethod
-    def approx_trainable_parameters(stft_buckets, sequence_length, control_size, depth, ratio, latent_size, vae_depth, vae_ratio):
-        stepwise = StepWiseMLPAutoEncoder.approx_trainable_parameters(stft_buckets, control_size, depth, ratio)
-        vae_layers = StepWiseMLP_VAE.get_vae_layers(stft_buckets, sequence_length, control_size, depth, ratio, latent_size, vae_depth, vae_ratio)
+    def approx_trainable_parameters(stft_buckets, sequence_length, hidden_size, depth, ratio, latent_size, vae_depth, vae_ratio):
+        stepwise = StepWiseMLPAutoEncoder.approx_trainable_parameters(stft_buckets, hidden_size, depth, ratio)
+        vae_layers = StepWiseMLP_VAE.get_vae_layers(stft_buckets, sequence_length, hidden_size, depth, ratio, latent_size, vae_depth, vae_ratio)
         vae = VariationalAutoEncoder.approx_trainable_parameters(vae_layers)
         return stepwise + vae
 
 
-    def __init__(self, stft_buckets, sequence_length, control_size, depth, ratio, latent_size, vae_depth, vae_ratio):
+    def __init__(self, stft_buckets, sequence_length, hidden_size, depth, ratio, latent_size, vae_depth, vae_ratio):
         super(StepWiseMLP_VAE, self).__init__()
         
-        self.stepwise = StepWiseMLPAutoEncoder(stft_buckets, sequence_length, control_size, depth, ratio)
+        self.stepwise = StepWiseMLPAutoEncoder(stft_buckets, sequence_length, hidden_size, depth, ratio)
         
-        vae_layers = StepWiseMLP_VAE.get_vae_layers(stft_buckets, sequence_length, control_size, depth, ratio, latent_size, vae_depth, vae_ratio)
+        vae_layers = StepWiseMLP_VAE.get_vae_layers(stft_buckets, sequence_length, hidden_size, depth, ratio, latent_size, vae_depth, vae_ratio)
         self.vae = VariationalAutoEncoder(vae_layers)
 
     def encode(self, x):
@@ -160,4 +169,9 @@ class StepWiseMLP_VAE(nn.Module):
         loss = self.loss_function(inputs, outputs, mus, logvars)
         return loss, outputs
 
-    
+
+    def load_outer_layers(self, file_name):
+        self.stepwise.load_outer_layers(file_name)
+
+    def freeze_outer_layers(self):
+        self.stepwise.freeze_outer_layers()

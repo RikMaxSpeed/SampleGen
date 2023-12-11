@@ -40,7 +40,7 @@ class VariationalAutoEncoder(nn.Module):
         # Activation function
         self.activation_fn = activation_fn
 
-        print(f"VariationalAutoEncoder compression: {sizes[0]/sizes[-1]:.1f} x smaller")
+        print(f"VariationalAutoEncoder {count_trainable_parameters(self):,} parameters, compression={sizes[0]/sizes[-1]:.1f}")
 
 
     def encode(self, x):
@@ -86,4 +86,4 @@ class VariationalAutoEncoder(nn.Module):
         # The optimiser appears to be able to efficiently minimise the KL loss, so it's unneccesary to weight it vs the reconstruction loss.
         kl_weight = 1.0
         
-        return (error + kl_weight * kl_div)
+        return (error + kl_weight * kl_div) # / inputs.size(0) # divide by the batch size

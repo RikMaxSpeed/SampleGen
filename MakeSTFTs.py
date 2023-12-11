@@ -217,7 +217,7 @@ def test_stft_conversions(file_name):
     output *= amp / maxAmp
     
     plot_stft("Resynth " + file_name, output, sr, stft_hop)
-    save_and_play_audio_from_stft(output, sr, stft_hop, "Results/resynth-mulaw-" + os.path.basename(file_name), True)
+    save_and_play_audio_from_stft(output, sr, stft_hop, "Results/resynth-" + os.path.basename(file_name), True)
 
     diff = np.abs(output - stft)
     debug("diff", diff)

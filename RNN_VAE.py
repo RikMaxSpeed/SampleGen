@@ -25,13 +25,14 @@ class RNNAutoEncoder(nn.Module): # no VAE
         hidden_size = int(hidden_size) # RNN objects to int64.
         self.sequence_length = sequence_length
         self.hidden_size = hidden_size
-        print(f"RNNAutoEncoder compression: {stft_buckets/hidden_size:.1f} x smaller")
         
         # RNN: input = (batch, sequence, features)
         self.encoder = torch.nn.RNN(stft_buckets, hidden_size, num_layers = encode_depth, batch_first = True, dropout = dropout)
         self.decoder = torch.nn.RNN(hidden_size, stft_buckets, num_layers = decode_depth, batch_first = True, dropout = dropout)
         # Important: in the rnnVAE I gave the model the previous and the current frame at each time step + the time itself.
         # In this version I'm only giving the model the individual time-steps... I don't know whether this will work.
+        
+        print(f"RNNAutoEncoder {count_trainable_parameters(self):,} parameters, compression={stft_buckets/hidden_size:.1f}")
         
         self.count = 0
         
