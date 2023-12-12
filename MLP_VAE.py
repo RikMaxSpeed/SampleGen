@@ -155,17 +155,13 @@ class StepWiseMLP_VAE(nn.Module):
 
     def forward(self, x):
         mu, logvar = self.encode(x)
-        z = self.vae.reparameterize(mu, logvar)
+        z = vae_reparameterize(mu, logvar)
         return self.decode(z), mu, logvar
-        
-        
-    def loss_function(self, inputs, outputs, mu, logvar):
-        return self.vae.loss_function(inputs, outputs, mu, logvar)
         
         
     def forward_loss(self, inputs):
         outputs, mus, logvars = self.forward(inputs)
-        loss = self.loss_function(inputs, outputs, mus, logvars)
+        loss = vae_loss_function(inputs, outputs, mus, logvars)
         return loss, outputs
 
 

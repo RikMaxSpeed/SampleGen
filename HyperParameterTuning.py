@@ -11,13 +11,16 @@ from Train import *
 one_sample = stft_buckets * sequence_length
 max_params = None
 tuning_count = 0
-break_on_exceptions = True # Set this to False to allow the process to continue even if the model blows up (useful for long tuning runs!)
+break_on_exceptions = True # True=Debugging, False allows the GPR to continue even if the model blows up (useful for long tuning runs!)
 max_loss = 4000 # default
 
 hyper_losses = []
 hyper_names = []
 hyper_model = None
 
+def is_incremental(model_name):
+    return "Incremental" in model_name
+    
 def evaluate_model(params):
     global hyper_model, hyper_losses, hyper_names, tuning_count
     
@@ -27,7 +30,7 @@ def evaluate_model(params):
     #max_time = 5 * 60 # seconds
     max_overfit = 1.2 # Ensure we retain the models that generalise reasonably well.
     
-    if "Incremental" in hyper_model:
+    if is_incremental(hyper_model):
         max_overfit = 3.0 # the internal layer may have been deliberately over-fit.
         print(f"Overriding max_overfit={max_overfit:.1f}")
         
@@ -96,10 +99,18 @@ def optimise_hyper_parameters(model_name):
     print(f"{stft_buckets} frequencies, {sequence_length} time-steps, maximum model size is {max_params:,} parameters.")
     
     # Optimiser:
+    batch=2 # actual batch_size = 2**batch
+    lr = 1e-5
+    if is_incremental(model_name):
+        batch = 1
+        lr = 1e-7
+    
+    wd = 1e-20 # neutralised because it doesn't help
+    
     search_space = list()
-    search_space.append(Integer(  3,    8,       'uniform',      name='batch')) # batch_size = 2^batch
-    search_space.append(Real   (1e-7,   1e-2,    'log-uniform',  name='learning_rate')) # scaled by the batch_size
-    search_space.append(Real   (1e-9,   1e-2,    'log-uniform',  name='weight_decay'))
+    search_space.append(Integer(batch,  batch+2,    'uniform',      name='batch')) # batch_size = 2^batch
+    search_space.append(Real   (lr,    lr * 100,    'log-uniform',  name='learning_rate')) # scaled by the batch_size
+    search_space.append(Real   (wd,    wd * 100,    'log-uniform',  name='weight_decay'))
 
     # Model:
     global hyper_model
@@ -111,9 +122,9 @@ def optimise_hyper_parameters(model_name):
             # Train the naive STFTVariationalAutoEncoder
             max_params = 10*train_data_size # this model needs way more parameters.
             max_loss = 100_000 # and the loss starts off extremely high
-            search_space.append(Integer(4,       500,   'uniform',      name='latent_size'))
+            search_space.append(Integer(4,        10,   'uniform',      name='latent_size'))
             search_space.append(Integer(1,         5,   'uniform',      name='vae_depth'))
-            search_space.append(Real   (0.1,      10,   'log-uniform',  name='vae_ratio'))
+            search_space.append(Real   (0.2,     1.0,   'log-uniform',  name='vae_ratio'))
             
         case "StepWiseMLP":
             # Train just the StepWiseMLPAutoEncode (with no VAE)
@@ -137,10 +148,10 @@ def optimise_hyper_parameters(model_name):
         
         case "MLPVAE_Incremental":
             # We only need the VAE parameters, as the StepWiseMLP has already been trained.
-            search_space.append(Integer(4,        20,   'uniform',      name='latent_size'))
-            search_space.append(Integer(1,         7,   'uniform',      name='vae_depth'))
-            search_space.append(Real   (0.2,       5,   'uniform',      name='vae_ratio'))
-            max_params = train_data_size // 5
+            search_space.append(Integer(8,        12,   'uniform',      name='latent_size'))
+            search_space.append(Integer(4,         7,   'uniform',      name='vae_depth'))
+            search_space.append(Real   (0.2,     0.5, 'uniform',      name='vae_ratio'))
+            max_params = train_data_size // 4
             
         case "RNNAutoEncoder": # Train the RNNAutoEncoder (no VAE)
             max_params = 20_000_000

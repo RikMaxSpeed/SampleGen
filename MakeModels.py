@@ -77,11 +77,12 @@ def make_model(model_type, model_params, max_params, verbose):
             print(model_text)
 
             vae_sizes = interpolate_layer_sizes(hidden_size * sequence_length, latent_size, vae_depth, vae_ratio)
-
+            print(f"VAE layers={vae_sizes}")
+            
             mlp_size = StepWiseMLPAutoEncoder.approx_trainable_parameters(stft_buckets, hidden_size, mlp_depth, mlp_ratio)
             vae_size = VariationalAutoEncoder.approx_trainable_parameters(vae_sizes)
             approx_size = mlp_size + vae_size
-            print(f"mlp={mlp_size:,}, VAE={vae_size:,}, approx total={approx_size}")
+            print(f"MLP={mlp_size:,}, VAE={vae_size:,}, approx total={approx_size:,}")
 
             if is_too_large(approx_size, max_params):
                 return invalid_model
@@ -94,23 +95,7 @@ def make_model(model_type, model_params, max_params, verbose):
             load_weights_and_biases(mlp, file_name)
             freeze_model(mlp)
             approx_size = vae_size # we're not re-training the RNN parameters
-            
-    
-#        case "Incremental_StepWiseVAEMLP-Old":
-#            # Load the pre-trained model
-#            mlp_name, mlp_params, file_name = get_best_configuration_for_model("StepWiseMLP")
-#            new_params = mlp_params[3:6] + model_params
-#
-#            model, model_text, approx_size = make_stepwiseMLPVAE(new_params, max_params)
-#            if model is None:
-#                return invalid_model
-#            
-#            # Incremental training: load the previous saved state, and freeze the layers we won't re-train
-#            model.load_outer_layers(file_name)
-#            model.freeze_outer_layers()
-#    
-#            approx_size = count_trainable_parameters(model) # self-realising: it's too complicated to figure out.
-            
+
     
         case "RNNAutoEncoder":
             hidden_size, encode_depth, decode_depth = model_params
@@ -145,11 +130,12 @@ def make_model(model_type, model_params, max_params, verbose):
             print(model_text)
 
             vae_sizes = interpolate_layer_sizes(hidden_size * sequence_length, latent_size, vae_depth, vae_ratio)
+            print(f"VAE layers={vae_sizes}")
 
             rnn_size = RNNAutoEncoder.approx_trainable_parameters(stft_buckets, hidden_size, encode_depth, decode_depth)
             vae_size = VariationalAutoEncoder.approx_trainable_parameters(vae_sizes)
             approx_size = rnn_size + vae_size
-            print(f"RNN={rnn_size:,}, VAE={vae_size:,}, approx total={approx_size}")
+            print(f"RNN={rnn_size:,}, VAE={vae_size:,}, approx total={approx_size:,}")
             
             if is_too_large(approx_size, max_params):
                 return invalid_model
@@ -198,16 +184,14 @@ def get_best_configuration_for_model(model_name):
     file_name = "Models/" + model_name
     with open(file_name + ".txt", 'r') as file:
         first_line = file.readline().strip()
-        print(f"first_line={first_line}")
         params = ast.literal_eval(first_line)
-        print(f"params={params}")
+        print(f"{model_name}: stored params={params}")
         
     return model_name, params, file_name + ".wab"
 
 
 
-def load_best_model(model_name = "RNNAutoEncoder"):
-    
+def load_saved_model(model_name):
     model_type, params, file_name = get_best_configuration_for_model(model_name)
     model_params = params[3:] # remove the optimiser configuration
     max_params = +1e99 # ignore
@@ -218,6 +202,6 @@ def load_best_model(model_name = "RNNAutoEncoder"):
     model.load_state_dict(torch.load(file_name))
     model.eval() # Ensure the model is in evaluation mode
     model.to(device)
-    print(f"{model.__class__.__name__} has {count_trainable_parameters(model):,} weights & biases")
+    print(f"{model_type} has {count_trainable_parameters(model):,} weights & biases")
     
     return model

@@ -4,28 +4,48 @@ import torch.nn.functional as F
 
 from ModelUtils import *
 
-zero_weight = None
+
 
 
 # Loss functions
+
+
 def reconstruction_loss(inputs, outputs):
     assert(inputs.shape == outputs.shape)
+    # shape = [batch, stft, time-step]
     scale = inputs.size(1) * inputs.size(2) # data-count irrespective of batch-size
     
     # Option to (heavily) weight time-step 0
-    if zero_weight is None:
+    first_stft_weight = None
+    
+    if first_stft_weight is None:
         return scale * F.mse_loss(inputs, outputs)
         
-    # shape = [batch, stft, time-step]
     loss = (outputs - inputs) ** 2
-    loss[:, :, 0] *= zero_weight
-    adjust = inputs.size(2) / (inputs.size(2) + zero_weight -1)
+    loss[:, :, 0] *= first_stft_weight
+    adjust = inputs.size(2) / (inputs.size(2) + first_stft_weight -1)
     return scale * adjust * loss.mean()
 
 
 def kl_divergence(mu, logvar):
     # see https://stackoverflow.com/questions/74865368/kl-divergence-loss-equation
     return -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
+
+
+def vae_loss_function(inputs, outputs, mu, logvar):
+    error  = reconstruction_loss(inputs, outputs)
+    kl_div = kl_divergence(mu, logvar)
+            
+    loss = error + kl_div #* 0.001
+    #print(f"loss={loss:.1f} <-- reconstruction={error:.1f} + kl_divergence={kl_div:.1f}")
+
+    return loss
+    
+
+def vae_reparameterize(mu, logvar):
+    std = torch.exp(0.5 * logvar)
+    eps = torch.randn_like(std)
+    return mu + eps * std
 
 
 # Generic VAE composed of a number of fully connected linear layers (re-usable)
@@ -52,8 +72,7 @@ class VariationalAutoEncoder(nn.Module):
         # Activation function
         self.activation_fn = activation_fn
 
-        print(f"VariationalAutoEncoder {count_trainable_parameters(self):,} parameters, compression={sizes[0]/sizes[-1]:.1f}")
-
+        print(f"VariationalAutoEncoder: layers={sizes}, parameters={count_trainable_parameters(self):,}, compression={sizes[0]/sizes[-1]:.1f}")
 
     def encode(self, x):
         for layer in self.encoder_layers:
@@ -63,12 +82,6 @@ class VariationalAutoEncoder(nn.Module):
         logvar = self.fc_logvar(x)
         
         return mu, logvar
-    
-    @staticmethod
-    def reparameterize(mu, logvar):
-        std = torch.exp(0.5 * logvar)
-        eps = torch.randn_like(std)
-        return mu + eps * std
 
 
     def decode(self, z):
@@ -76,25 +89,16 @@ class VariationalAutoEncoder(nn.Module):
             z = layer(z)
             if idx < len(self.decoder_layers) - 1:
                 z = self.activation_fn(z)
+                
         return z
 
 
     def forward(self, x):
         mu, logvar = self.encode(x)
-        z = reparameterize(mu, logvar)
+        z = vae_reparameterize(mu, logvar)
         
         return self.decode(z), mu, logvar
         
-        
-    def loss_function(self, inputs, outputs, mu, logvar):
-        error  = reconstruction_loss(inputs, outputs)
-        kl_div = kl_divergence(mu, logvar)
-                
-        #print(f"error={error:.1f}, kl_divergence={kl_div:.1f}, ratio={error/kl_div:.1f}")
-        
-        # The optimiser appears to always efficiently minimise the KL loss, no need to weight this.
-        return error + kl_div
-
 
 #########################################################################################################################
 # Combined_VAE: take a standard auto-encoder and insert a VAE in the middle.
@@ -129,27 +133,11 @@ class CombinedVAE(nn.Module):
 
     def forward(self, x):
         mu, logvar = self.encode(x)
-        z = VariationalAutoEncoder.reparameterize(mu, logvar)
+        z = vae_reparameterize(mu, logvar)
         return self.decode(z), mu, logvar
-        
-
-    def loss_function(self, inputs, outputs, mu, logvar):
-        return self.vae.loss_function(inputs, outputs, mu, logvar)
         
 
     def forward_loss(self, inputs):
         outputs, mus, logvars = self.forward(inputs)
-        loss = self.loss_function(inputs, outputs, mus, logvars)
+        loss = vae_loss_function(inputs, outputs, mus, logvars)
         return loss, outputs
-
-
-    def forward(self, x):
-        mu, logvar = self.encode(x)
-        z = self.vae.reparameterize(mu, logvar)
-        
-        return self.decode(z), mu, logvar
-        
-        
-    def loss_function(self, inputs, outputs, mu, logvar):
-        return self.vae.loss_function(inputs, outputs, mu, logvar)
-

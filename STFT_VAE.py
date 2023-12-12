@@ -23,20 +23,15 @@ class STFTVariationalAutoEncoder(nn.Module):
         self.vae = VariationalAutoEncoder(sizes, nn.Tanh)
         
         
-    def encode(self, x, randomize):
+    def encode(self, x):
         x = x.reshape(x.size(0), -1)
         mu, logvar = self.vae.encode(x)
+        return vae_reparameterize(mu, logvar)
         
-        if randomize:
-            return self.vae.reparameterize(mu, logvar) # for generation
-        else:
-            return mu # for precise reproduction
-        
-        
+
     def decode(self, x):
         x = self.vae.decode(x)
         x = x.reshape(x.size(0), self.stft_buckets, self.sequence_length)
-        #x = x.tanh()
         return x
         
         
@@ -44,15 +39,10 @@ class STFTVariationalAutoEncoder(nn.Module):
         x = x.reshape(x.size(0), -1)
         x, mu, logvar = self.vae.forward(x)
         x = x.reshape(x.size(0), self.stft_buckets, self.sequence_length)
-        #x = x.tanh()
         return x, mu, logvar
     
 
-    def loss_function(self, inputs, outputs, mu, logvar):
-        return self.vae.loss_function(inputs, outputs, mu, logvar)
-
-
     def forward_loss(self, inputs):
         outputs, mus, logvars = self.forward(inputs)
-        loss = self.loss_function(inputs, outputs, mus, logvars)
+        loss = vae_loss_function(inputs, outputs, mus, logvars)
         return loss, outputs

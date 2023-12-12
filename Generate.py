@@ -1,4 +1,4 @@
-from HyperParameterTuning import load_best_model
+from HyperParameterTuning import load_saved_model
 from SampleCategory import *
 import matplotlib.patches as patches
 
@@ -16,13 +16,13 @@ def max_amp(x):
 
 # New: see whether we can interpolate interestingly between samples (ie: not just linear mixing)
 class Sample_Generator():
-    def __init__(self):
+    def __init__(self, model_name):
         super(Sample_Generator, self).__init__()
-        self.load_data()
+        self.load_data(model_name)
         
         
-    def load_data(self):
-        self.model = load_best_model()
+    def load_data(self, model_name):
+        self.model = load_saved_model(model_name)
         self.stfts, self.file_names = load_STFTs()
         self.categories = infer_sample_categories(self.file_names)
 
