@@ -110,15 +110,6 @@ class StepWiseMLPAutoEncoder(nn.Module):
         return loss, outputs
 
 
-    def load_outer_layers(self, file_name):
-        print(f"StepWiseMLPAutoEncoder: loading weights & biases from file '{file_name}'")
-        model.load_state_dict(torch.load(file_name))
-    
-    
-    def freeze_outer_layers(self):
-        for name, param in model.named_parameters():
-            print("\tfreezing: {name}")
-            param.requires_grad = False
 
 
 ##########################################################################################

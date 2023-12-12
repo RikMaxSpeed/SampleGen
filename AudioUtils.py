@@ -53,8 +53,9 @@ def note_frequency(midi):
     return 440 * 2 ** ((midi - 69) / 12) # 440Hz = A4 = 69
 
 
-c4hz = note_frequency(60) # Middle-C
-
+middleCHz = note_frequency(60) # Middle-C
+print(f"middle-C={middleCHz:.2f} Hz")
+assert(abs(middleCHz - 261.63) < 0.1)
 
 def normalise_sample_to_mono_floats(data):
     data = convert_to_float(data)

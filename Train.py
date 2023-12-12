@@ -62,7 +62,7 @@ def generate_training_stfts(how_many):
     stfts = convert_stfts_to_inputs(stfts)
     train_stfts, test_stfts = split_dataset(stfts, 0.8)
     
-    display_average_stft(stfts, True) # trying to debug why there's a bump at 1 sec
+    #display_average_stft(stfts, True)
     
     # Training set is kept completely separate from Test when augmenting.
     if how_many is not None and len(train_stfts) < how_many:
@@ -77,7 +77,7 @@ def generate_training_stfts(how_many):
 
 
 # Hyper-parameter optimisation
-last_saved_loss = 2000 # don't bother saving models above this threshold
+last_saved_loss = 100 # don't bother saving models above this threshold
 
 # Keep track of all the test-losses over multiple runs, so we can learn how to terminate early on poor hyper-parameters.
 all_test_losses = []
@@ -91,7 +91,7 @@ use_exact_train_loss = False # Setting to True is more accurate but very expensi
 
 
 # Main entry point for training the model
-def train_model(hyper_params, max_epochs, max_time, max_params, max_overfit, max_loss, verbose):
+def train_model(model_type, hyper_params, max_epochs, max_time, max_params, max_overfit, max_loss, verbose):
     
     # We split the hyper-params into optimiser parameters & model parameters:
     opt_params   = hyper_params[0:3]
@@ -105,7 +105,7 @@ def train_model(hyper_params, max_epochs, max_time, max_params, max_overfit, max
     print(f"optimiser: {optimiser_text}")
     
     # Create the model
-    model, model_text = make_model(model_params, max_params, verbose)
+    model, model_text = make_model(model_type, model_params, max_params, verbose)
     if model is None:
         return max_loss, model_text
     print(f"model: {model_text}")
@@ -118,6 +118,9 @@ def train_model(hyper_params, max_epochs, max_time, max_params, max_overfit, max
 
     # Optimiser
     optimizer = optim.Adam(model.parameters(), lr=learning_rate, weight_decay=weight_decay)
+
+    trainable = count_trainable_parameters(model)
+    print(f"Adam: {trainable:,} trainable parameters") # check this is as expected.
 
     # Training loop
     start = time.time()
@@ -148,12 +151,14 @@ def train_model(hyper_params, max_epochs, max_time, max_params, max_overfit, max
             loss, _ = model.forward_loss(inputs)
             
             numeric_loss = loss.item() # loss is a tensor
-            #print(f"batch#{batch_idx}, loss={numeric_loss:.2f}")
-            sum_train_loss += numeric_loss * len(inputs)
-            sum_batches += len(inputs)
+            
             if np.isnan(numeric_loss) or numeric_loss > max_loss:
                 print(f"*** Aborting: model exploded! loss={loss:.2f} vs max={max_loss}")
                 return max_loss, model_text
+
+            sum_train_loss += numeric_loss * len(inputs)
+            sum_batches += len(inputs)
+
             
             # Backward pass and optimization
             optimizer.zero_grad()
@@ -188,25 +193,26 @@ def train_model(hyper_params, max_epochs, max_time, max_params, max_overfit, max
             last_saved_loss = train_losses[-1]
             
             # Save the model:
-            file_name = "Models/" + model_text # keep over-writing the same file as the loss improves
+            file_name = "Models/" + model_type # keep over-writing the same file as the loss improves
             print(f"*** Best! loss={last_saved_loss:.2f}, {model_text}, {optimiser_text}")
             print(f"hyper-parameters: {hyper_params}")
             torch.save(model.state_dict(), file_name + ".wab")
             
             # Write the parameters to file:
             with open(file_name+".txt", 'w') as file:
+                file.write(str(hyper_params) + "\n\n")
                 file.write(model_text + "\n")
                 file.write(f"{count_trainable_parameters(model):,} weights & biases\n\n")
                 file.write(f"optimiser: {optimiser_text}\n")
                 file.write("\n")
                 file.write(f"train loss={train_losses[-1]:.1f}, test  loss={test_losses[-1]:.1f}, overfit={train_losses[-1]/test_losses[-1]:.2f}\n")
                 file.write(f"time={total_time:.0f} sec, train_size={len(train_dataset)}, batch_size={batch_size}, epoch={epoch} = {total_time/epoch:.1f} sec/epoch\n")
-                file.write("\n")
-                file.write(str(hyper_params))
             
             # Generate a test tone:
             resynth, loss = predict_stft(model, sanity_test_stft)
-            save_and_play_audio_from_stft(resynth, sample_rate, stft_hop, f"Results/{sanity_test_name} {model_text} - resynth.wav", False)
+#            norm = (sanity_test_stft[:, :, resynth.size(2)] - resynth).norm()
+#            print(f"Resynth loss={loss.item():.2f} for {sanity_test_name}, norm={norm:.2f}")
+            save_and_play_audio_from_stft(resynth, sample_rate, stft_hop, f"Results/{model_type} {sanity_test_name} - resynth.wav", False)
             plot_stft("Resynth " + sanity_test_name, resynth, sample_rate, stft_hop)
             
 

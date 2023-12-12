@@ -53,9 +53,6 @@ def compute_average_loss(model, dataset, batch_size):
             loss, _ = model.forward_loss(inputs)
             loss = loss.item()
             
-            if np.isnan(loss): # give-up
-                raise Exception("model.forward_loss returned NaN :(")
-                
             total_loss += loss * len(inputs)
             total_samples += len(inputs)
 
@@ -208,3 +205,15 @@ def rnn_size(input_size, hidden_size, num_layers):
     total_params = first_layer_params + ((num_layers - 1) * additional_layer_params)
     
     return total_params
+
+
+def load_weights_and_biases(model, file_name):
+        print(f"{model.__class__.__name__}: loading weights & biases from file '{file_name}'")
+        model.load_state_dict(torch.load(file_name))
+    
+    
+def freeze_model(model):
+    print(f"Freezing model {model.__class__.__name__}")
+    for name, param in model.named_parameters():
+        #print(f"\tfreezing: {name}")
+        param.requires_grad = False

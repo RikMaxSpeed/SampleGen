@@ -12,7 +12,7 @@ from Debug import *
 
 # Bunch of nasty global variables...
 sample_rate = 44100
-stft_size = 512 # was 1024
+stft_size = 1024 # tried 512
 stft_buckets = 2 * stft_size
 stft_hop = int(stft_buckets * 3 / 4) # with some overlap
 
@@ -23,25 +23,63 @@ input_size = stft_buckets * sequence_length
 print("Using sample rate={} Hz, FFT={} buckets, hop={} samples, duration={:.1f} sec = {:,} time steps".format(sample_rate, stft_buckets, stft_hop, sample_duration, sequence_length))
 
 
+def plot_amplitudes_vs_frequency(amplitudes, name):
+    global sample_rate, stft_size, stft_buckets
+    frequencies = [i * sample_rate / stft_buckets for i in range(len(amplitudes))]
+        
+    i = np.argmax(amplitudes)
+    f = frequencies[i]
+    a = amplitudes[i]
+    plt.figure(figsize=(9, 5))
+    plt.scatter(f, a)
+    plt.text(f, a, f"max={f:.1f}Hz")
+    plt.plot(frequencies, amplitudes)
+    plt.title(f"Amplitude vs Frequency for {name}")
+    plt.xscale("log")
+    fs = [note_frequency(midi) for midi in range(24, 127, 12)]
+    plt.xlim(fs[0], fs[-1])
+    plt.xticks(fs, [f"{f:.0f} Hz" for f in fs])
+    plt.ylabel("Magnitude")
+    plt.xlabel("Frequency (Hz)")
+    plt.show()
 
-def lowest_frequency(stft, sample_rate):
+
+def out_of_range(freq, mult):
+    return abs(freq / (mult * middleCHz) - 1) > 0.1
+  
+  
+def exclude_frequency(freq):
+    return out_of_range(freq, 0.5) and out_of_range(freq, 1) and out_of_range(freq, 2)
+
+
+def lowest_frequency(stft, sample_rate, name):
     #debug("lowest_frequency.stft", stft)
+    assert(stft.shape[0] == stft_size + 1)
+    amplitudes = np.abs(stft).sum(axis=1)
+        
+    amplitudes[0] = 0 # Ignore the constant offset
     
-    amplitudes = abs(stft.sum(axis=1))
-    amplitudes[0] = 0 # Remove the constant offset
+    i = np.argmax(amplitudes)
+    f = i * sample_rate / stft_buckets
+    if not exclude_frequency(f):
+        return f
     
-    buckets = len(stft)
-    if buckets %2 == 1:
-        buckets -= 1
+    maxAmp = np.max(amplitudes[0 : len(amplitudes) // 4])
     
-    max_amp = amplitudes.max()
-    min_amp = max_amp / 32
-    for i in range(len(amplitudes)):
-        if amplitudes[i] > min_amp:
-            return i * sample_rate / (2 * buckets)
+    for i in range(1, len(amplitudes) - 1):
+        f = i * sample_rate / stft_buckets
+        if 30 < f < 4*middleCHz:
+            a = amplitudes[i]
+            if a > maxAmp / 8:
+                if amplitudes[i-1] < a > amplitudes[i+1]: # peak
+                    print(f"a[{i-1}]={amplitudes[i-1]:.1f}, a[{i}]={a:.1f}, a[{i+1}]={amplitudes[i+1]:.1f}, f={f:.1f} Hz")
+                
+                    if exclude_frequency(f):
+                        plot_amplitudes_vs_frequency(amplitudes, name)
             
-    print(amplitudes)
-    raise Exception("This should never happen!")
+                    return f
+    
+    return 0
 
 
 def compute_stft_from_file(file_name):
@@ -50,7 +88,7 @@ def compute_stft_from_file(file_name):
     #debug("compute_stft_from_file.stft", stft)
     assert(stft.shape[0] == stft_size + 1)
     
-    low_hz = lowest_frequency(stft, sr)
+    low_hz = lowest_frequency(stft, sr, file_name)
 
     return sr, torch.tensor(stft), low_hz
 
@@ -64,6 +102,8 @@ def display_time(start, count, unit):
             print("processed {} {}s in {:.1f} sec = {:.1f} {}/sec".format(count, unit, elapsed, count/elapsed, unit))
 
 
+    
+    
 def gather_stfts_from_directory(directory, notes, requiredSR):
     """Loops over all .wav files in the given directory and computes their STFTs"""
 
@@ -87,14 +127,14 @@ def gather_stfts_from_directory(directory, notes, requiredSR):
                             
                             if sr != requiredSR:
                                 print("Skipping {}: sample rate={} Hz".format(filepath, sr))
-                            elif low_hz > c4hz *1.7:
+                            elif exclude_frequency(low_hz):
                                 print("Skipping {}: lowest frequency={:.1f} Hz".format(filepath, low_hz))
                             else:
                                 #debug("stft_tensor", stft_tensor)
                                 stft_tensors.append(stft_tensor)
                                 file_names.append(file)
                                 print("#{}: {}".format(len(stft_tensors)+1, file))
-                                    
+                                        
                         except AssertionError as e:
                             print("Assertion failed in file {}: {}".format(filepath, e))
                             sys.exit()
@@ -180,17 +220,6 @@ def convert_to_complex(reals):
     return output_tensor
 
 
-x = torch.randn(5, 3, dtype=torch.complex32)
-print(f"x={x}\n")
-y = convert_to_reals(x)
-print(f"y={y}\n")
-z = convert_to_complex(y)
-print(f"z={z}\n")
-d = x - z
-print(f"diff={d}")
-assert(d.norm() < 1e-4)
-
-
 def convert_stft_to_input(stft):
     assert(len(stft.shape) == 2)
     assert(stft.shape[0] == stft_size + 1)
@@ -209,11 +238,16 @@ def convert_stfts_to_inputs(stfts):
 
 
 def convert_stft_to_output(stft):
-    global maxAmp
-    stft *= maxAmp
+    # Re-append the constant bucket
     zeros = torch.zeros(2, sequence_length, device=device)
     stft = torch.cat((zeros, stft), dim = 0)
     stft = convert_to_complex(stft)
+    
+    # Normalise & Amplify
+    global maxAmp
+    max_magnitude = stft.abs().max()
+    stft *= maxAmp / max_magnitude
+    
     return stft.cpu().detach().numpy()
 
 
@@ -258,7 +292,7 @@ def test_stft_conversions(file_name):
                 print("f={}, t={}, diff={:.3f}, stft={:.3f}, output={:.3f}".format(f, t, d, stft[f, t], output[f, t]))
 
 
-test_stft_conversions("Samples/Piano C4 Major 13.wav")
+#test_stft_conversions("Samples/Piano C4 Major 13.wav")
 #test_stft_conversions("/Users/Richard/Coding/WaveFiles/FreeWaveSamples/Alesis-S4-Plus-Clean-Gtr-C4.wav")
 #sys.exit(1)
 

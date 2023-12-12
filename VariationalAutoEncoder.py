@@ -4,11 +4,23 @@ import torch.nn.functional as F
 
 from ModelUtils import *
 
+zero_weight = None
+
 
 # Loss functions
 def reconstruction_loss(inputs, outputs):
     assert(inputs.shape == outputs.shape)
-    return F.mse_loss(inputs, outputs, reduction='sum')
+    scale = inputs.size(1) * inputs.size(2) # data-count irrespective of batch-size
+    
+    # Option to (heavily) weight time-step 0
+    if zero_weight is None:
+        return scale * F.mse_loss(inputs, outputs)
+        
+    # shape = [batch, stft, time-step]
+    loss = (outputs - inputs) ** 2
+    loss[:, :, 0] *= zero_weight
+    adjust = inputs.size(2) / (inputs.size(2) + zero_weight -1)
+    return scale * adjust * loss.mean()
 
 
 def kl_divergence(mu, logvar):
@@ -52,8 +64,8 @@ class VariationalAutoEncoder(nn.Module):
         
         return mu, logvar
     
-    
-    def reparameterize(self, mu, logvar):
+    @staticmethod
+    def reparameterize(mu, logvar):
         std = torch.exp(0.5 * logvar)
         eps = torch.randn_like(std)
         return mu + eps * std
@@ -69,7 +81,7 @@ class VariationalAutoEncoder(nn.Module):
 
     def forward(self, x):
         mu, logvar = self.encode(x)
-        z = self.reparameterize(mu, logvar)
+        z = reparameterize(mu, logvar)
         
         return self.decode(z), mu, logvar
         
@@ -91,14 +103,14 @@ class VariationalAutoEncoder(nn.Module):
 
 class CombinedVAE(nn.Module):
         
-    def __init__(self, auto_encoder, hidden_size, vae_latent_size, vae_depth, vae_ratio):
+    def __init__(self, auto_encoder, sizes):
         super(CombinedVAE, self).__init__()
         
         self.auto_encoder = auto_encoder
-        self.hidden_size  = hidden_size
+        self.hidden_size = sizes[0]
+        self.latent_size = sizes[-1]
         
-        layers = interpolate_layer_sizes(basic_hidden_size, vae_latent_size, vae_depth, vae_ratio)
-        self.vae = VariationalAutoEncoder(layers)
+        self.vae = VariationalAutoEncoder(sizes)
 
         print(f"CombinedVAE {count_trainable_parameters(self):,} parameters, compression={sizes[0]/sizes[-1]:.1f}")
 
@@ -117,24 +129,23 @@ class CombinedVAE(nn.Module):
 
     def forward(self, x):
         mu, logvar = self.encode(x)
-        z = self.vae.reparameterize(mu, logvar)
+        z = VariationalAutoEncoder.reparameterize(mu, logvar)
         return self.decode(z), mu, logvar
         
-        
+
     def loss_function(self, inputs, outputs, mu, logvar):
         return self.vae.loss_function(inputs, outputs, mu, logvar)
         
-        
+
     def forward_loss(self, inputs):
         outputs, mus, logvars = self.forward(inputs)
         loss = self.loss_function(inputs, outputs, mus, logvars)
         return loss, outputs
 
 
-
     def forward(self, x):
         mu, logvar = self.encode(x)
-        z = self.reparameterize(mu, logvar)
+        z = self.vae.reparameterize(mu, logvar)
         
         return self.decode(z), mu, logvar
         

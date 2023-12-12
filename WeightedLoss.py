@@ -10,8 +10,8 @@ class Time_Frequency_Loss(nn.Module):
         lowF = dB_to_amplitude(-40) # Looks like -60 is too aggressive.
         hiF  = dB_to_amplitude(-10)
         
-        midF = int( (c4hz * 2 * stft_buckets) / sample_rate ) # bucket for C4
-        print(f"{c4hz:.2f}Hz = bucket# {midF}")
+        midF = int( (middleCHz * 2 * stft_buckets) / sample_rate ) # bucket for C4
+        print(f"{middleCHz:.2f}Hz = bucket# {midF}")
         
         hiT  = dB_to_amplitude(10)
         lowT = dB_to_amplitude(-40)
