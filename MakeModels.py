@@ -23,6 +23,35 @@ def make_stepwiseMLPVAE(params, max_params):
     return model, model_text, approx_size
 
 
+def make_RNN_VAE(model_type, model_params, max_params):
+    hidden_size, encode_depth, decode_depth, latent_size, vae_depth, vae_ratio = model_params
+    model_text = f"{model_type} hidden={hidden_size}, encode_depth={encode_depth}, decode_depth={decode_depth}, latent={latent_size}, VAE depth={vae_depth}, VAE ratio={vae_ratio:.2f}"
+    print(model_text)
+
+    vae_sizes = interpolate_layer_sizes(hidden_size * sequence_length, latent_size, vae_depth, vae_ratio)
+    print(f"VAE layers={vae_sizes}")
+
+    rnn_size = RNNAutoEncoder.approx_trainable_parameters(stft_buckets, hidden_size, encode_depth, decode_depth)
+    vae_size = VariationalAutoEncoder.approx_trainable_parameters(vae_sizes)
+    approx_size = rnn_size + vae_size
+    print(f"RNN={rnn_size:,}, VAE={vae_size:,}, approx total={approx_size:,}")
+    
+    if is_too_large(approx_size, max_params):
+        return None, model_text, approx_size, vae_size
+    
+    
+    dropout = 0
+    rnn = RNNAutoEncoder(stft_buckets, sequence_length, hidden_size, encode_depth, decode_depth, dropout)
+    
+    model = CombinedVAE(rnn, vae_sizes)
+    
+    return model, model_text, approx_size, vae_size
+
+
+def is_incremental(model_name):
+    return "Incremental" in model_name
+
+
 ##########################################################################################
 # Top-Level to create models and read hyper-parameters
 #
@@ -35,8 +64,10 @@ def is_too_large(approx_size, max_params):
         return False
 
 
+def invalid_model(size):
+    return None, None, size
+    
 def make_model(model_type, model_params, max_params, verbose):
-    invalid_model = None, None
     
     match model_type:
         case "STFT_VAE":
@@ -45,7 +76,7 @@ def make_model(model_type, model_params, max_params, verbose):
             print(model_text)
             approx_size = STFTVariationalAutoEncoder.approx_trainable_parameters(stft_buckets, sequence_length, latent_size, depth, ratio)
             if is_too_large(approx_size, max_params):
-                return invalid_model
+                return invalid_model(approx_size)
                 
             model = STFTVariationalAutoEncoder(stft_buckets, sequence_length, latent_size, depth, ratio)
         
@@ -56,20 +87,35 @@ def make_model(model_type, model_params, max_params, verbose):
             print(model_text)
             approx_size = StepWiseMLPAutoEncoder.approx_trainable_parameters(stft_buckets, hidden_size, depth, ratio)
             if is_too_large(approx_size, max_params):
-                return invalid_model
+                return invalid_model(approx_size)
                 
             model = StepWiseMLPAutoEncoder(stft_buckets, sequence_length, hidden_size, depth, ratio)
            
            
-#        case "StepWiseVAEMLP":
-#            model, model_text, approx_size = make_stepwiseMLPVAE(model_params, max_params)
-#            if model is None:
-#                return invalid_model
-    
-    
+        case "MLP_VAE":
+            hidden_size, mlp_depth, mlp_ratio, latent_size, vae_depth, vae_ratio = model_params
+            model_text = f"{model_type} hidden={hidden_size}, depth={mlp_depth}, ratio={mlp_ratio:.1f}, latent={latent_size}, VAE depth={vae_depth}, VAE ratio={vae_ratio:.2f}"
+            print(model_text)
+
+            vae_sizes = interpolate_layer_sizes(hidden_size * sequence_length, latent_size, vae_depth, vae_ratio)
+            print(f"VAE layers={vae_sizes}")
+            
+            mlp_size = StepWiseMLPAutoEncoder.approx_trainable_parameters(stft_buckets, hidden_size, mlp_depth, mlp_ratio)
+            vae_size = VariationalAutoEncoder.approx_trainable_parameters(vae_sizes)
+            approx_size = mlp_size + vae_size
+            print(f"MLP={mlp_size:,}, VAE={vae_size:,}, approx total={approx_size:,}")
+
+            if is_too_large(approx_size, max_params):
+                return invalid_model(approx_size)
+            
+            mlp = StepWiseMLPAutoEncoder(stft_buckets, sequence_length, hidden_size, mlp_depth, mlp_ratio)
+            
+            model = CombinedVAE(mlp, vae_sizes)
+
+
         case "MLPVAE_Incremental":
             mlp_name, mlp_params, file_name = get_best_configuration_for_model("StepWiseMLP")
-            mlp_params = mlp_params[3:] # remove the first 3 optimiser params
+            mlp_params = mlp_params[2:] # remove the optimiser params
             new_params = mlp_params + model_params # add the VAE params.
 
             hidden_size, mlp_depth, mlp_ratio, latent_size, vae_depth, vae_ratio = new_params
@@ -85,7 +131,7 @@ def make_model(model_type, model_params, max_params, verbose):
             print(f"MLP={mlp_size:,}, VAE={vae_size:,}, approx total={approx_size:,}")
 
             if is_too_large(approx_size, max_params):
-                return invalid_model
+                return invalid_model(approx_size)
             
             mlp = StepWiseMLPAutoEncoder(stft_buckets, sequence_length, hidden_size, mlp_depth, mlp_ratio)
             
@@ -104,49 +150,28 @@ def make_model(model_type, model_params, max_params, verbose):
             dropout = 0 # will explore this later.
             approx_size = RNNAutoEncoder.approx_trainable_parameters(stft_buckets, hidden_size, encode_depth, decode_depth)
             if is_too_large(approx_size, max_params):
-                return invalid_model
+                return invalid_model(approx_size)
                 
             model = RNNAutoEncoder(stft_buckets, sequence_length, hidden_size, encode_depth, decode_depth, dropout)
     
     
         case "RNN_VAE":
-            hidden_size, encode_depth, decode_depth, latent_size, vae_depth, vae_ratio = model_params
-            model_text = f"{model_type} hidden={hidden_size}, encode_depth={encode_depth}, decode_depth={decode_depth}, latent={latent_size}, VAE depth={vae_depth}, VAE ratio={vae_ratio:.2f}"
-            print(model_text)
-            dropout = 0 # will explore this later.
-            approx_size = RNN_VAE.approx_trainable_parameters(stft_buckets, sequence_length, hidden_size, encode_depth, decode_depth, latent_size, vae_depth, vae_ratio)
+            model, model_text, approx_size, vae_size = make_RNN_VAE(model_type, model_params, max_params)
             if is_too_large(approx_size, max_params):
-                return invalid_model
-                
-            model = RNN_VAE(stft_buckets, sequence_length, hidden_size, encode_depth, decode_depth, dropout, latent_size, vae_depth, vae_ratio)
+                return invalid_model(approx_size)
+
 
         case "RNN_VAE_Incremental": # We load a trained RNN Auto-Encoder, and train a further lever of compression using a VAE.
             rnn_name, rnn_params, file_name = get_best_configuration_for_model("RNNAutoEncoder")
-            rnn_params = rnn_params[3:] # remove the first 3 optimiser params
+            rnn_params = rnn_params[2:] # remove the optimiser params
             new_params = rnn_params + model_params # add the VAE params.
 
-            hidden_size, encode_depth, decode_depth, latent_size, vae_depth, vae_ratio = new_params
-            model_text = f"{model_type} hidden={hidden_size}, encode_depth={encode_depth}, decode_depth={decode_depth}, latent={latent_size}, VAE depth={vae_depth}, VAE ratio={vae_ratio:.2f}"
-            print(model_text)
-
-            vae_sizes = interpolate_layer_sizes(hidden_size * sequence_length, latent_size, vae_depth, vae_ratio)
-            print(f"VAE layers={vae_sizes}")
-
-            rnn_size = RNNAutoEncoder.approx_trainable_parameters(stft_buckets, hidden_size, encode_depth, decode_depth)
-            vae_size = VariationalAutoEncoder.approx_trainable_parameters(vae_sizes)
-            approx_size = rnn_size + vae_size
-            print(f"RNN={rnn_size:,}, VAE={vae_size:,}, approx total={approx_size:,}")
-            
+            model, model_text, approx_size, vae_size = make_RNN_VAE(model_type, new_params, max_params)
             if is_too_large(approx_size, max_params):
-                return invalid_model
-            
-            dropout = 0
-            rnn = RNNAutoEncoder(stft_buckets, sequence_length, hidden_size, encode_depth, decode_depth, dropout)
-            
-            model = CombinedVAE(rnn, vae_sizes)
+                return invalid_model(approx_size)
             
             # Incremental training: load the previous saved state, and freeze the layers we won't re-train
-            load_weights_and_biases(rnn, file_name)
+            load_weights_and_biases(model.auto_encoder, file_name)
             freeze_model(rnn)
             approx_size = vae_size # we're not re-training the RNN parameters
 
@@ -157,8 +182,8 @@ def make_model(model_type, model_params, max_params, verbose):
 
     # Check the real size:
     size = count_trainable_parameters(model)
-    print(f"{model_type} {size:,} parameters")
-    model_text += f" ({size:,} parameters)"
+#    print(f"{model_type} {size:,} parameters")
+#    model_text += f" ({size:,} parameters)"
     
     # Warn if the approximation was off:
     size_error = approx_size / size  - 1
@@ -168,7 +193,7 @@ def make_model(model_type, model_params, max_params, verbose):
     # Too big?
     if size > max_params:
         print(f"Model is too large: {size:,} parameters vs max={max_params:,}")
-        return invalid_model, model_text
+        return invalid_model(approx_size)
 
     # Get ready!
     model.float() # ensure we're using float32 and not float64
@@ -177,7 +202,7 @@ def make_model(model_type, model_params, max_params, verbose):
     if verbose:
         print("model={}".format(model))
     
-    return model, model_text
+    return model, model_text, size
 
 
 def get_best_configuration_for_model(model_name):
@@ -193,10 +218,10 @@ def get_best_configuration_for_model(model_name):
 
 def load_saved_model(model_name):
     model_type, params, file_name = get_best_configuration_for_model(model_name)
-    model_params = params[3:] # remove the optimiser configuration
+    model_params = params[2:] # remove the optimiser configuration
     max_params = +1e99 # ignore
     verbose = True
-    model, model_text = make_model(model_type, model_params, max_params, verbose)
+    model, model_text, model_size = make_model(model_type, model_params, max_params, verbose)
     
     print(f"Loading weights & biases from file '{file_name}'")
     model.load_state_dict(torch.load(file_name))
@@ -205,3 +230,4 @@ def load_saved_model(model_name):
     print(f"{model_type} has {count_trainable_parameters(model):,} weights & biases")
     
     return model
+

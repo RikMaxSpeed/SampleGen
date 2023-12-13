@@ -49,8 +49,9 @@ def generate_training_stfts(how_many):
      # Augmentation is used if this exceeds the number of real available samples
     stfts, file_names = get_training_stfts(how_many)
 
-    lengths = np.array([x.shape[1] for x in stfts])
-    plot_multiple_histograms_vs_gaussian([lengths * stft_hop / sample_rate], ["Sample Durations (seconds)"])
+    if False:
+        lengths = np.array([x.shape[1] for x in stfts])
+        plot_multiple_histograms_vs_gaussian([lengths * stft_hop / sample_rate], ["Sample Durations (seconds)"])
 
     # Pick an example file to sanity check that everything is behaving from A-Z
     for i in range(len(file_names)):
@@ -73,6 +74,8 @@ def generate_training_stfts(how_many):
     
     print(f"Using train={len(train_dataset)} samples, test={len(test_dataset)} samples.")
     
+    return len(train_dataset), len(test_dataset)
+    
     
 
 
@@ -94,20 +97,25 @@ use_exact_train_loss = False # Setting to True is more accurate but very expensi
 def train_model(model_type, hyper_params, max_epochs, max_time, max_params, max_overfit, max_loss, verbose):
     
     # We split the hyper-params into optimiser parameters & model parameters:
-    opt_params   = hyper_params[0:3]
-    model_params = hyper_params[3:]
+    opt_params   = hyper_params[:2]
+    model_params = hyper_params[2:]
     
     # Optmiser parameters:
-    batch, learning_rate, weight_decay = opt_params
+    batch, learning_rate = opt_params
     batch_size = int(2 ** batch) # convert int64 to int32
     learning_rate *= batch_size # see https://www.baeldung.com/cs/learning-rate-batch-size
+    weight_decay = 0
     optimiser_text = f"Adam batch={batch_size}, learning_rate={learning_rate:.2g}, weight_decay={weight_decay:.2g}"
     print(f"optimiser: {optimiser_text}")
     
     # Create the model
-    model, model_text = make_model(model_type, model_params, max_params, verbose)
+    model, model_text, model_size = make_model(model_type, model_params, max_params, verbose)
     if model is None:
-        return max_loss, model_text
+        return max_loss + np.log(model_size), model_text
+        
+    trainable = count_trainable_parameters(model)
+
+    model_text += f" (params={model_size:,}, trainable={trainable:,} = {100*trainable/model_size:.1f}%)"
     print(f"model: {model_text}")
     
     description = model_text + " | " + optimiser_text
@@ -119,9 +127,10 @@ def train_model(model_type, hyper_params, max_epochs, max_time, max_params, max_
     # Optimiser
     optimizer = optim.Adam(model.parameters(), lr=learning_rate, weight_decay=weight_decay)
 
-    trainable = count_trainable_parameters(model)
     print(f"Adam: {trainable:,} trainable parameters") # check this is as expected.
-
+    size_penalty = np.log10(trainable) # favour smaller models
+    print(f"model size penalty={size_penalty:.1f}")
+    
     # Training loop
     start = time.time()
     lastGraph = start
@@ -154,7 +163,7 @@ def train_model(model_type, hyper_params, max_epochs, max_time, max_params, max_
             
             if np.isnan(numeric_loss) or numeric_loss > max_loss:
                 print(f"*** Aborting: model exploded! loss={loss:.2f} vs max={max_loss}")
-                return max_loss, model_text
+                return max_loss + size_penalty, model_text
 
             sum_train_loss += numeric_loss * len(inputs)
             sum_batches += len(inputs)
@@ -176,11 +185,14 @@ def train_model(model_type, hyper_params, max_epochs, max_time, max_params, max_
             print(f"training loss: exact={exact_train_loss:.2f}, approx={approx_train_loss:.2f}, diff={pct_error:.2f}%")
             approx_train_loss = exact_train_loss
             
+        approx_train_loss += size_penalty
+        test_loss = compute_average_loss(model, test_dataset, batch_size) + size_penalty
         train_losses.append(approx_train_loss)
-        test_losses.append(compute_average_loss(model, test_dataset, batch_size)) # this is an acceptable overhead if the test set is several times smaller than the train set.
+        test_losses.append(test_loss) # this is an acceptable overhead if the test set is several times smaller than the train set.
+        
         if np.isnan(train_losses[-1]) or np.isnan(test_losses[-1]):
-            print("Aborting: model returns NaNs :(") # Happens when the learning rate is too high
-            return max_loss, model_text
+            print("Aborting: model returns NaNs :(") # High learning rate or unstable model?
+            return min(max_loss, min(train_losses)), model_text
 
         
         # Progress
@@ -194,7 +206,7 @@ def train_model(model_type, hyper_params, max_epochs, max_time, max_params, max_
             
             # Save the model:
             file_name = "Models/" + model_type # keep over-writing the same file as the loss improves
-            print(f"*** Best! loss={last_saved_loss:.2f}")
+            print(f"*** Best! loss={last_saved_loss:.2f}, without size penalty {last_saved_loss - size_penalty:.2f}")
             print(f"{model_text}\n{optimiser_text}\nhyper-parameters: {hyper_params}")
             torch.save(model.state_dict(), file_name + ".wab")
             
@@ -217,7 +229,7 @@ def train_model(model_type, hyper_params, max_epochs, max_time, max_params, max_
             
 
         if verbose and now - lastGraph > graph_interval and len(train_losses) > 1:
-            plot_train_test_losses(train_losses, test_losses)
+            plot_train_test_losses(train_losses, test_losses, model_type)
             lastGraph = now
             graph_interval = int(min(3600, 1.5*graph_interval))
 
@@ -274,25 +286,13 @@ def train_model(model_type, hyper_params, max_epochs, max_time, max_params, max_
     all_test_losses.append(test_losses)
     all_test_names.append("loss={:.1f}, {}, {}".format(np.min(test_losses), model_text, optimiser_text))
     
-    plot_multiple_losses(all_test_losses, all_test_names, 5) # this could become large...
+    plot_multiple_losses(all_test_losses, all_test_names, 5, model_type) # can have 100+ curves.
     
     if verbose:
-        plot_train_test_losses(train_losses, test_losses)
+        plot_train_test_losses(train_losses, test_losses, model_type)
     
     return np.min(test_losses), description
 
-
-
-from IPython.display import HTML, display
-
-
-def display_custom_link(file_path, display_text=None):
-
-    if display_text is None:
-        display_text = file_path
-
-    link_str = f'<a href="{file_path}" target="_blank">{display_text}</a>'
-    display(HTML(link_str))    
 
 
 

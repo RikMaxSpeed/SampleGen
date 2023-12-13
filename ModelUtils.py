@@ -143,7 +143,7 @@ def test_loss_chart():
     lengths = range(10, 200, 5)
     examples = [random_exponential_decay_list(n) for n in lengths]
     names = ["example#"+str(n) for n in lengths]
-    plot_multiple_losses(examples, names, 5)
+    plot_multiple_losses(examples, names, 5, "Text Example")
 
 #test_loss_chart()
 
@@ -160,13 +160,19 @@ def fully_connected_size(layer_sizes):
 
 
 # Builds multiple fully-connected layers with ReLU() in between:
-def build_sequential_model(layer_sizes, final_activation):
+def sequential_fully_connected(layer_sizes, final_activation):
+
+    if len(layer_sizes) < 2:
+        return []
+
     layers = []
     
     for i in range(len(layer_sizes) - 1):
         layers.append(nn.Linear(layer_sizes[i], layer_sizes[i+1]))
         if i < len(layer_sizes) - 2:  # Add ReLU activation for all but the last layer
             layers.append(nn.ReLU())
+    
+    assert(len(layers) == 2*(len(layer_sizes)-1) - 1)
     
     if final_activation is not None:
         layers.append(final_activation)
@@ -183,16 +189,17 @@ def build_sequential_model(layer_sizes, final_activation):
 def interpolate_layer_sizes(start, end, depth, ratio):
     assert(depth > 0)
     
-    if depth == 1:
-        return [start, end]
-
-    layers=[]
+    layers = [start]
     for i in range(depth):
-        t = i / (depth - 1)
+        t = (i+1) / depth
         t = t ** ratio
         layers.append(int(start + t * (end - start)))
     
     #print(f"start={start}, end={end}, depth={depth}, ratio={ratio:.2f} --> layers={layers}")
+    assert(len(layers) == depth + 1)
+    assert(layers[0] == start)
+    assert(layers[-1] == end)
+    
     return layers
 
 
@@ -217,3 +224,18 @@ def freeze_model(model):
     for name, param in model.named_parameters():
         #print(f"\tfreezing: {name}")
         param.requires_grad = False
+
+
+count = 0
+last_count = 0
+
+def periodically_display_hiddens(hiddens):
+    return # only enable this for experiments
+    
+    global count, last_count
+    
+    count += hiddens.size(0)
+    
+    if count - last_count > 5000: # approx every 5 epochs
+        last_count = count
+        display_image_grid(hiddens.detach().cpu(), f"Hidden outputs {self.sequence_length} x {self.hidden_size}", "summer") # was "magma"

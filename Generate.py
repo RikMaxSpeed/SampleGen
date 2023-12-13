@@ -1,6 +1,23 @@
-from HyperParameterTuning import load_saved_model
+from MakeSTFTs import *
+from MakeModels import load_saved_model
 from SampleCategory import *
+from Train import predict_stft
+from Graph import *
+
 import matplotlib.patches as patches
+
+from IPython.display import HTML, display
+
+
+def display_custom_link(file_path, display_text=None):
+
+    if display_text is None:
+        display_text = file_path
+
+    link_str = f'<a href="{file_path}" target="_blank">{display_text}</a>'
+    display(HTML(link_str))    
+
+
 
 
 def numpify(tensor):
@@ -306,7 +323,9 @@ examples = [
 ]
 
 
-g = Sample_Generator()
+#model = "StepWiseMLP"
+model = "MLP_VAE"
+g = Sample_Generator(model)
 
 
 def generate_morphs():
@@ -339,4 +358,10 @@ def generate_main_encodings():
 
 def test_all():
     g.test_all()
+
+
+def demo_all():
+    plot_encodings()
+    plot_categories()
+    generate_main_encodings()
 

@@ -18,8 +18,6 @@ hyper_losses = []
 hyper_names = []
 hyper_model = None
 
-def is_incremental(model_name):
-    return "Incremental" in model_name
     
 def evaluate_model(params):
     global hyper_model, hyper_losses, hyper_names, tuning_count
@@ -55,7 +53,7 @@ def evaluate_model(params):
     if loss < max_loss:
         hyper_losses.append(loss)
         hyper_names.append(model_text)
-        plot_hypertrain_loss(hyper_losses, hyper_names)
+        plot_hypertrain_loss(hyper_losses, hyper_names, hyper_model)
     
     return loss
 
@@ -89,28 +87,22 @@ def generate_parameters(search_space, amount):
 
 
 def optimise_hyper_parameters(model_name):
-    #tuning_count = 200  # use a smaller data-set here to speed things up? Not a good idea as the model may be too limited in size
-    samples = 950
-    generate_training_stfts(samples)
+    # use a smaller data-set here to speed things up? Not a good idea as the model may be too limited in size
+    samples, _ = generate_training_stfts(100)
+    print(f"Training data set has {samples} samples.")
     
     global max_params, max_loss
     train_data_size = samples * one_sample
-    max_params = train_data_size // 5 # that means both the encode & decoder are approx half that size
+    max_params = 200 * one_sample # encoder & decoder will be approx half that size
     print(f"{stft_buckets} frequencies, {sequence_length} time-steps, maximum model size is {max_params:,} parameters.")
     
     # Optimiser:
-    batch=2 # actual batch_size = 2**batch
-    lr = 1e-5
-    if is_incremental(model_name):
-        batch = 1
-        lr = 1e-7
-    
-    wd = 1e-20 # neutralised because it doesn't help
+    batch = 4 # actual batch_size = 2**batch
+    lr = 1e-6
     
     search_space = list()
-    search_space.append(Integer(batch,  batch+2,    'uniform',      name='batch')) # batch_size = 2^batch
+    search_space.append(Integer(batch,  batch+3,    'uniform',      name='batch')) # batch_size = 2^batch
     search_space.append(Real   (lr,    lr * 100,    'log-uniform',  name='learning_rate')) # scaled by the batch_size
-    search_space.append(Real   (wd,    wd * 100,    'log-uniform',  name='weight_decay'))
 
     # Model:
     global hyper_model
@@ -120,55 +112,51 @@ def optimise_hyper_parameters(model_name):
         
         case "STFT_VAE":
             # Train the naive STFTVariationalAutoEncoder
-            max_params = 10*train_data_size # this model needs way more parameters.
+            max_params = 200_000_000 # this model needs a huge number of parameters
             max_loss = 100_000 # and the loss starts off extremely high
             search_space.append(Integer(4,        10,   'uniform',      name='latent_size'))
-            search_space.append(Integer(1,         5,   'uniform',      name='vae_depth'))
-            search_space.append(Real   (0.2,     1.0,   'log-uniform',  name='vae_ratio'))
+            search_space.append(Integer(1,         3,   'uniform',      name='vae_depth'))
+            search_space.append(Real   (0.1,      10,   'log-uniform',  name='vae_ratio'))
             
         case "StepWiseMLP":
             # Train just the StepWiseMLPAutoEncode (with no VAE)
-            search_space.append(Integer(10,      200,   'uniform',      name='hidden_size'))
-            search_space.append(Integer(1,         7,   'uniform',      name='depth'))
+            search_space.append(Integer(8,        12,   'uniform',      name='hidden_size'))
+            search_space.append(Integer(3,         5,   'uniform',      name='depth'))
             search_space.append(Real   (0.1,      10,   'log-uniform',  name='ratio'))
             
-        case "StepWiseVAEMLP":
-            # Train the StepWiseMLP_VAE
-            max_params = train_data_size // 5
-            
+        case "StepWiseVAEMLP" | "MLP_VAE":
             # StepWiseMLP parameters
-            search_space.append(Integer(50,      180,   'uniform',     name='hidden_size'))
-            search_space.append(Integer(3,         7,   'uniform',      name='depth'))
-            search_space.append(Real   (0.2,       5,   'uniform',      name='ratio'))
+            search_space.append(Integer(8,        12,   'uniform',      name='hidden_size'))
+            search_space.append(Integer(3,         5,   'uniform',      name='depth'))
+            search_space.append(Real   (0.1,      10,   'log-uniform',  name='ratio'))
             
             # VAE parameters:
-            search_space.append(Integer(4,        20,   'uniform',      name='latent_size'))
-            search_space.append(Integer(1,         7,   'uniform',      name='vae_depth'))
-            search_space.append(Real   (0.2,       5,   'uniform',      name='vae_ratio'))
+            search_space.append(Integer(5,         8,   'uniform',      name='latent_size'))
+            search_space.append(Integer(1,         5,   'uniform',      name='vae_depth'))
+            search_space.append(Real   (0.1,      10,   'uniform',      name='vae_ratio'))
         
         case "MLPVAE_Incremental":
             # We only need the VAE parameters, as the StepWiseMLP has already been trained.
-            search_space.append(Integer(8,        12,   'uniform',      name='latent_size'))
-            search_space.append(Integer(4,         7,   'uniform',      name='vae_depth'))
-            search_space.append(Real   (0.2,     0.5, 'uniform',      name='vae_ratio'))
-            max_params = train_data_size // 4
+            search_space.append(Integer(8,        20,   'uniform',      name='latent_size'))
+            search_space.append(Integer(2,         7,   'uniform',      name='vae_depth'))
+            search_space.append(Real   (0.1,    10.0, 'uniform',        name='vae_ratio'))
             
         case "RNNAutoEncoder": # Train the RNNAutoEncoder (no VAE)
             max_params = 20_000_000
-            search_space.append(Integer(80,     100,   'log-uniform',       name='hidden_size'))
-            search_space.append(Integer(1,        6,   'uniform',       name='encode_depth'))
-            search_space.append(Integer(1,        6,   'uniform',       name='decode_depth'))
+            search_space.append(Integer(50,      80,   'log-uniform',   name='hidden_size'))
+            search_space.append(Integer(2,        6,   'uniform',       name='encode_depth'))
+            search_space.append(Integer(2,        6,   'uniform',       name='decode_depth'))
 
         case "RNN_VAE": # Train the full RNN_VAE
 
             # RNN parameters
-            search_space.append(Integer(10,      200,   'log-uniform',      name='hidden_size'))
+            search_space.append(Integer(60,      100,   'log-uniform',      name='hidden_size'))
             search_space.append(Integer(1,         5,   'uniform',      name='encode_depth'))
             search_space.append(Integer(1,         5,   'uniform',      name='decode_depth'))
             
             # VAE parameters
             search_space.append(Integer(4,         8,   'uniform',      name='latent_size'))
-            search_space.append(Integer(1,        10,   'uniform',      name='vae_depth'))
+            search_space.append(Integer(3,        10,   'uniform',      name='vae_depth'))
             search_space.append(Real   (0.1,      10,   'uniform',      name='vae_ratio'))
 
         case "RNN_VAE_Incremental": # Train the VAE only and load a pre-trained RNNAutoEncoder
@@ -188,10 +176,10 @@ def optimise_hyper_parameters(model_name):
         generate = 3 * len(search_space)
         amount = 0.7
         initial_params = [generate_parameters(search_space, amount) for amount in np.arange(0.0, amount, amount/generate)]
-        result = gp_minimize(evaluate_model, search_space, n_calls=1000, x0 = initial_params, noise='gaussian', verbose=False)
+        result = gp_minimize(evaluate_model, search_space, n_calls=1000, x0 = initial_params, noise='gaussian', verbose=False, acq_func='LCB')
     else:
-        result = gp_minimize(evaluate_model, search_space, n_calls=1000, n_initial_points=8, initial_point_generator='sobol', noise='gaussian', verbose=False)
-
+        result = gp_minimize(evaluate_model, search_space, n_calls=1000, n_initial_points=8, initial_point_generator='sobol', noise='gaussian', verbose=False, acq_func='LCB')
+        
     # I've never reached this point! :)
     print("\n\nHyper Parameter Optimisation Done!!")
     print("Best result={:.2f}".format(result.fun))
@@ -212,6 +200,8 @@ def train_best_params(model_name):
     max_params = 1e9 # ignore - we want high fidelity on the training set, though this could result in less diversity on the generated audio... Mmm...
     max_epochs = 2000 # we don't hit this in practice.
     max_loss = 1e9
+    
+    params[0] = 4 # override the batch-size
     
     verbose = True
     train_model(model_name, params, max_epochs, max_time, max_params, max_overfit, max_loss, verbose)

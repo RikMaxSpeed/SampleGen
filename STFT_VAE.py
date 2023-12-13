@@ -7,7 +7,7 @@ from VariationalAutoEncoder import *
 
 
 # Simply create a massive VAE with the entire spectogram as input
-# This does work but requires >100M parameters and has a lot of noise in the results.
+# This doesn't really work, evern with >100M parameters and has a lot of noise in the results.
 
 class STFTVariationalAutoEncoder(nn.Module):
     @staticmethod
@@ -20,6 +20,7 @@ class STFTVariationalAutoEncoder(nn.Module):
         self.sequence_length = sequence_length
         self.stft_buckets = stft_buckets
         sizes = interpolate_layer_sizes(sequence_length * stft_buckets, latent_size, depth, ratio)
+        print(f"sizes={sizes}")
         self.vae = VariationalAutoEncoder(sizes, nn.Tanh)
         
         

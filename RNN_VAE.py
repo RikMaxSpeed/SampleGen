@@ -1,10 +1,9 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from ModelUtils import rnn_size
+from ModelUtils import rnn_size, periodically_display_hiddens
 from VariationalAutoEncoder import reconstruction_loss, VariationalAutoEncoder
 from ModelUtils import interpolate_layer_sizes, count_trainable_parameters
-from Graph import display_image_grid
 
 # Buildling on the experience of the rnnVAE, we now try using an RNN to extract the time hiddens of the signal.
 # We then combine that with the VAE to massively reduce the feature space.
@@ -32,22 +31,22 @@ class RNNAutoEncoder(nn.Module): # no VAE
         # Important: in the rnnVAE I gave the model the previous and the current frame at each time step + the time itself.
         # In this version I'm only giving the model the individual time-steps... I don't know whether this will work.
         
-        print(f"RNNAutoEncoder {count_trainable_parameters(self):,} parameters, compression={stft_buckets/hidden_size:.1f}")
-        
-        self.count = 0
+        print(f"RNNAutoEncoder {count_trainable_parameters(self):,} parameters, compression={stft_buckets/hidden_size:.1f}")        
         
     def encode(self, x):
         batch_size = x.size(0)
         x = x.transpose(2, 1) # Swap from [batch, stft, seq] to [batch, seq, stft] which is what the RNN expects
         hiddens, _ = self.encoder(x) # also returns the last internal state
         
-        if False: # this is interesting to visualise the hidden output
-            self.count += 1
-            if self.count % 400 == 0:
-                display_image_grid(hiddens.detach().cpu().transpose(2, 1), f"RNN hidden outputs {self.sequence_length} x {self.hidden_size}", "magma")
+        # Check that the encoded layer is between -1 and 1
+        #print(f"RNNAutoEncoder: hidden={hiddens.shape}, min={hiddens.min():.3f}, max={hiddens.max():.3f}")
+        #assert(hiddens.abs().max() <= 1)
+        periodically_display_hiddens(hiddens)
 
         hiddens = hiddens.flatten(-2)
+        
         return hiddens
+
 
     def decode(self, x):
         batch_size = x.size(0)
@@ -56,11 +55,13 @@ class RNNAutoEncoder(nn.Module): # no VAE
         reconstructed = reconstructed.transpose(2, 1)
         return reconstructed
 
+
     def forward(self, inputs):
         hiddens = self.encode(inputs)
         outputs = self.decode(hiddens)
         return outputs
-                
+              
+              
     def forward_loss(self, inputs):
         outputs = self.forward(inputs)
         loss = reconstruction_loss(inputs, outputs)
@@ -71,7 +72,7 @@ class RNNAutoEncoder(nn.Module): # no VAE
 # Here we combine the RNN-AutoEncoder with the VAE auto-encoder.
 # It might actually be possible to train them separately, ie: first optimise the RNN, then use the VAE to further compress the data.
 
-class RNN_VAE(nn.Module):
+class Legacy_RNN_VAE(nn.Module):
     @staticmethod
     def get_vae_layers(stft_buckets, sequence_length, hidden_size, latent_size, vae_depth, vae_ratio):
         rnn_output_size = hidden_size * sequence_length

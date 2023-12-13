@@ -127,7 +127,7 @@ def plot_loss(losses, name=None, colour=None, linewidth = 1):
         plt.text(i+1, min_loss, f"{min_loss:.1f}", color = colour)
 
 
-def plot_train_test_losses(train_losses, test_losses):
+def plot_train_test_losses(train_losses, test_losses, title):
     assert(len(train_losses) == len(test_losses))
     
     plt.figure(figsize=(10, 5))
@@ -138,12 +138,12 @@ def plot_train_test_losses(train_losses, test_losses):
     plt.xlabel('Epoch')
     plt.ylabel('Loss (log)')
     plt.gca().set_yscale('log')
-    plt.title("Loss after {} epochs".format(len(train_losses)))
+    plt.title(title + ": loss after {} epochs".format(len(train_losses)))
     plt.legend()
     plt.show()
 
 
-def plot_multiple_losses(losses, names, min_count):
+def plot_multiple_losses(losses, names, min_count, title):
     plt.figure(figsize=(12, 6))
     plt.yscale('log')
     
@@ -174,9 +174,10 @@ def plot_multiple_losses(losses, names, min_count):
             assert(len(Ms) == len(SDs))
             plt.fill_between(Xs, Ms - SDs, Ms + SDs, color='gray', alpha=0.2, label='±1 SD')
         
-    title = "Loss vs Epoch"
+    title = title + ": loss vs epoch"
     if len(losses) > 1:
-        title += f" for {len(losses)} runs"
+        title += f", over {len(losses)} runs"
+        
     plt.title(title)
     plt.ylabel("Loss (log scale)")
     plt.xlabel("Epoch")
@@ -185,7 +186,7 @@ def plot_multiple_losses(losses, names, min_count):
     plt.show()
 
 
-def plot_hypertrain_loss(loss, names):
+def plot_hypertrain_loss(loss, names, model_name):
     if len(loss) < 2:
         return
     
@@ -216,14 +217,14 @@ def plot_hypertrain_loss(loss, names):
     plt.xlabel("Run")
     plt.ylabel("Loss (log scale)")
     plt.legend()
-    plt.title(f"Hyper-Parameter Optimisation: loss over {len(loss)} runs")
+    plt.title(f"{model_name} hyper-parameter optimisation: loss over {len(loss)} runs")
     plt.show()
     
     
 if False:
     from num2words import num2words
     N = 100
-    plot_hypertrain_loss([np.random.uniform(0, 1) * np.exp(-t/N) for t in range(N)], [num2words(n+1) for n in range(N)])
+    plot_hypertrain_loss([np.random.uniform(0, 1) * np.exp(-t/N) for t in range(N)], [num2words(n+1) for n in range(N)], "Test Crash Dummy")
 
 
 def plot_bar_charts(encodings, names, title):
@@ -303,9 +304,9 @@ def display_image_grid(images, title, colour_map = 'gray', min_width=15):
         axs.flatten()[i].set_xticks([])  # Remove x-axis ticks
         axs.flatten()[i].set_yticks([])  # Remove y-axis ticks
         axs.flatten()[i].set_frame_on(False)  # Remove frame around the image
-
+    
+    plt.tight_layout()
     plt.show()
-
 
 #images = [torch.rand(57, 150).mul(np.random.uniform(x)) for x in range(11)]
 #display_image_grid(images, "Example")
