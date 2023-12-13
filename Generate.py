@@ -325,8 +325,11 @@ examples = [
 
 
 #model = "StepWiseMLP"
-model = "MLPVAE_Incremental"
-g = Sample_Generator(model)
+g = None
+
+def use_model(model):
+    global g
+    g = Sample_Generator(model)
 
 
 def generate_morphs():
@@ -349,7 +352,7 @@ def plot_categories(categories = None):
     if categories is None:
         g.plot_categories(["Vocal", "Synth", "Guitar"], "Set1")
         g.plot_categories(["Bass", "Plucked", "Bell"], "Set2")
-        g.plot_categories(["Other", "Synth Makes", "Piano", "Bell"], "Dark2")
+        g.plot_categories(["No Category", "Synth Makes", "Piano", "Bell"], "Dark2")
     else:
         g.plot_categories(categories)
 

@@ -7,6 +7,8 @@ from skopt.space import Integer, Real, Categorical
 from Train import *
 
 one_sample = freq_buckets * sequence_length
+print(f"1 sample = {freq_buckets:,} x {sequence_length:,} = {one_sample:,}")
+
 max_params = None
 tuning_count = 0
 break_on_exceptions = True # True=Debugging, False allows the GPR to continue even if the model blows up (useful for long tuning runs!)
@@ -86,7 +88,7 @@ def generate_parameters(search_space, amount):
 
 def optimise_hyper_parameters(model_name):
     # use a smaller data-set here to speed things up? Not a good idea as the model may be too limited in size
-    samples, _ = generate_training_stfts(100)
+    samples, _ = generate_training_stfts(None)
     print(f"Training data set has {samples} samples.")
     
     global max_params, max_loss
@@ -110,7 +112,7 @@ def optimise_hyper_parameters(model_name):
         
         case "STFT_VAE":
             # Train the naive STFTVariationalAutoEncoder
-            max_params = 200_000_000 # this model needs a huge number of parameters
+            max_params = 50_000_000 # this model needs a huge number of parameters
             max_loss = 100_000 # and the loss starts off extremely high
             search_space.append(Integer(4,        10,   'uniform',      name='latent_size'))
             search_space.append(Integer(1,         3,   'uniform',      name='vae_depth'))

@@ -222,18 +222,25 @@ def convert_to_complex(reals):
     return output_tensor
 
 
+mu_law = MuLawCodec(2) # Yet another hyper-parameter but we can't tune this one as it's outside the model's loss function.
+
+
 def convert_stft_to_input(stft):
     assert(len(stft.shape) == 2)
     assert(stft.shape[0] == stft_size + 1)
-#    stft = stft[1:, :]
-#    assert(stft.shape[0] == stft_size)
     
     stft = adjust_stft_length(stft, sequence_length)
-    stft = stft[:freq_buckets//2,:]
+    
+    # Truncate the frequency range
+    stft = stft[:freq_buckets//2,:] # complex, so divide by 2.
     
     maxAmp = torch.max(stft.abs())
     stft /= maxAmp
     stft = convert_to_reals(stft)
+    
+    if mu_law is not None:
+        stft = mu_law.encode(stft)
+    
     return stft.to(device)
 
 
@@ -242,11 +249,14 @@ def convert_stfts_to_inputs(stfts):
 
 
 def convert_stft_to_output(stft):
-    # Re-append the constant bucket
+    # Re-append truncated frequencies
     assert(stft.size(0) == freq_buckets)
     missing_buckets = torch.zeros(stft_buckets - freq_buckets +2, sequence_length, device=device)
     stft = torch.cat((stft, missing_buckets), dim = 0)
     assert(stft.size(0) == stft_buckets + 2)
+    
+    if mu_law is not None:
+        stft = mu_law.decode(stft)
     
     stft = convert_to_complex(stft)
     
@@ -358,7 +368,7 @@ def display_sample_categories():
     for name in file_names:
         category = infer_sample_category(name)
         #print(f"{category:>20}: {name}")
-        if category == "Other":
+        if category == "No Category":
             for term in split_text_into_words(name):
                 if not ignore_term(term):
                     others.append(term)

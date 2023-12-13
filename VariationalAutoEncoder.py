@@ -27,7 +27,7 @@ def vae_loss_function(inputs, outputs, mu, logvar):
     kl_div = kl_divergence(mu, logvar)
             
     loss = error + kl_div
-    #print(f"loss={loss:.1f} <-- reconstruction={error:.3f} + kl_divergence={kl_div:.3f}")
+    #print(f"loss={loss:.2f} <-- reconstruction={error:.2f} + kl_divergence={kl_div:.2f}")
 
     return loss
     

@@ -53,10 +53,10 @@ def infer_sample_category(name):
                 if term in words:
                     return category
                     
-    return "Other"
+    return "No Category"
     
 
-all_categories = [x[0] for x in category_map] + ["Other"]
+all_categories = [x[0] for x in category_map] + ["No Category"]
 
 
 def infer_sample_categories(names):
