@@ -39,6 +39,7 @@ class Sample_Generator():
         
         
     def load_data(self, model_name):
+        self.model_name = model_name
         self.model = load_saved_model(model_name)
         self.stfts, self.file_names = load_STFTs()
         self.categories = infer_sample_categories(self.file_names)
@@ -99,7 +100,7 @@ class Sample_Generator():
         name2, stft2, encode2 = self.encode_sample_matching(pattern2)
         
         #plot_multiple_histograms_vs_gaussian([numpify(encode1), numpify(encode2)], [name1, name2])
-        plot_bar_charts([numpify(encode1), numpify(encode2)], [name1, name2], "Encodings")
+        plot_bar_charts([numpify(encode1), numpify(encode2)], [name1, name2], self.model_name + " encodings")
         
         plot_stft(name1, stft1, sample_rate, stft_hop)
         save_and_play_audio_from_stft(stft1, sample_rate, stft_hop, None, play_sound)
@@ -107,7 +108,7 @@ class Sample_Generator():
         for i in range(steps):
             t = i / (steps - 1)
             encode = linterp(t, encode1, encode2)
-            save_file = f"interpolate {100*(1-t):.1f}% x {name1} & {100*t:.1f}% x {name2}"
+            save_file = f"{self.model_name} interpolate {100*(1-t):.1f}% x {name1} & {100*t:.1f}% x {name2}"
             self.decode_and_save(encode, save_file, play_sound)
 
         plot_stft(name2, stft2, sample_rate, stft_hop)
@@ -151,7 +152,7 @@ class Sample_Generator():
     def randomise_sample(self, pattern, max_noise=1, play_sound=True, steps=5):
         name, stft, encode = self.encode_sample_matching(pattern)
         #plot_multiple_histograms_vs_gaussian([numpify(encode)], [name])
-        plot_bar_charts([numpify(encode)], [name], "Encoding")
+        plot_bar_charts([numpify(encode)], [name], self.model_name + " encoding")
 
         for i in range(steps):
             amount = max_noise * i / (steps - 1)
@@ -168,14 +169,14 @@ class Sample_Generator():
         for stft in stfts:
             input_stft = convert_stft_to_input(stft).unsqueeze(0).to(device)
             encodes.append(numpify(self.model.encode(input_stft)[0]))
-        plot_bar_charts(encodes, names, f"{len(names)} {pattern} encodings")
+        plot_bar_charts(encodes, names, f"{self.model_name}: {len(names)} {pattern} encodings")
     
     
     def generate_main_encodings(self, values, play_sound=True):
         # Determine the latent size:
         stft = self.stfts[0]
         input_stft = convert_stft_to_input(stft).unsqueeze(0).to(device)
-        encode = self.model.encode(input_stft, False)
+        encode = self.model.encode(input_stft)
         debug("encode", encode)
         latent_size = encode.shape[1]
         print(f"latent_size={latent_size}")
@@ -324,7 +325,7 @@ examples = [
 
 
 #model = "StepWiseMLP"
-model = "MLP_VAE"
+model = "MLPVAE_Incremental"
 g = Sample_Generator(model)
 
 

@@ -304,6 +304,43 @@ def display_average_stft(stfts, playAudio):
     save_and_play_audio_from_stft(output, sample_rate, stft_hop, "Results/MeanSTFT.wav", playAudio)
 
 
+
+def select_diverse_tensors(tensor_array, names, N):
+    """Select 'N' most diverse tensors from a tensor of tensors using PyTorch."""
+    if N <= 0 or tensor_array.nelement() == 0:
+        return torch.tensor([])
+
+    # Compute the average tensor of the entire dataset
+    average_tensor = torch.mean(tensor_array, dim=0)
+
+    # Find the tensor closest to the average
+    closest_tensor_index = torch.argmin(torch.norm(tensor_array - average_tensor, dim=(1, 2)))
+    diverse_subset = [tensor_array[closest_tensor_index]]
+    
+    # Mask to keep track of selected tensors
+    selected_mask = torch.zeros(len(tensor_array), dtype=torch.bool)
+    selected_mask[closest_tensor_index] = True
+    print(f"Most average: {names[closest_tensor_index]}")
+
+    # Iteratively add tensors
+    for _ in range(1, N):
+        # Calculate the average tensor of the current subset
+        subset_average = torch.mean(torch.stack(diverse_subset), dim=0)
+
+        # Find the tensor that is furthest from the current subset average
+        distances = torch.norm(tensor_array - subset_average, dim=(1, 2))
+        distances[selected_mask] = float('-inf')  # Ignore already selected tensors
+        furthest_tensor_index = torch.argmax(distances)
+        
+        # Add the furthest tensor to the subset and update the mask
+        diverse_subset.append(tensor_array[furthest_tensor_index])
+        selected_mask[furthest_tensor_index] = True
+        print(f"Furthest: {names[furthest_tensor_index]}")
+    
+    return torch.stack(diverse_subset)
+
+
+
 from SampleCategory import *
 
 # Utility to help categorise samples:

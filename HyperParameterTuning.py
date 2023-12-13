@@ -5,8 +5,6 @@ from skopt import gp_minimize
 from skopt.space import Integer, Real, Categorical
 
 from Train import *
-#from MakeSTFTs import *
-
 
 one_sample = stft_buckets * sequence_length
 max_params = None
@@ -120,13 +118,13 @@ def optimise_hyper_parameters(model_name):
             
         case "StepWiseMLP":
             # Train just the StepWiseMLPAutoEncode (with no VAE)
-            search_space.append(Integer(8,        12,   'uniform',      name='hidden_size'))
+            search_space.append(Integer(8,        16,   'uniform',      name='hidden_size'))
             search_space.append(Integer(3,         5,   'uniform',      name='depth'))
             search_space.append(Real   (0.1,      10,   'log-uniform',  name='ratio'))
             
         case "StepWiseVAEMLP" | "MLP_VAE":
             # StepWiseMLP parameters
-            search_space.append(Integer(8,        12,   'uniform',      name='hidden_size'))
+            search_space.append(Integer(8,        16,   'uniform',      name='hidden_size'))
             search_space.append(Integer(3,         5,   'uniform',      name='depth'))
             search_space.append(Real   (0.1,      10,   'log-uniform',  name='ratio'))
             
@@ -190,8 +188,9 @@ def optimise_hyper_parameters(model_name):
 
 
 def train_best_params(model_name):
+    generate_training_stfts(100) # Small dataset of the most diverse samples
+    #generate_training_stfts(None) # Full dataset with no augmentation
     #generate_training_stfts(3000) # use a large number of samples with augmentation
-    generate_training_stfts(None) # No augmentation
     
     model_name, params, _ = get_best_configuration_for_model(model_name)
 
@@ -201,7 +200,9 @@ def train_best_params(model_name):
     max_epochs = 2000 # we don't hit this in practice.
     max_loss = 1e9
     
-    params[0] = 4 # override the batch-size
+    params[0] = 0 # override the batch-size
+    
+    #set_display_hiddens(True) # Displays the internal auto-encoder output
     
     verbose = True
     train_model(model_name, params, max_epochs, max_time, max_params, max_overfit, max_loss, verbose)

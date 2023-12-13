@@ -18,8 +18,6 @@ def log_interp(start, end, steps):
     return torch.exp(torch.linspace(math.log(start), math.log(end), steps))
 
 
-
-
 def predict_stft(model, input_stft):
     input_stft = convert_stft_to_input(input_stft)
 
@@ -60,14 +58,23 @@ def generate_training_stfts(how_many):
             sanity_test_name = file_names[i]
             break
 
+
     stfts = convert_stfts_to_inputs(stfts)
-    train_stfts, test_stfts = split_dataset(stfts, 0.8)
     
     #display_average_stft(stfts, True)
+
+    # Find key samples to encode
+    if how_many is not None and how_many <= 200:
+        stfts = select_diverse_tensors(stfts, file_names, how_many).to(device)
+
+
+    # Convert into train & test datasets
+    ratio = 0.8
+    train_stfts, test_stfts = split_dataset(stfts, ratio)
     
     # Training set is kept completely separate from Test when augmenting.
-    if how_many is not None and len(train_stfts) < how_many:
-        train_stfts = augment_stfts(train_stfts, how_many)
+    if how_many is not None and len(train_stfts) < how_many * ratio:
+        train_stfts = augment_stfts(train_stfts, int(how_many * ratio))
     
     train_dataset = train_stfts
     test_dataset  = test_stfts
@@ -128,7 +135,7 @@ def train_model(model_type, hyper_params, max_epochs, max_time, max_params, max_
     optimizer = optim.Adam(model.parameters(), lr=learning_rate, weight_decay=weight_decay)
 
     print(f"Adam: {trainable:,} trainable parameters") # check this is as expected.
-    size_penalty = np.log10(trainable) # favour smaller models
+    size_penalty = np.log10(trainable)/6 # slightly favour smaller models
     print(f"model size penalty={size_penalty:.1f}")
     
     # Training loop

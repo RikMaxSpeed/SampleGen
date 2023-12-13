@@ -26,7 +26,7 @@ def vae_loss_function(inputs, outputs, mu, logvar):
     error  = reconstruction_loss(inputs, outputs)
     kl_div = kl_divergence(mu, logvar)
             
-    loss = error + kl_div * 1000
+    loss = error + kl_div
     #print(f"loss={loss:.1f} <-- reconstruction={error:.3f} + kl_divergence={kl_div:.3f}")
 
     return loss
@@ -64,7 +64,7 @@ class VariationalAutoEncoder(nn.Module):
         self.encoder_layers = sequential_fully_connected(sizes[:-1], nn.ReLU())
 
         # Latent space layers (for mean and log variance)
-        self.fc_mu = nn.Linear(sizes[-2], sizes[-1])
+        self.fc_mu     = nn.Linear(sizes[-2], sizes[-1])
         self.fc_logvar = nn.Linear(sizes[-2], sizes[-1])
 
         # Decoder layers

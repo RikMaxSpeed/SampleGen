@@ -228,14 +228,21 @@ def freeze_model(model):
 
 count = 0
 last_count = 0
+do_display_hiddens = False
 
+def set_display_hiddens(onOff):
+    global do_display_hiddens
+    do_display_hiddens = onOff
+    
 def periodically_display_hiddens(hiddens):
-    return # only enable this for experiments
-    
-    global count, last_count
-    
-    count += hiddens.size(0)
-    
-    if count - last_count > 5000: # approx every 5 epochs
-        last_count = count
-        display_image_grid(hiddens.detach().cpu(), f"Hidden outputs {self.sequence_length} x {self.hidden_size}", "summer") # was "magma"
+
+    global count, last_count, do_display_hiddens
+    if do_display_hiddens:
+        count += hiddens.size(0)
+        
+        if count - last_count > 5000: # approx every 5 epochs
+            last_count = count
+            hiddens = hiddens.detach().cpu()
+            width = hiddens[0].size(0)
+            height = hiddens[0].size(1)
+            display_image_grid(hiddens, f"Hidden outputs {width} x {height}", "summer") # was "magma"

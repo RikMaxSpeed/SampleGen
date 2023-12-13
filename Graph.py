@@ -176,7 +176,7 @@ def plot_multiple_losses(losses, names, min_count, title):
         
     title = title + ": loss vs epoch"
     if len(losses) > 1:
-        title += f", over {len(losses)} runs"
+        title += f" for {len(losses)} runs"
         
     plt.title(title)
     plt.ylabel("Loss (log scale)")
