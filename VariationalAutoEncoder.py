@@ -7,14 +7,8 @@ from ModelUtils import *
 
 
 # Loss functions
-
-
 def reconstruction_loss(inputs, outputs):
     return F.mse_loss(inputs, outputs, reduction='sum')
-    # shape = [batch, stft, time-step]
-#    scale = inputs.size(1) * inputs.size(2) # data-count irrespective of batch-size
-#    assert(inputs.shape == outputs.shape)
-#    return scale * F.mse_loss(inputs, outputs)
 
 
 def kl_divergence(mu, logvar):
@@ -30,7 +24,7 @@ def vae_loss_function(inputs, outputs, mu, logvar):
     loss = error + kl_div
     #print(f"loss={loss:.2f} <-- reconstruction={error:.2f} + kl_divergence={kl_div:.2f}")
 
-    return loss
+    return loss / inputs[0].numel()
     
 
 def vae_reparameterize(mu, logvar):
@@ -44,11 +38,6 @@ class VariationalAutoEncoder(nn.Module):
     @staticmethod
     def decode_sizes(encoder_sizes):
         d_sizes = list(reversed(encoder_sizes))
-        return d_sizes
-        
-        # Experiment: add an extra layer, it didn't improve the accuracy
-        d_sizes = d_sizes + [d_sizes[-1]] # add an extra layer
-        print(f"Encoder={encoder_sizes}, decoder sizes={d_sizes}")
         return d_sizes
         
         

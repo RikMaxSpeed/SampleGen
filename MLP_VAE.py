@@ -19,8 +19,8 @@ class StepWiseMLPAutoEncoder(nn.Module):
         
     @staticmethod
     def get_layer_sizes(freq_buckets, hidden_size, depth, ratio):
-        encode_layer_sizes = interpolate_layer_sizes(2 * freq_buckets, hidden_size, depth, ratio)
-        decode_layer_sizes = interpolate_layer_sizes(freq_buckets + hidden_size, freq_buckets, depth, ratio)
+        encode_layer_sizes = interpolate_layer_sizes(2 * freq_buckets + 1, hidden_size, depth, ratio)
+        decode_layer_sizes = interpolate_layer_sizes(freq_buckets + hidden_size + 1, freq_buckets, depth, ratio)
         return encode_layer_sizes, decode_layer_sizes
         
     @staticmethod
@@ -56,9 +56,11 @@ class StepWiseMLPAutoEncoder(nn.Module):
         
         # Process each time step
         for t in range(self.sequence_length):
+            time_step = torch.full((batch_size, 1), t / float(self.sequence_length), dtype=torch.float32).to(device)
+            
             # Concatenate previous STFT, current STFT
             curr_stft = x[:, :, t]
-            combined_input = torch.cat([prev_stft, curr_stft], dim=1)
+            combined_input = torch.cat([prev_stft, curr_stft, time_step], dim=1)
             
             # Update control parameters
             result = self.encoder(combined_input)
@@ -88,9 +90,10 @@ class StepWiseMLPAutoEncoder(nn.Module):
 
         # Process each time step
         for t in range(self.sequence_length):
+            time_step = torch.full((batch_size, 1), t / float(self.sequence_length), dtype=torch.float32).to(device)
 
             # Concatenate control parameters and previous STFT
-            combined_input = torch.cat([hiddens[:, :, t], prev_stft], dim=1)
+            combined_input = torch.cat([hiddens[:, :, t], prev_stft, time_step], dim=1)
             
             # Update previous STFT frame with the output of the decoder
             prev_stft = self.decoder(combined_input)

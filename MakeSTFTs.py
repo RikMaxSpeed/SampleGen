@@ -14,12 +14,12 @@ from Debug import *
 sample_rate = 44100
 stft_size = 1024 # tried 512
 stft_buckets = 2 * stft_size # full frequency range
-stft_hop = int(stft_size * 3 / 2) # with some overlap
+stft_hop = int(stft_buckets * 3 / 4) # with some overlap
 
-max_freq = 8_000 # strip the high frequencies
+max_freq = 11_025 # strip the high frequencies
 freq_buckets = 2 * int(max_freq * 2 * stft_size / sample_rate)
 
-sample_duration = 1.0 # seconds
+sample_duration = 2.0 # seconds
 sequence_length = int(sample_duration * sample_rate / stft_hop)
 input_size = stft_buckets * sequence_length
 
@@ -222,7 +222,7 @@ def convert_to_complex(reals):
     return output_tensor
 
 
-mu_law = MuLawCodec(2) # Yet another hyper-parameter but we can't tune this one as it's outside the model's loss function.
+mu_law = MuLawCodec(8) # Yet another hyper-parameter but we can't tune this one as it's outside the model's loss function.
 
 
 def convert_stft_to_input(stft):
@@ -273,17 +273,19 @@ def test_stft_conversions(file_name):
     debug("stft", stft)
     stft = stft[:, :sequence_length] # truncate
     debug("truncated", stft)
-    amp = np.max(np.abs(stft))
     
     if False: # Generate a synthetic spectrum
         for f in range(stft.shape[0]):
-            for t in range(stft.shape[1]):
-                stft[f, t] = 75*np.sin(f*t) if f>=2*t and f <= 3*t else 0
+            for i in range(stft.shape[1]):
+                stft[f, i] = 75*np.random.uniform() if np.random.uniform() > 0.9 else 0
+    
+    amp = np.max(np.abs(stft))
+    print(f"original max={amp:.2f}")
     
     plot_stft(file_name, stft, sr, stft_hop)
     
     tensor = torch.tensor(stft)
-    debug("tensor", tensor)
+    debug("original", tensor)
     input = convert_stft_to_input(tensor)
     debug("input", input)
     print(f"input: min={input.min():.5f}, max={input.max():.5f}")
@@ -302,11 +304,12 @@ def test_stft_conversions(file_name):
     diff = np.abs(output - stft)
     debug("diff", diff)
     plot_stft("Diff", diff, sr, stft_hop)
-    for f in range(stft.shape[0]):
-        for t in range(stft.shape[1]):
-            d = diff[f, t]
-            if d > 0.1:
-                print("f={}, t={}, diff={:.3f}, stft={:.3f}, output={:.3f}".format(f, t, d, stft[f, t], output[f, t]))
+    if False: # Print the differences
+        for f in range(stft.shape[0]):
+            for t in range(stft.shape[1]):
+                d = diff[f, t]
+                if d > 0.1:
+                    print("f={}, t={}, diff={:.3f}, stft={:.3f}, output={:.3f}".format(f, t, d, stft[f, t], output[f, t]))
 
 
 #test_stft_conversions("Samples/Piano C4 Major 13.wav")

@@ -88,21 +88,22 @@ def generate_parameters(search_space, amount):
 
 def optimise_hyper_parameters(model_name):
     # use a smaller data-set here to speed things up? Not a good idea as the model may be too limited in size
-    samples, _ = generate_training_stfts(None)
+    #samples, _ = generate_training_stfts(None)
+    samples, _ = generate_training_stfts(200)
     print(f"Training data set has {samples} samples.")
     
     global max_params, max_loss
     train_data_size = samples * one_sample
     max_params = 200 * one_sample # encoder & decoder will be approx half that size
-    print(f"{freq_buckets} frequencies, {sequence_length} time-steps, maximum model size is {max_params:,} parameters.")
+    print(f"{freq_buckets} frequencies, {sequence_length} time-steps, sample={one_sample:,}, maximum model size is {max_params:,} parameters.")
     
     # Optimiser:
-    batch = 4 # actual batch_size = 2**batch
-    lr = 1e-6
+    batch = 5 # actual batch_size = 2**batch
+    lr = 1e-5
     
     search_space = list()
-    search_space.append(Integer(batch,  batch+3,    'uniform',      name='batch')) # batch_size = 2^batch
-    search_space.append(Real   (lr,    lr * 100,    'log-uniform',  name='learning_rate')) # scaled by the batch_size
+    search_space.append(Integer(batch, batch+1,    'uniform',      name='batch')) # batch_size = 2^batch
+    search_space.append(Real   (lr,    lr * 2,    'log-uniform',  name='learning_rate')) # scaled by the batch_size
 
     # Model:
     global hyper_model
@@ -125,8 +126,10 @@ def optimise_hyper_parameters(model_name):
             search_space.append(Real   (0.1,      10,   'log-uniform',  name='ratio'))
             
         case "StepWiseVAEMLP" | "MLP_VAE":
+            max_loss = 50_000
+            
             # StepWiseMLP parameters
-            search_space.append(Integer(8,        16,   'uniform',      name='hidden_size'))
+            search_space.append(Integer(40,      100,   'uniform',      name='hidden_size'))
             search_space.append(Integer(3,         5,   'uniform',      name='depth'))
             search_space.append(Real   (0.1,      10,   'log-uniform',  name='ratio'))
             
@@ -202,7 +205,8 @@ def train_best_params(model_name):
     max_epochs = 2000 # we don't hit this in practice.
     max_loss = 1e9
     
-    params[0] = 3 # override the batch-size
+#    params[0] = 4 # override the batch-size
+#    params[1] = 1e-5 # override the learning rate
     
     #set_display_hiddens(True) # Displays the internal auto-encoder output
     

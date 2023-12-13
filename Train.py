@@ -45,8 +45,12 @@ def generate_training_stfts(how_many):
     global sanity_test_stft, sanity_test_name, train_dataset, test_dataset
                 
      # Augmentation is used if this exceeds the number of real available samples
-    stfts, file_names = get_training_stfts(how_many)
-
+    stfts, file_names = get_training_stfts(None)
+    
+    count = len(stfts)
+    if how_many is None:
+        how_many = count
+    
     if False:
         lengths = np.array([x.shape[1] for x in stfts])
         plot_multiple_histograms_vs_gaussian([lengths * stft_hop / sample_rate], ["Sample Durations (seconds)"])
@@ -61,19 +65,22 @@ def generate_training_stfts(how_many):
 
     stfts = convert_stfts_to_inputs(stfts)
     count = stfts.size(0)
-    
+    print(f"{count} STFTs")
     #display_average_stft(stfts, True)
 
     # Find key samples to encode
-    if how_many is not None and how_many <= count/4:
+    if how_many <= count/3:
         stfts = select_diverse_tensors(stfts, file_names, how_many).to(device)
 
+    if stfts.size(0) > how_many: # truncate if too many
+        stfts = stfts[:how_many, : , :]
 
     # Convert into train & test datasets
     ratio = 0.8
     train_stfts, test_stfts = split_dataset(stfts, ratio)
     
     # Training set is kept completely separate from Test when augmenting.
+    train_size = int(how_many * ratio)
     if how_many is not None and len(train_stfts) < how_many * ratio:
         train_stfts = augment_stfts(train_stfts, int(how_many * ratio))
     
@@ -119,7 +126,7 @@ def train_model(model_type, hyper_params, max_epochs, max_time, max_params, max_
     # Create the model
     model, model_text, model_size = make_model(model_type, model_params, max_params, verbose)
     
-    size_penalty = np.log10(model_size) # slightly favour smaller models
+    size_penalty = np.log10(model_size)/100 # slightly favour smaller models
 
     if model is None:
         return max_loss + size_penalty, model_text
@@ -129,10 +136,6 @@ def train_model(model_type, hyper_params, max_epochs, max_time, max_params, max_
     model_text += f" (params={model_size:,}, trainable={trainable:,} = {100*trainable/model_size:.1f}%)"
     print(f"model: {model_text}")
     description = model_text + " | " + optimiser_text
-
-    # if verbose:
-    print(model)
-    
 
     # Train/Test & DataLoader
     dataloader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
@@ -163,7 +166,6 @@ def train_model(model_type, hyper_params, max_epochs, max_time, max_params, max_
     for epoch in range(0, max_epochs):
         model.train() # ensure we compute gradients
         
-#        epoch_start = time.time()
         sum_train_loss = 0
         sum_batches = 0
         for batch_idx, inputs in enumerate(dataloader):
@@ -181,14 +183,10 @@ def train_model(model_type, hyper_params, max_epochs, max_time, max_params, max_
             sum_train_loss += numeric_loss * len(inputs)
             sum_batches += len(inputs)
 
-            
             # Backward pass and optimization
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
-                
-#        elapsed = time.time() - epoch_start
-#        print(f"Epoch took {elapsed:.2} sec")
         
         # Store the loss after each epoch:
         approx_train_loss = sum_train_loss / sum_batches # effectively the loss at the previous time step before the most recent back-propagation
@@ -198,10 +196,9 @@ def train_model(model_type, hyper_params, max_epochs, max_time, max_params, max_
             print(f"training loss: exact={exact_train_loss:.2f}, approx={approx_train_loss:.2f}, diff={pct_error:.2f}%")
             approx_train_loss = exact_train_loss
             
-        approx_train_loss += size_penalty
-        test_loss = compute_average_loss(model, test_dataset, batch_size) + size_penalty
+        test_loss = compute_average_loss(model, test_dataset, batch_size) # this is an acceptable overhead if the test set is several times smaller than the train set.
         train_losses.append(approx_train_loss)
-        test_losses.append(test_loss) # this is an acceptable overhead if the test set is several times smaller than the train set.
+        test_losses.append(test_loss)
         
         if np.isnan(train_losses[-1]) or np.isnan(test_losses[-1]):
             print("Aborting: model returns NaNs :(") # High learning rate or unstable model?
@@ -219,7 +216,7 @@ def train_model(model_type, hyper_params, max_epochs, max_time, max_params, max_
             
             # Save the model:
             file_name = "Models/" + model_type # keep over-writing the same file as the loss improves
-            print(f"*** Best! loss={last_saved_loss:.2f}, without size penalty {last_saved_loss - size_penalty:.2f}")
+            print(f"*** Best! loss={last_saved_loss:.2f}")
             print(f"{model_text}\n{optimiser_text}\nhyper-parameters: {hyper_params}")
             torch.save(model.state_dict(), file_name + ".wab")
             
@@ -304,7 +301,7 @@ def train_model(model_type, hyper_params, max_epochs, max_time, max_params, max_
     if verbose:
         plot_train_test_losses(train_losses, test_losses, model_type)
     
-    return np.min(test_losses), description
+    return np.min(test_losses) + size_penalty, description
 
 
 

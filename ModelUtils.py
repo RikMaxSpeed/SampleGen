@@ -38,8 +38,6 @@ def get_output_for_layer(name, layer, input):
 
 def compute_average_loss(model, dataset, batch_size):
     
-#    start = time.time()
-    
     model.eval()
 
     data_loader = DataLoader(dataset, batch_size=batch_size, shuffle=False)
@@ -56,9 +54,6 @@ def compute_average_loss(model, dataset, batch_size):
             total_loss += loss * len(inputs)
             total_samples += len(inputs)
 
-#    elapsed = time.time() - start
-#    print(f"compute_average_loss took {elapsed:.2f} sec for {len(dataset)} samples")
-    
     return total_loss / total_samples
 
 
