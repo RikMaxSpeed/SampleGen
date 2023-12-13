@@ -13,15 +13,18 @@ from Debug import *
 # Bunch of nasty global variables...
 sample_rate = 44100
 stft_size = 1024 # tried 512
-stft_buckets = 2 * stft_size
-stft_hop = int(stft_buckets * 3 / 4) # with some overlap
+stft_buckets = 2 * stft_size # full frequency range
+stft_hop = int(stft_size * 3 / 2) # with some overlap
 
-sample_duration = 2.0 # seconds
+max_freq = 8_000 # strip the high frequencies
+freq_buckets = 2 * int(max_freq * 2 * stft_size / sample_rate)
+
+sample_duration = 1.0 # seconds
 sequence_length = int(sample_duration * sample_rate / stft_hop)
 input_size = stft_buckets * sequence_length
 
-print("Using sample rate={} Hz, FFT={} buckets, hop={} samples, duration={:.1f} sec = {:,} time steps".format(sample_rate, stft_buckets, stft_hop, sample_duration, sequence_length))
-
+print(f"Using sample rate={sample_rate} Hz, FFT={stft_buckets} buckets, hop={stft_hop} samples, duration={sample_duration:.1f} sec = {sequence_length:,} time steps")
+print(f"Max frequency={max_freq} Hz --> freq_buckets={freq_buckets}")
 
 def plot_amplitudes_vs_frequency(amplitudes, name):
     global sample_rate, stft_size, stft_buckets
@@ -72,7 +75,6 @@ def lowest_frequency(stft, sample_rate, name):
             a = amplitudes[i]
             if a > maxAmp / 8:
                 if amplitudes[i-1] < a > amplitudes[i+1]: # peak
-                    print(f"a[{i-1}]={amplitudes[i-1]:.1f}, a[{i}]={a:.1f}, a[{i+1}]={amplitudes[i+1]:.1f}, f={f:.1f} Hz")
                 
                     if exclude_frequency(f):
                         plot_amplitudes_vs_frequency(amplitudes, name)
@@ -223,10 +225,12 @@ def convert_to_complex(reals):
 def convert_stft_to_input(stft):
     assert(len(stft.shape) == 2)
     assert(stft.shape[0] == stft_size + 1)
-    stft = stft[1:, :]
-    assert(stft.shape[0] == stft_size)
+#    stft = stft[1:, :]
+#    assert(stft.shape[0] == stft_size)
     
     stft = adjust_stft_length(stft, sequence_length)
+    stft = stft[:freq_buckets//2,:]
+    
     maxAmp = torch.max(stft.abs())
     stft /= maxAmp
     stft = convert_to_reals(stft)
@@ -239,8 +243,11 @@ def convert_stfts_to_inputs(stfts):
 
 def convert_stft_to_output(stft):
     # Re-append the constant bucket
-    zeros = torch.zeros(2, sequence_length, device=device)
-    stft = torch.cat((zeros, stft), dim = 0)
+    assert(stft.size(0) == freq_buckets)
+    missing_buckets = torch.zeros(stft_buckets - freq_buckets +2, sequence_length, device=device)
+    stft = torch.cat((stft, missing_buckets), dim = 0)
+    assert(stft.size(0) == stft_buckets + 2)
+    
     stft = convert_to_complex(stft)
     
     # Normalise & Amplify
@@ -285,7 +292,7 @@ def test_stft_conversions(file_name):
     diff = np.abs(output - stft)
     debug("diff", diff)
     plot_stft("Diff", diff, sr, stft_hop)
-    for f in range(1, stft.shape[0]):
+    for f in range(stft.shape[0]):
         for t in range(stft.shape[1]):
             d = diff[f, t]
             if d > 0.1:

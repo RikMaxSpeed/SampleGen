@@ -60,11 +60,12 @@ def generate_training_stfts(how_many):
 
 
     stfts = convert_stfts_to_inputs(stfts)
+    count = stfts.size(0)
     
     #display_average_stft(stfts, True)
 
     # Find key samples to encode
-    if how_many is not None and how_many <= 200:
+    if how_many is not None and how_many <= count/4:
         stfts = select_diverse_tensors(stfts, file_names, how_many).to(device)
 
 

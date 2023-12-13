@@ -11,17 +11,17 @@ from VariationalAutoEncoder import *
 
 class STFTVariationalAutoEncoder(nn.Module):
     @staticmethod
-    def approx_trainable_parameters(stft_buckets, sequence_length, latent_size, depth, ratio):
-        sizes = interpolate_layer_sizes(sequence_length * stft_buckets, latent_size, depth, ratio)
+    def approx_trainable_parameters(freq_buckets, sequence_length, latent_size, depth, ratio):
+        sizes = interpolate_layer_sizes(sequence_length * freq_buckets, latent_size, depth, ratio)
         return VariationalAutoEncoder.approx_trainable_parameters(sizes)
 
-    def __init__(self, stft_buckets, sequence_length, latent_size, depth, ratio):
+    def __init__(self, freq_buckets, sequence_length, latent_size, depth, ratio):
         super(STFTVariationalAutoEncoder, self).__init__()
         self.sequence_length = sequence_length
-        self.stft_buckets = stft_buckets
-        sizes = interpolate_layer_sizes(sequence_length * stft_buckets, latent_size, depth, ratio)
+        self.freq_buckets = freq_buckets
+        sizes = interpolate_layer_sizes(sequence_length * freq_buckets, latent_size, depth, ratio)
         print(f"sizes={sizes}")
-        self.vae = VariationalAutoEncoder(sizes, nn.Tanh)
+        self.vae = VariationalAutoEncoder(sizes)
         
         
     def encode(self, x):
@@ -32,14 +32,14 @@ class STFTVariationalAutoEncoder(nn.Module):
 
     def decode(self, x):
         x = self.vae.decode(x)
-        x = x.reshape(x.size(0), self.stft_buckets, self.sequence_length)
+        x = x.reshape(x.size(0), self.freq_buckets, self.sequence_length)
         return x
         
         
     def forward(self, x):
         x = x.reshape(x.size(0), -1)
         x, mu, logvar = self.vae.forward(x)
-        x = x.reshape(x.size(0), self.stft_buckets, self.sequence_length)
+        x = x.reshape(x.size(0), self.freq_buckets, self.sequence_length)
         return x, mu, logvar
     
 

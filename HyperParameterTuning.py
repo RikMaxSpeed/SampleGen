@@ -6,7 +6,7 @@ from skopt.space import Integer, Real, Categorical
 
 from Train import *
 
-one_sample = stft_buckets * sequence_length
+one_sample = freq_buckets * sequence_length
 max_params = None
 tuning_count = 0
 break_on_exceptions = True # True=Debugging, False allows the GPR to continue even if the model blows up (useful for long tuning runs!)
@@ -92,7 +92,7 @@ def optimise_hyper_parameters(model_name):
     global max_params, max_loss
     train_data_size = samples * one_sample
     max_params = 200 * one_sample # encoder & decoder will be approx half that size
-    print(f"{stft_buckets} frequencies, {sequence_length} time-steps, maximum model size is {max_params:,} parameters.")
+    print(f"{freq_buckets} frequencies, {sequence_length} time-steps, maximum model size is {max_params:,} parameters.")
     
     # Optimiser:
     batch = 4 # actual batch_size = 2**batch
@@ -188,8 +188,8 @@ def optimise_hyper_parameters(model_name):
 
 
 def train_best_params(model_name):
-    generate_training_stfts(100) # Small dataset of the most diverse samples
-    #generate_training_stfts(None) # Full dataset with no augmentation
+    #generate_training_stfts(100) # Small dataset of the most diverse samples
+    generate_training_stfts(None) # Full dataset with no augmentation
     #generate_training_stfts(3000) # use a large number of samples with augmentation
     
     model_name, params, _ = get_best_configuration_for_model(model_name)
@@ -200,7 +200,7 @@ def train_best_params(model_name):
     max_epochs = 2000 # we don't hit this in practice.
     max_loss = 1e9
     
-    params[0] = 0 # override the batch-size
+    params[0] = 3 # override the batch-size
     
     #set_display_hiddens(True) # Displays the internal auto-encoder output
     

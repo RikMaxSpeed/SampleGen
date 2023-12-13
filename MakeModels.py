@@ -14,11 +14,11 @@ def make_stepwiseMLPVAE(params, max_params):
     model_text = f"{model_type} control={hidden_size}, depth={depth}, ratio={ratio:.2f}, latent={latent_size}, VAE depth={vae_depth}, VAE ratio={vae_ratio:.2f}"
     print(model_text)
     
-    approx_size = StepWiseMLP_VAE.approx_trainable_parameters(stft_buckets, sequence_length, hidden_size, depth, ratio, latent_size, vae_depth, vae_ratio)
+    approx_size = StepWiseMLP_VAE.approx_trainable_parameters(freq_buckets, sequence_length, hidden_size, depth, ratio, latent_size, vae_depth, vae_ratio)
     if is_too_large(approx_size, max_params):
         return None, model_text, approx_size
         
-    model = StepWiseMLP_VAE(stft_buckets, sequence_length, hidden_size, depth, ratio, latent_size, vae_depth, vae_ratio)
+    model = StepWiseMLP_VAE(freq_buckets, sequence_length, hidden_size, depth, ratio, latent_size, vae_depth, vae_ratio)
     
     return model, model_text, approx_size
 
@@ -31,7 +31,7 @@ def make_RNN_VAE(model_type, model_params, max_params):
     vae_sizes = interpolate_layer_sizes(hidden_size * sequence_length, latent_size, vae_depth, vae_ratio)
     print(f"VAE layers={vae_sizes}")
 
-    rnn_size = RNNAutoEncoder.approx_trainable_parameters(stft_buckets, hidden_size, encode_depth, decode_depth)
+    rnn_size = RNNAutoEncoder.approx_trainable_parameters(freq_buckets, hidden_size, encode_depth, decode_depth)
     vae_size = VariationalAutoEncoder.approx_trainable_parameters(vae_sizes)
     approx_size = rnn_size + vae_size
     print(f"RNN={rnn_size:,}, VAE={vae_size:,}, approx total={approx_size:,}")
@@ -41,7 +41,7 @@ def make_RNN_VAE(model_type, model_params, max_params):
     
     
     dropout = 0
-    rnn = RNNAutoEncoder(stft_buckets, sequence_length, hidden_size, encode_depth, decode_depth, dropout)
+    rnn = RNNAutoEncoder(freq_buckets, sequence_length, hidden_size, encode_depth, decode_depth, dropout)
     
     model = CombinedVAE(rnn, vae_sizes)
     
@@ -74,22 +74,22 @@ def make_model(model_type, model_params, max_params, verbose):
             latent_size, depth, ratio = model_params
             model_text = f"{model_type} latent={latent_size}, layers={depth}, ratio={ratio:.2f}"
             print(model_text)
-            approx_size = STFTVariationalAutoEncoder.approx_trainable_parameters(stft_buckets, sequence_length, latent_size, depth, ratio)
+            approx_size = STFTVariationalAutoEncoder.approx_trainable_parameters(freq_buckets, sequence_length, latent_size, depth, ratio)
             if is_too_large(approx_size, max_params):
                 return invalid_model(approx_size)
                 
-            model = STFTVariationalAutoEncoder(stft_buckets, sequence_length, latent_size, depth, ratio)
+            model = STFTVariationalAutoEncoder(freq_buckets, sequence_length, latent_size, depth, ratio)
         
         
         case "StepWiseMLP":
             hidden_size, depth, ratio = model_params
             model_text = f"{model_type} control={hidden_size}, depth={depth}, ratio={ratio:.2f}"
             print(model_text)
-            approx_size = StepWiseMLPAutoEncoder.approx_trainable_parameters(stft_buckets, hidden_size, depth, ratio)
+            approx_size = StepWiseMLPAutoEncoder.approx_trainable_parameters(freq_buckets, hidden_size, depth, ratio)
             if is_too_large(approx_size, max_params):
                 return invalid_model(approx_size)
                 
-            model = StepWiseMLPAutoEncoder(stft_buckets, sequence_length, hidden_size, depth, ratio)
+            model = StepWiseMLPAutoEncoder(freq_buckets, sequence_length, hidden_size, depth, ratio)
            
            
         case "MLP_VAE":
@@ -100,7 +100,7 @@ def make_model(model_type, model_params, max_params, verbose):
             vae_sizes = interpolate_layer_sizes(hidden_size * sequence_length, latent_size, vae_depth, vae_ratio)
             print(f"VAE layers={vae_sizes}")
             
-            mlp_size = StepWiseMLPAutoEncoder.approx_trainable_parameters(stft_buckets, hidden_size, mlp_depth, mlp_ratio)
+            mlp_size = StepWiseMLPAutoEncoder.approx_trainable_parameters(freq_buckets, hidden_size, mlp_depth, mlp_ratio)
             vae_size = VariationalAutoEncoder.approx_trainable_parameters(vae_sizes)
             approx_size = mlp_size + vae_size
             print(f"MLP={mlp_size:,}, VAE={vae_size:,}, approx total={approx_size:,}")
@@ -108,7 +108,7 @@ def make_model(model_type, model_params, max_params, verbose):
             if is_too_large(approx_size, max_params):
                 return invalid_model(approx_size)
             
-            mlp = StepWiseMLPAutoEncoder(stft_buckets, sequence_length, hidden_size, mlp_depth, mlp_ratio)
+            mlp = StepWiseMLPAutoEncoder(freq_buckets, sequence_length, hidden_size, mlp_depth, mlp_ratio)
             
             model = CombinedVAE(mlp, vae_sizes)
 
@@ -125,7 +125,7 @@ def make_model(model_type, model_params, max_params, verbose):
             vae_sizes = interpolate_layer_sizes(hidden_size * sequence_length, latent_size, vae_depth, vae_ratio)
             print(f"VAE layers={vae_sizes}")
             
-            mlp_size = StepWiseMLPAutoEncoder.approx_trainable_parameters(stft_buckets, hidden_size, mlp_depth, mlp_ratio)
+            mlp_size = StepWiseMLPAutoEncoder.approx_trainable_parameters(freq_buckets, hidden_size, mlp_depth, mlp_ratio)
             vae_size = VariationalAutoEncoder.approx_trainable_parameters(vae_sizes)
             approx_size = mlp_size + vae_size
             print(f"MLP={mlp_size:,}, VAE={vae_size:,}, approx total={approx_size:,}")
@@ -133,7 +133,7 @@ def make_model(model_type, model_params, max_params, verbose):
             if is_too_large(approx_size, max_params):
                 return invalid_model(approx_size)
             
-            mlp = StepWiseMLPAutoEncoder(stft_buckets, sequence_length, hidden_size, mlp_depth, mlp_ratio)
+            mlp = StepWiseMLPAutoEncoder(freq_buckets, sequence_length, hidden_size, mlp_depth, mlp_ratio)
             
             model = CombinedVAE(mlp, vae_sizes)
             
@@ -148,11 +148,11 @@ def make_model(model_type, model_params, max_params, verbose):
             model_text = f"{model_type} hidden={hidden_size}, encode_depth={encode_depth}, decode_depth={decode_depth}"
             print(model_text)
             dropout = 0 # will explore this later.
-            approx_size = RNNAutoEncoder.approx_trainable_parameters(stft_buckets, hidden_size, encode_depth, decode_depth)
+            approx_size = RNNAutoEncoder.approx_trainable_parameters(freq_buckets, hidden_size, encode_depth, decode_depth)
             if is_too_large(approx_size, max_params):
                 return invalid_model(approx_size)
                 
-            model = RNNAutoEncoder(stft_buckets, sequence_length, hidden_size, encode_depth, decode_depth, dropout)
+            model = RNNAutoEncoder(freq_buckets, sequence_length, hidden_size, encode_depth, decode_depth, dropout)
     
     
         case "RNN_VAE":

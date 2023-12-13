@@ -13,12 +13,12 @@ from ModelUtils import interpolate_layer_sizes, count_trainable_parameters
 class RNNAutoEncoder(nn.Module): # no VAE
                 
     @staticmethod
-    def approx_trainable_parameters(stft_buckets, hidden_size, encode_depth, decode_depth):
-        encode = rnn_size(stft_buckets, hidden_size, encode_depth)
-        decode = rnn_size(hidden_size, stft_buckets, decode_depth)
+    def approx_trainable_parameters(freq_buckets, hidden_size, encode_depth, decode_depth):
+        encode = rnn_size(freq_buckets, hidden_size, encode_depth)
+        decode = rnn_size(hidden_size, freq_buckets, decode_depth)
         return encode + decode
 
-    def __init__(self, stft_buckets, sequence_length, hidden_size, encode_depth, decode_depth, dropout):
+    def __init__(self, freq_buckets, sequence_length, hidden_size, encode_depth, decode_depth, dropout):
         super(RNNAutoEncoder, self).__init__()
         
         hidden_size = int(hidden_size) # RNN objects to int64.
@@ -26,12 +26,12 @@ class RNNAutoEncoder(nn.Module): # no VAE
         self.hidden_size = hidden_size
         
         # RNN: input = (batch, sequence, features)
-        self.encoder = torch.nn.RNN(stft_buckets, hidden_size, num_layers = encode_depth, batch_first = True, dropout = dropout)
-        self.decoder = torch.nn.RNN(hidden_size, stft_buckets, num_layers = decode_depth, batch_first = True, dropout = dropout)
+        self.encoder = torch.nn.RNN(freq_buckets, hidden_size, num_layers = encode_depth, batch_first = True, dropout = dropout)
+        self.decoder = torch.nn.RNN(hidden_size, freq_buckets, num_layers = decode_depth, batch_first = True, dropout = dropout)
         # Important: in the rnnVAE I gave the model the previous and the current frame at each time step + the time itself.
         # In this version I'm only giving the model the individual time-steps... I don't know whether this will work.
         
-        print(f"RNNAutoEncoder {count_trainable_parameters(self):,} parameters, compression={stft_buckets/hidden_size:.1f}")        
+        print(f"RNNAutoEncoder {count_trainable_parameters(self):,} parameters, compression={freq_buckets/hidden_size:.1f}")        
         
     def encode(self, x):
         batch_size = x.size(0)
@@ -74,26 +74,26 @@ class RNNAutoEncoder(nn.Module): # no VAE
 
 class Legacy_RNN_VAE(nn.Module):
     @staticmethod
-    def get_vae_layers(stft_buckets, sequence_length, hidden_size, latent_size, vae_depth, vae_ratio):
+    def get_vae_layers(freq_buckets, sequence_length, hidden_size, latent_size, vae_depth, vae_ratio):
         rnn_output_size = hidden_size * sequence_length
         layers = interpolate_layer_sizes(rnn_output_size, latent_size, vae_depth, vae_ratio)
         return layers
 
 
     @staticmethod
-    def approx_trainable_parameters(stft_buckets, sequence_length, hidden_size, encode_depth, decode_depth, latent_size, vae_depth, vae_ratio):
-        rnn = RNNAutoEncoder.approx_trainable_parameters(stft_buckets, hidden_size, encode_depth, decode_depth)
-        vae_layers = RNN_VAE.get_vae_layers(stft_buckets, sequence_length, hidden_size, latent_size, vae_depth, vae_ratio)
+    def approx_trainable_parameters(freq_buckets, sequence_length, hidden_size, encode_depth, decode_depth, latent_size, vae_depth, vae_ratio):
+        rnn = RNNAutoEncoder.approx_trainable_parameters(freq_buckets, hidden_size, encode_depth, decode_depth)
+        vae_layers = RNN_VAE.get_vae_layers(freq_buckets, sequence_length, hidden_size, latent_size, vae_depth, vae_ratio)
         vae = VariationalAutoEncoder.approx_trainable_parameters(vae_layers)
         return rnn + vae
 
 
-    def __init__(self, stft_buckets, sequence_length, hidden_size, encode_depth, decode_depth, dropout, latent_size, vae_depth, vae_ratio):
+    def __init__(self, freq_buckets, sequence_length, hidden_size, encode_depth, decode_depth, dropout, latent_size, vae_depth, vae_ratio):
         super(RNN_VAE, self).__init__()
         
-        self.rnn = RNNAutoEncoder(stft_buckets, sequence_length, hidden_size, encode_depth, decode_depth, dropout)
+        self.rnn = RNNAutoEncoder(freq_buckets, sequence_length, hidden_size, encode_depth, decode_depth, dropout)
         
-        vae_layers = RNN_VAE.get_vae_layers(stft_buckets, sequence_length, hidden_size, latent_size, vae_depth, vae_ratio)
+        vae_layers = RNN_VAE.get_vae_layers(freq_buckets, sequence_length, hidden_size, latent_size, vae_depth, vae_ratio)
         self.vae = VariationalAutoEncoder(vae_layers)
         
 
