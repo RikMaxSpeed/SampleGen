@@ -88,7 +88,7 @@ def generate_training_stfts(how_many):
 
 
 # Hyper-parameter optimisation
-last_saved_loss = 100 # don't bother saving models above this threshold
+last_saved_loss = 1500 # don't bother saving models above this threshold
 
 # Keep track of all the test-losses over multiple runs, so we can learn how to terminate early on poor hyper-parameters.
 all_test_losses = []
@@ -111,23 +111,29 @@ def train_model(model_type, hyper_params, max_epochs, max_time, max_params, max_
     # Optmiser parameters:
     batch, learning_rate = opt_params
     batch_size = int(2 ** batch) # convert int64 to int32
-    learning_rate *= batch_size # see https://www.baeldung.com/cs/learning-rate-batch-size
+    #learning_rate *= batch_size # see https://www.baeldung.com/cs/learning-rate-batch-size
     weight_decay = 0
     optimiser_text = f"Adam batch={batch_size}, learning_rate={learning_rate:.2g}, weight_decay={weight_decay:.2g}"
     print(f"optimiser: {optimiser_text}")
     
     # Create the model
     model, model_text, model_size = make_model(model_type, model_params, max_params, verbose)
+    
+    size_penalty = np.log10(model_size) # slightly favour smaller models
+
     if model is None:
-        return max_loss + np.log(model_size), model_text
+        return max_loss + size_penalty, model_text
         
     trainable = count_trainable_parameters(model)
 
     model_text += f" (params={model_size:,}, trainable={trainable:,} = {100*trainable/model_size:.1f}%)"
     print(f"model: {model_text}")
-    
     description = model_text + " | " + optimiser_text
+
+    # if verbose:
+    print(model)
     
+
     # Train/Test & DataLoader
     dataloader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
     print(f"train={len(train_dataset)} samples, batch={batch_size} --> {len(train_dataset)/batch_size:.1f} batches/epoch")
@@ -136,7 +142,6 @@ def train_model(model_type, hyper_params, max_epochs, max_time, max_params, max_
     optimizer = optim.Adam(model.parameters(), lr=learning_rate, weight_decay=weight_decay)
 
     print(f"Adam: {trainable:,} trainable parameters") # check this is as expected.
-    size_penalty = np.log10(trainable)/6 # slightly favour smaller models
     print(f"model size penalty={size_penalty:.1f}")
     
     # Training loop

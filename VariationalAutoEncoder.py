@@ -10,10 +10,11 @@ from ModelUtils import *
 
 
 def reconstruction_loss(inputs, outputs):
+    return F.mse_loss(inputs, outputs, reduction='sum')
     # shape = [batch, stft, time-step]
-    scale = inputs.size(1) * inputs.size(2) # data-count irrespective of batch-size
-    assert(inputs.shape == outputs.shape)
-    return scale * F.mse_loss(inputs, outputs)
+#    scale = inputs.size(1) * inputs.size(2) # data-count irrespective of batch-size
+#    assert(inputs.shape == outputs.shape)
+#    return scale * F.mse_loss(inputs, outputs)
 
 
 def kl_divergence(mu, logvar):
