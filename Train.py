@@ -118,8 +118,7 @@ def train_model(model_type, hyper_params, max_epochs, max_time, max_params, max_
     # Optmiser parameters:
     batch, learning_rate = opt_params
     batch_size = int(2 ** batch) # convert int64 to int32
-    batch_size = 28 # hack
-    #learning_rate *= batch_size # see https://www.baeldung.com/cs/learning-rate-batch-size
+    learning_rate *= batch_size # see https://www.baeldung.com/cs/learning-rate-batch-size
     weight_decay = 0
     optimiser_text = f"Adam batch={batch_size}, learning_rate={learning_rate:.2g}, weight_decay={weight_decay:.2g}"
     print(f"optimiser: {optimiser_text}")

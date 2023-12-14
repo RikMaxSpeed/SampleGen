@@ -271,7 +271,7 @@ def testAmplitudeCodec():
     print(f"diff={diff}")
 
 
-testAmplitudeCodec()
+#testAmplitudeCodec()
 
 
 # We normalise all amplitudes to [0, 1] on input.

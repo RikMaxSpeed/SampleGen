@@ -10,20 +10,20 @@ from Device import *
 from Debug import *
 
 
-# Bunch of nasty global variables...
+#mu_law = MuLawCodec(8) # Yet another hyper-parameter but we can't tune this one as it's outside the model's loss function.
+mu_law = None
+
+# Configure the Audio -> STFT conversion
 sample_rate = 44100
 stft_size = 1024 # tried 512
 stft_buckets = 2 * stft_size # full frequency range
 stft_hop = int(stft_buckets * 3 / 4) # with some overlap
 
-#max_freq = 11_025 # strip the high frequencies
-#freq_buckets = 2 * int(max_freq * 2 * stft_size / sample_rate)
-freq_buckets = stft_size + 1
-max_freq = sample_rate / 2
+max_freq = 11_025 # strip the high frequencies
+freq_buckets = 2 * int(max_freq * 2 * stft_size / sample_rate)
 
 sample_duration = 2.0 # seconds
 sequence_length = int(sample_duration * sample_rate / stft_hop)
-input_size = stft_buckets * sequence_length
 
 print(f"Using sample rate={sample_rate} Hz, FFT={stft_buckets} buckets, hop={stft_hop} samples, duration={sample_duration:.1f} sec = {sequence_length:,} time steps")
 print(f"Max frequency={max_freq} Hz --> freq_buckets={freq_buckets}")
@@ -221,9 +221,11 @@ def convert_to_complex(reals):
     return output_tensor
 
 
-mu_law = MuLawCodec(8) # Yet another hyper-parameter but we can't tune this one as it's outside the model's loss function.
-#mu_law = None
-amps = AmplitudeCodec()
+def display_min_max(name, stft):
+    min = stft.min()
+    max = stft.max()
+    print(f"{name}: min={min:.3f}, max={max:.3f}")
+
 
 def convert_stft_to_input(stft):
     assert(stft.dtype == torch.complex64)
@@ -232,17 +234,22 @@ def convert_stft_to_input(stft):
     
     stft = adjust_stft_length(stft, sequence_length)
     
-    if amps is not None:
-        stft = amps.encode(stft)
-        stft /= torch.max(stft.abs())
-    else:
-        # Truncate the frequency range
-        stft = stft[:freq_buckets//2,:] # complex, so divide by 2.
-        stft /= torch.max(stft.abs())
-        stft = convert_to_reals(stft)
-    
+    # Truncate the frequency range
+    stft = stft[:freq_buckets//2,:] # complex, so divide by 2.
+
+    # Normalise to [-1, 1]
+    stft /= torch.max(stft.abs())
+
+    stft = convert_to_reals(stft)
+        
+    # Mu-Law
     if mu_law is not None:
         stft = mu_law.encode(stft)
+
+    # Normalise to [0, 1]
+    #stft = (1 + stft) / 2 # normalise
+    #stft = torch.sigmoid(stft)
+    #display_min_max("input", stft)
     
     assert(stft.dtype == torch.float32)
     return stft.to(device)
@@ -256,24 +263,27 @@ def convert_stft_to_output(stft):
     assert(stft.dtype == torch.float32)
     
     # Re-append truncated frequencies
-    if amps is None:
-        assert(stft.size(0) == freq_buckets)
-        missing_buckets = torch.zeros(stft_buckets - freq_buckets +2, sequence_length, device=device)
-        stft = torch.cat((stft, missing_buckets), dim = 0)
-        assert(stft.size(0) == stft_buckets + 2)
+    assert(stft.size(0) == freq_buckets)
+    missing_buckets = torch.full((stft_buckets - freq_buckets +2, sequence_length), 0.0, device=device)
+    stft = torch.cat((stft, missing_buckets), dim = 0)
+    assert(stft.size(0) == stft_buckets + 2)
+    
+    
+    #display_min_max("before", stft)
+    #stft = 2 * stft - 1
+    
+#    epsilon = 1e-5  # Small value to avoid log(0)
+#    stft = torch.clamp(stft, epsilon, 1 - epsilon)
+#    stft = torch.logit(stft)
+    #display_min_max("output", stft)
     
     if mu_law is not None:
         stft = mu_law.decode(stft)
     
-    if amps is not None:
-        stft = amps.decode(stft).cpu()
-    else:
-        stft = convert_to_complex(stft)
+    stft = convert_to_complex(stft)
     
-    # Normalise & Amplify
     global maxAmp
-    max_magnitude = torch.max(stft.abs())
-    stft *= maxAmp / max_magnitude
+    stft *= maxAmp
     
     assert(stft.dtype == torch.complex64)
     return stft.cpu().detach().numpy()
@@ -298,11 +308,9 @@ def test_stft_conversions(file_name):
     debug("original", tensor)
     input = convert_stft_to_input(tensor)
     debug("input", input)
-    print(f"input: min={input.min():.5f}, max={input.max():.5f}")
     
     output = convert_stft_to_output(input)
     debug("output", output)
-    print(f"output: min={input.min():.5f}, max={output.max():.5f}")
     
     
     global maxAmp

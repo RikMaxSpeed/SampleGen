@@ -12,7 +12,7 @@ print(f"1 sample = {freq_buckets:,} x {sequence_length:,} = {one_sample:,}")
 max_params = None
 tuning_count = 0
 break_on_exceptions = True # True=Debugging, False allows the GPR to continue even if the model blows up (useful for long tuning runs!)
-max_loss = 4000 # default
+max_loss = 10_000 # default
 
 hyper_losses = []
 hyper_names = []
@@ -99,11 +99,11 @@ def optimise_hyper_parameters(model_name):
     
     # Optimiser:
     batch = 5 # actual batch_size = 2**batch
-    lr = 1e-5
+    lr = 1e-6
     
     search_space = list()
     search_space.append(Integer(batch, batch+1,    'uniform',      name='batch')) # batch_size = 2^batch
-    search_space.append(Real   (lr,    lr * 2,    'log-uniform',  name='learning_rate')) # scaled by the batch_size
+    search_space.append(Real   (lr,    lr * 100,   'log-uniform',  name='learning_rate')) # scaled by the batch_size
 
     # Model:
     global hyper_model
@@ -121,8 +121,8 @@ def optimise_hyper_parameters(model_name):
             
         case "StepWiseMLP":
             # Train just the StepWiseMLPAutoEncode (with no VAE)
-            search_space.append(Integer(8,        16,   'uniform',      name='hidden_size'))
-            search_space.append(Integer(3,         5,   'uniform',      name='depth'))
+            search_space.append(Integer(10,       50,   'uniform',      name='hidden_size'))
+            search_space.append(Integer(2,         5,   'uniform',      name='depth'))
             search_space.append(Real   (0.1,      10,   'log-uniform',  name='ratio'))
             
         case "StepWiseVAEMLP" | "MLP_VAE":
