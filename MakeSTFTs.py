@@ -16,8 +16,10 @@ stft_size = 1024 # tried 512
 stft_buckets = 2 * stft_size # full frequency range
 stft_hop = int(stft_buckets * 3 / 4) # with some overlap
 
-max_freq = 11_025 # strip the high frequencies
-freq_buckets = 2 * int(max_freq * 2 * stft_size / sample_rate)
+#max_freq = 11_025 # strip the high frequencies
+#freq_buckets = 2 * int(max_freq * 2 * stft_size / sample_rate)
+freq_buckets = stft_size + 1
+max_freq = sample_rate / 2
 
 sample_duration = 2.0 # seconds
 sequence_length = int(sample_duration * sample_rate / stft_hop)
@@ -56,7 +58,6 @@ def exclude_frequency(freq):
 
 
 def lowest_frequency(stft, sample_rate, name):
-    #debug("lowest_frequency.stft", stft)
     assert(stft.shape[0] == stft_size + 1)
     amplitudes = np.abs(stft).sum(axis=1)
         
@@ -87,7 +88,6 @@ def lowest_frequency(stft, sample_rate, name):
 def compute_stft_from_file(file_name):
     """Computes the STFT of the audio file and returns it as a tensor"""
     sr, stft = compute_stft_for_file(file_name, stft_buckets, stft_hop)
-    #debug("compute_stft_from_file.stft", stft)
     assert(stft.shape[0] == stft_size + 1)
     
     low_hz = lowest_frequency(stft, sr, file_name)
@@ -132,7 +132,6 @@ def gather_stfts_from_directory(directory, notes, requiredSR):
                             elif exclude_frequency(low_hz):
                                 print("Skipping {}: lowest frequency={:.1f} Hz".format(filepath, low_hz))
                             else:
-                                #debug("stft_tensor", stft_tensor)
                                 stft_tensors.append(stft_tensor)
                                 file_names.append(file)
                                 print("#{}: {}".format(len(stft_tensors)+1, file))
@@ -223,24 +222,29 @@ def convert_to_complex(reals):
 
 
 mu_law = MuLawCodec(8) # Yet another hyper-parameter but we can't tune this one as it's outside the model's loss function.
-
+#mu_law = None
+amps = AmplitudeCodec()
 
 def convert_stft_to_input(stft):
+    assert(stft.dtype == torch.complex64)
     assert(len(stft.shape) == 2)
     assert(stft.shape[0] == stft_size + 1)
     
     stft = adjust_stft_length(stft, sequence_length)
     
-    # Truncate the frequency range
-    stft = stft[:freq_buckets//2,:] # complex, so divide by 2.
-    
-    maxAmp = torch.max(stft.abs())
-    stft /= maxAmp
-    stft = convert_to_reals(stft)
+    if amps is not None:
+        stft = amps.encode(stft)
+        stft /= torch.max(stft.abs())
+    else:
+        # Truncate the frequency range
+        stft = stft[:freq_buckets//2,:] # complex, so divide by 2.
+        stft /= torch.max(stft.abs())
+        stft = convert_to_reals(stft)
     
     if mu_law is not None:
         stft = mu_law.encode(stft)
     
+    assert(stft.dtype == torch.float32)
     return stft.to(device)
 
 
@@ -249,28 +253,34 @@ def convert_stfts_to_inputs(stfts):
 
 
 def convert_stft_to_output(stft):
+    assert(stft.dtype == torch.float32)
+    
     # Re-append truncated frequencies
-    assert(stft.size(0) == freq_buckets)
-    missing_buckets = torch.zeros(stft_buckets - freq_buckets +2, sequence_length, device=device)
-    stft = torch.cat((stft, missing_buckets), dim = 0)
-    assert(stft.size(0) == stft_buckets + 2)
+    if amps is None:
+        assert(stft.size(0) == freq_buckets)
+        missing_buckets = torch.zeros(stft_buckets - freq_buckets +2, sequence_length, device=device)
+        stft = torch.cat((stft, missing_buckets), dim = 0)
+        assert(stft.size(0) == stft_buckets + 2)
     
     if mu_law is not None:
         stft = mu_law.decode(stft)
     
-    stft = convert_to_complex(stft)
+    if amps is not None:
+        stft = amps.decode(stft).cpu()
+    else:
+        stft = convert_to_complex(stft)
     
     # Normalise & Amplify
     global maxAmp
-    max_magnitude = stft.abs().max()
+    max_magnitude = torch.max(stft.abs())
     stft *= maxAmp / max_magnitude
     
+    assert(stft.dtype == torch.complex64)
     return stft.cpu().detach().numpy()
 
 
 def test_stft_conversions(file_name):
     sr, stft = compute_stft_for_file(file_name, stft_buckets, stft_hop)
-    debug("stft", stft)
     stft = stft[:, :sequence_length] # truncate
     debug("truncated", stft)
     
@@ -312,7 +322,7 @@ def test_stft_conversions(file_name):
                     print("f={}, t={}, diff={:.3f}, stft={:.3f}, output={:.3f}".format(f, t, d, stft[f, t], output[f, t]))
 
 
-#test_stft_conversions("Samples/Piano C4 Major 13.wav")
+test_stft_conversions("Samples/Piano C4 Major 13.wav")
 #test_stft_conversions("/Users/Richard/Coding/WaveFiles/FreeWaveSamples/Alesis-S4-Plus-Clean-Gtr-C4.wav")
 #sys.exit(1)
 

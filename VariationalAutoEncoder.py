@@ -24,7 +24,7 @@ def vae_loss_function(inputs, outputs, mu, logvar):
     loss = error + kl_div
     #print(f"loss={loss:.2f} <-- reconstruction={error:.2f} + kl_divergence={kl_div:.2f}")
 
-    return loss / inputs[0].numel()
+    return loss #/ inputs[0].numel()
     
 
 def vae_reparameterize(mu, logvar):

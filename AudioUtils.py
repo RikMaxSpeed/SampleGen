@@ -167,11 +167,11 @@ def print_all_audio_devices_info():
         print("-" * 50)
 
 
-#def amplitude_to_dB(amplitude):
-#    return 20.0 * torch.log10(torch.clamp(amplitude, min=1e-5))  # Added clamp to avoid log(0)
-#
-#def dB_to_amplitude(dB):
-#    return 10.0 ** (dB / 20.0)
+def amplitude_to_dB(amplitude):
+    return 20.0 * torch.log10(torch.clamp(amplitude, min=1e-5))  # Added clamp to avoid log(0)
+
+def dB_to_amplitude(dB):
+    return 10.0 ** (dB / 20.0)
 
 
 ## WaveNet uses Mu-Law encoding which is simlar but constrained to the range [-1, 1].
@@ -240,6 +240,40 @@ class MuLawCodec:
 codec = MuLawCodec(2) # Yet another hyper-parameter but we can't tune this one as it's outside the model's loss function.
 
 
+
+class AmplitudeCodec:
+#    def __init__(self):
+
+    def encode(self, x):
+        return x.abs()
+
+    def decode(self, y):
+        stacked = torch.stack([y, torch.zeros_like(y)], dim=-1)
+        return torch.view_as_complex(stacked)
+
+
+def testAmplitudeCodec():
+    codec = AmplitudeCodec()
+    
+    complex = torch.rand(5, 3, dtype=torch.complex32)
+    print(f"complex={complex}")
+    
+    amplitudes = codec.encode(complex)
+    print(f"amplitudes={amplitudes}")
+
+    decode = codec.decode(amplitudes)
+    print(f"decode={decode}")
+    
+    recode = codec.encode(decode)
+    print(f"recode={recode}")
+    
+    diff = (recode - amplitudes).abs()
+    print(f"diff={diff}")
+
+
+testAmplitudeCodec()
+
+
 # We normalise all amplitudes to [0, 1] on input.
 # But when we convert back to audio we need to amplify the signal again.
 maxAmp = 278.0 # Average across all training samples - this is just to get a reasonable playback level.
@@ -251,10 +285,6 @@ def complex_to_mulaw(complex_tensor):
     
     max = torch.max(magnitude)
     
-#    if max > maxAmp:
-#        maxAmp = max
-#        print("*** warning: max={:.1f} --> {:.1f} !!".format(max, maxAmp))
-
     return codec.encode(magnitude / max)
     
     

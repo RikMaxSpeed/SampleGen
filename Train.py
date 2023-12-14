@@ -118,6 +118,7 @@ def train_model(model_type, hyper_params, max_epochs, max_time, max_params, max_
     # Optmiser parameters:
     batch, learning_rate = opt_params
     batch_size = int(2 ** batch) # convert int64 to int32
+    batch_size = 28 # hack
     #learning_rate *= batch_size # see https://www.baeldung.com/cs/learning-rate-batch-size
     weight_decay = 0
     optimiser_text = f"Adam batch={batch_size}, learning_rate={learning_rate:.2g}, weight_decay={weight_decay:.2g}"
@@ -154,11 +155,11 @@ def train_model(model_type, hyper_params, max_epochs, max_time, max_params, max_
     test_losses = []
     
     # Stopping condition
-    window     = 5 # check average progress between two windows
+    window     = 15 # check average progress between two windows
     min_change = 0.005 # stop if lossNew/lossOld - 1 < min_change
 
-    if max_overfit >= 1.5:
-        window = 10 # allow the model longer to recover from any exploratory excursions.
+#    if max_overfit >= 1.5:
+#        window = 10 # allow the model longer to recover from any exploratory excursions.
         
     # Plot a graph of the loss vs epoch at regular intervals
     graph_interval = 5
