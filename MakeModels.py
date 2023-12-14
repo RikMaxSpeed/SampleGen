@@ -2,8 +2,9 @@ from Debug import *
 from MakeSTFTs import *
 from ModelUtils import *
 from STFT_VAE import *
-from MLP_VAE import *
-from RNN_VAE import *
+from MLP_AE import *
+from RNN_AE import *
+from RNN_FaT import *
 import ast
 
 
@@ -116,9 +117,9 @@ def make_model(model_type, model_params, max_params, verbose):
         case "MLPVAE_Incremental":
             mlp_name, mlp_params, file_name = get_best_configuration_for_model("StepWiseMLP")
             mlp_params = mlp_params[2:] # remove the optimiser params
-            new_params = mlp_params + model_params # add the VAE params.
+            combined_params = mlp_params + model_params # add the VAE params.
 
-            hidden_size, mlp_depth, mlp_ratio, latent_size, vae_depth, vae_ratio = new_params
+            hidden_size, mlp_depth, mlp_ratio, latent_size, vae_depth, vae_ratio = combined_params
             model_text = f"{model_type} hidden={hidden_size}, depth={mlp_depth}, ratio={mlp_ratio:.1f}, latent={latent_size}, VAE depth={vae_depth}, VAE ratio={vae_ratio:.2f}"
             print(model_text)
 
@@ -164,17 +165,29 @@ def make_model(model_type, model_params, max_params, verbose):
         case "RNN_VAE_Incremental": # We load a trained RNN Auto-Encoder, and train a further lever of compression using a VAE.
             rnn_name, rnn_params, file_name = get_best_configuration_for_model("RNNAutoEncoder")
             rnn_params = rnn_params[2:] # remove the optimiser params
-            new_params = rnn_params + model_params # add the VAE params.
-
-            model, model_text, approx_size, vae_size = make_RNN_VAE(model_type, new_params, max_params)
+            print(f"rnn_params={rnn_params}")
+            print(f"model_params={model_params}")
+            combined_params = rnn_params + model_params # add the VAE params.
+            print(f"combined={combined_params}")
+            model, model_text, approx_size, vae_size = make_RNN_VAE(model_type, combined_params, max_params)
             if is_too_large(approx_size, max_params):
                 return invalid_model(approx_size)
             
             # Incremental training: load the previous saved state, and freeze the layers we won't re-train
             load_weights_and_biases(model.auto_encoder, file_name)
-            freeze_model(rnn)
+            freeze_model(model.auto_encoder)
             approx_size = vae_size # we're not re-training the RNN parameters
 
+        case "RNN_F&T":
+            freq_size, freq_depth, time_size, time_depth = [int(x) for x in model_params] # convert int64 to int32
+            model_text = f"{model_type} frequency={freq_size} x {freq_depth}, time={time_size} x {time_depth}"
+            print(model_text)
+            approx_size = RNNFreqAndTime.approx_trainable_parameters(freq_buckets, sequence_length, freq_size, freq_depth, time_size, time_depth)
+            if is_too_large(approx_size, max_params):
+                return invalid_model(approx_size)
+                
+            dropout = 0
+            model = RNNFreqAndTime(freq_buckets, sequence_length, freq_size, freq_depth, time_size, time_depth, dropout)
         
         case _:
             raise Exception(f"Unknown model: {model_type}")

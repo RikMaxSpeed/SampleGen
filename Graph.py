@@ -2,7 +2,66 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.stats import qmc, gmean, norm
 import torch
+import time
 from Debug import *
+
+
+start_time = time.time()
+
+def total_time():
+    return time.time() - start_time
+
+
+
+# Crazy idea: let's make training videos!
+import matplotlib.pyplot as plt
+import numpy as np
+import imageio.v2 as imageio
+import io
+
+class PlotVideoMaker:
+    def __init__(self):
+        self.images = []
+
+    def add_plot(self, show):
+        # Save the current figure as an in-memory image and add to the list
+        buf = io.BytesIO()
+        plt.savefig(buf, format='png')
+        buf.seek(0)
+        image = imageio.imread(buf)
+        self.images.append(image)
+        buf.close()
+
+        # Optionally display
+        if show:
+            plt.show()
+        else:
+            plt.close()
+
+    def save_video(self, file_name, fps):
+        # Save the images as an animated GIF
+        imageio.mimsave(file_name, self.images, duration=1000/fps)
+
+
+if __name__ == '__main__':
+    plot_video_maker = PlotVideoMaker()
+
+    # Create some plots independently and add them to the video maker
+    x = np.linspace(0, 2 * np.pi, 100)
+    frames = 60
+    fps = 30
+    for i in range(frames):
+        #plt.figure()  # Create a new figure for each plot
+        y = np.sin(x + 2 * np.pi * i / frames)
+        plt.plot(x, y)
+        plt.title(f"frame#{i+1:>2}")
+        plot_video_maker.add_plot(False)  # Add the current plot to the video maker
+
+    # Save the plots as a GIF
+    plot_video_maker.save_video('sine_wave_animation.gif', fps)
+
+    exit()
+
 
 # Heuristic of number of buckets in a histogram
 def sturges(N):
@@ -176,7 +235,7 @@ def plot_multiple_losses(losses, names, min_count, title):
         
     title = title + ": loss vs epoch"
     if len(losses) > 1:
-        title += f" for {len(losses)} runs"
+        title += f" for {len(losses)} runs ({int(total_time()):,} sec)"
         
     plt.title(title)
     plt.ylabel("Loss (log scale)")
@@ -217,7 +276,7 @@ def plot_hypertrain_loss(loss, names, model_name):
     plt.xlabel("Run")
     plt.ylabel("Loss (log scale)")
     plt.legend()
-    plt.title(f"{model_name} hyper-parameter optimisation: loss over {len(loss)} runs")
+    plt.title(f"{model_name} hyper-parameter optimisation: loss over {len(loss)} runs ({int(total_time()):,} sec)")
     plt.show()
     
     
@@ -260,11 +319,13 @@ def plot_bar_charts(encodings, names, title):
 #plot_bar_charts([[1, 2, 3], [2, 4, 8], [-3, 6, 9]], ["counting", "powers", "threes"], "demo")
 
 
+
 def normalize_tensor(tensor):
     tensor_min = tensor.min()
     tensor_max = tensor.max()
     normalized_tensor = (tensor - tensor_min) / (tensor_max - tensor_min)
     return normalized_tensor
+
 
 def display_image(ax, image, title, colour_map = 'gray'):
     image = normalize_tensor(image)
@@ -275,6 +336,7 @@ def display_image(ax, image, title, colour_map = 'gray'):
     ax.set_frame_on(False)  # Remove frame around the image
     if title:
         ax.set_title(title)
+
 
 def display_image_grid(images, title, colour_map = 'gray', min_width=15):
     count = len(images)
@@ -310,4 +372,5 @@ def display_image_grid(images, title, colour_map = 'gray', min_width=15):
 
 #images = [torch.rand(57, 150).mul(np.random.uniform(x)) for x in range(11)]
 #display_image_grid(images, "Example")
+
 

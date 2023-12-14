@@ -88,7 +88,7 @@ def stop_condition(train_losses, test_losses, window, min_change, max_overfit, t
     now = time.time()
     if now - last_progress > progress_seconds:
         last_progress = now
-        print("total={:.0f} sec, epoch={} ({:.1f} sec/epoch), train={:.4f} ({:.2f}%), test={:.4f} ({:.2f}%), overfit={:.2f}"\
+        print("total={:.0f} sec, epoch={} ({:.1f} sec/epoch), train={:.1f} ({:.2f}%), test={:.1f} ({:.2f}%), overfit={:.2f}"\
         .format(total, epochs, total/epochs, train_losses[-1], delta(train_losses), test_losses[-1], delta(test_losses), test_losses[-1]/train_losses[-1]))
         
     if len(test_losses) < 2*window: # Too few epochs
@@ -105,7 +105,7 @@ def stop_condition(train_losses, test_losses, window, min_change, max_overfit, t
     # This means we can allow overfitting which is helpful in some use-cases.
     # Use max_overfit to stop early once the test loss is stuck.
     if abs(train_change) < min_change and abs(test_change) < min_change:
-        print("Model stalled.")
+        print("Training stalled.")
         return True
     
     overfit = test_loss / train_loss
@@ -229,15 +229,16 @@ def set_display_hiddens(onOff):
     global do_display_hiddens
     do_display_hiddens = onOff
     
-def periodically_display_hiddens(hiddens):
+def periodically_display_2D_output(hiddens):
 
     global count, last_count, do_display_hiddens
     if do_display_hiddens:
         count += hiddens.size(0)
         
-        if count - last_count > 5000: # approx every 5 epochs
+        if count - last_count > 10_000: # approx every 5 epochs
             last_count = count
             hiddens = hiddens.detach().cpu()
             width = hiddens[0].size(0)
             height = hiddens[0].size(1)
-            display_image_grid(hiddens, f"Hidden outputs {width} x {height}", "summer") # was "magma"
+            display_image_grid(hiddens.transpose(2, 1), f"Hidden outputs {width} x {height}", "magma")
+

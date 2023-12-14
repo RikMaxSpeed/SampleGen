@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from ModelUtils import interpolate_layer_sizes, fully_connected_size, periodically_display_hiddens
+from ModelUtils import interpolate_layer_sizes, fully_connected_size, periodically_display_2D_output
 from VariationalAutoEncoder import *
 
 # Here we create 2 models: the first applies an MLP to each spectrogram frame, the second combines this with the VAE.
@@ -11,7 +11,7 @@ from VariationalAutoEncoder import *
 
 ##########################################################################################
 # Step-Wise MLP Auto-encoder (with no VAE)
-# At each step in the STFT, we run a MLP using as input the previous and current frames, and output a 'control' result.
+# At each step in the STFT, we run a MLP using as input the previous and current frames, and output a 'features' result.
 # The goals are that the MLP learns how to predict a frame from the previous frame, and to generate key descriptive parameters at each step.
 # On further reading, it looks like this could be replaced with an RNN, I will give that a go!
 
@@ -62,7 +62,7 @@ class StepWiseMLPAutoEncoder(nn.Module):
             curr_stft = x[:, :, t]
             combined_input = torch.cat([prev_stft, curr_stft, time_step], dim=1)
             
-            # Update control parameters
+            # Update features parameters
             result = self.encoder(combined_input)
             hiddens[:, :, t] = result
 
@@ -70,7 +70,7 @@ class StepWiseMLPAutoEncoder(nn.Module):
             prev_stft = curr_stft #.clone() do we need to clone here??
 
 
-        periodically_display_hiddens(hiddens)
+        periodically_display_2D_output(hiddens)
         
         hiddens = hiddens.flatten(-2)
         assert(hiddens.size(0) == batch_size)
@@ -94,7 +94,7 @@ class StepWiseMLPAutoEncoder(nn.Module):
         for t in range(self.sequence_length):
             time_step = torch.full((batch_size, 1), t / float(self.sequence_length), dtype=torch.float32).to(device)
 
-            # Concatenate control parameters and previous STFT
+            # Concatenate features and previous STFT
             combined_input = torch.cat([hiddens[:, :, t], prev_stft, time_step], dim=1)
             
             # Update previous STFT frame with the output of the decoder
@@ -116,65 +116,3 @@ class StepWiseMLPAutoEncoder(nn.Module):
         outputs = self.forward(inputs)
         loss = reconstruction_loss(inputs, outputs)
         return loss, outputs
-
-
-
-
-##########################################################################################
-# Step-Wise MLP Auto-encoder with VAE
-# Here we combine the StepWiseMLP model with the VAE auto-encoder.
-# It might actually be possible to train them separately, ie: first optimise the StepWiseMLP, then use the VAE to further compress the data.
-
-class Legacy_StepWiseMLP_VAE(nn.Module):
-    @staticmethod
-    def get_vae_layers(freq_buckets, sequence_length, hidden_size, depth, ratio, latent_size, vae_depth, vae_ratio):
-        stepwise_output_size = hidden_size * sequence_length
-        layers = interpolate_layer_sizes(stepwise_output_size, latent_size, vae_depth, vae_ratio)
-        return layers
-
-
-    @staticmethod
-    def approx_trainable_parameters(freq_buckets, sequence_length, hidden_size, depth, ratio, latent_size, vae_depth, vae_ratio):
-        stepwise = StepWiseMLPAutoEncoder.approx_trainable_parameters(freq_buckets, hidden_size, depth, ratio)
-        vae_layers = StepWiseMLP_VAE.get_vae_layers(freq_buckets, sequence_length, hidden_size, depth, ratio, latent_size, vae_depth, vae_ratio)
-        vae = VariationalAutoEncoder.approx_trainable_parameters(vae_layers)
-        return stepwise + vae
-
-
-    def __init__(self, freq_buckets, sequence_length, hidden_size, depth, ratio, latent_size, vae_depth, vae_ratio):
-        super(StepWiseMLP_VAE, self).__init__()
-        
-        self.stepwise = StepWiseMLPAutoEncoder(freq_buckets, sequence_length, hidden_size, depth, ratio)
-        
-        vae_layers = StepWiseMLP_VAE.get_vae_layers(freq_buckets, sequence_length, hidden_size, depth, ratio, latent_size, vae_depth, vae_ratio)
-        self.vae = VariationalAutoEncoder(vae_layers)
-
-    def encode(self, x):
-        hiddens = self.stepwise.encode(x)
-        mu, logvar = self.vae.encode(hiddens)
-        return mu, logvar
-
-
-    def decode(self, z):
-        hiddens = self.vae.decode(z)
-        stft = self.stepwise.decode(hiddens)
-        return stft
-
-
-    def forward(self, x):
-        mu, logvar = self.encode(x)
-        z = vae_reparameterize(mu, logvar)
-        return self.decode(z), mu, logvar
-        
-        
-    def forward_loss(self, inputs):
-        outputs, mus, logvars = self.forward(inputs)
-        loss = vae_loss_function(inputs, outputs, mus, logvars)
-        return loss, outputs
-
-
-    def load_outer_layers(self, file_name):
-        self.stepwise.load_outer_layers(file_name)
-
-    def freeze_outer_layers(self):
-        self.stepwise.freeze_outer_layers()

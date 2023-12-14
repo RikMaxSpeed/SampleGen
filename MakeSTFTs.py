@@ -330,7 +330,7 @@ def test_stft_conversions(file_name):
                     print("f={}, t={}, diff={:.3f}, stft={:.3f}, output={:.3f}".format(f, t, d, stft[f, t], output[f, t]))
 
 
-test_stft_conversions("Samples/Piano C4 Major 13.wav")
+#test_stft_conversions("Samples/Piano C4 Major 13.wav")
 #test_stft_conversions("/Users/Richard/Coding/WaveFiles/FreeWaveSamples/Alesis-S4-Plus-Clean-Gtr-C4.wav")
 #sys.exit(1)
 
@@ -354,11 +354,12 @@ def select_diverse_tensors(tensor_array, names, N):
     # Find the tensor closest to the average
     closest_tensor_index = torch.argmin(torch.norm(tensor_array - average_tensor, dim=(1, 2)))
     diverse_subset = [tensor_array[closest_tensor_index]]
+    diverse_names = [names[closest_tensor_index]]
     
     # Mask to keep track of selected tensors
     selected_mask = torch.zeros(len(tensor_array), dtype=torch.bool)
     selected_mask[closest_tensor_index] = True
-    print(f"Most average: {names[closest_tensor_index]}")
+    #print(f"Most average: {names[closest_tensor_index]}")
 
     # Iteratively add tensors
     for _ in range(1, N):
@@ -373,7 +374,9 @@ def select_diverse_tensors(tensor_array, names, N):
         # Add the furthest tensor to the subset and update the mask
         diverse_subset.append(tensor_array[furthest_tensor_index])
         selected_mask[furthest_tensor_index] = True
-        print(f"Furthest: {names[furthest_tensor_index]}")
+        diverse_names.append(names[furthest_tensor_index])
+    
+    print(f"Most diverse {len(diverse_subset)} samples: {diverse_names}")
     
     return torch.stack(diverse_subset)
 

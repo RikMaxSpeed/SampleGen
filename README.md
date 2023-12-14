@@ -50,7 +50,7 @@ An auto-encoder presents itself as a natural choice as we are interested in both
 
 After some exploration with simple models, I bumped into some well documented problems: 
 - when interpolating between encoded samples, I would frequently get silence (!!), and occasionally horrible noise. 
-- the variables in the control dimensions had no definite range, which also made it difficult to generate new random samples.
+- the variables in the latent dimensions had no definite range, which also made it difficult to generate new random samples.
 
 This is because the auto-encoded values have no constraints over them, random values might simply point to regions of emptiness which the model has never seen before.
 
@@ -66,7 +66,7 @@ My initial auto-encoder model was simply four fully-connected layers, the decode
  
 I then started looking at models that could interpolate across the frequency spectrum and across time in a more reasonable manner.
 
-1: MLP: at each time-step, an MLP is trained using the previous spectrogram slice (initialised to 0 for the first slice) and the current slice, it outputs a vecto of "control" variables. The decoder is a symmetric version of this process, taking in the prevoius generated slice (0s initially) and the control variables, and generates the corresponding spectrogram slice. 
+1: MLP: at each time-step, an MLP is trained using the previous spectrogram slice (initialised to 0 for the first slice) and the current slice, it outputs a vector of "control" variables. The decoder is a symmetric version of this process, taking in the prevoius generated slice (0s initially) and the control variables, and generates the corresponding spectrogram slice. 
 
 2: RNN: in a similar way, an RNN is trained at each time step, learning how best to summarise 1 time-step into a set of control variables.
 

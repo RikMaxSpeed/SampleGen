@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from ModelUtils import rnn_size, periodically_display_hiddens
+from ModelUtils import rnn_size, periodically_display_2D_output
 from VariationalAutoEncoder import reconstruction_loss, VariationalAutoEncoder
 from ModelUtils import interpolate_layer_sizes, count_trainable_parameters
 
@@ -41,7 +41,9 @@ class RNNAutoEncoder(nn.Module): # no VAE
         # Check that the encoded layer is between -1 and 1
         #print(f"RNNAutoEncoder: hidden={hiddens.shape}, min={hiddens.min():.3f}, max={hiddens.max():.3f}")
         #assert(hiddens.abs().max() <= 1)
-        periodically_display_hiddens(hiddens)
+        hiddens = torch.sigmoid(hiddens)
+        
+        periodically_display_2D_output(hiddens)
 
         hiddens = hiddens.flatten(-2)
         
@@ -65,57 +67,4 @@ class RNNAutoEncoder(nn.Module): # no VAE
     def forward_loss(self, inputs):
         outputs = self.forward(inputs)
         loss = reconstruction_loss(inputs, outputs)
-        return loss, outputs
-
-
-##########################################################################################
-# Here we combine the RNN-AutoEncoder with the VAE auto-encoder.
-# It might actually be possible to train them separately, ie: first optimise the RNN, then use the VAE to further compress the data.
-
-class Legacy_RNN_VAE(nn.Module):
-    @staticmethod
-    def get_vae_layers(freq_buckets, sequence_length, hidden_size, latent_size, vae_depth, vae_ratio):
-        rnn_output_size = hidden_size * sequence_length
-        layers = interpolate_layer_sizes(rnn_output_size, latent_size, vae_depth, vae_ratio)
-        return layers
-
-
-    @staticmethod
-    def approx_trainable_parameters(freq_buckets, sequence_length, hidden_size, encode_depth, decode_depth, latent_size, vae_depth, vae_ratio):
-        rnn = RNNAutoEncoder.approx_trainable_parameters(freq_buckets, hidden_size, encode_depth, decode_depth)
-        vae_layers = RNN_VAE.get_vae_layers(freq_buckets, sequence_length, hidden_size, latent_size, vae_depth, vae_ratio)
-        vae = VariationalAutoEncoder.approx_trainable_parameters(vae_layers)
-        return rnn + vae
-
-
-    def __init__(self, freq_buckets, sequence_length, hidden_size, encode_depth, decode_depth, dropout, latent_size, vae_depth, vae_ratio):
-        super(RNN_VAE, self).__init__()
-        
-        self.rnn = RNNAutoEncoder(freq_buckets, sequence_length, hidden_size, encode_depth, decode_depth, dropout)
-        
-        vae_layers = RNN_VAE.get_vae_layers(freq_buckets, sequence_length, hidden_size, latent_size, vae_depth, vae_ratio)
-        self.vae = VariationalAutoEncoder(vae_layers)
-        
-
-    def encode(self, x):
-        hiddens = self.rnn.encode(x)
-        mu, logvar = self.vae.encode(hiddens)
-        return mu, logvar
-
-
-    def decode(self, z):
-        hiddens = self.vae.decode(z)
-        stft = self.rnn.decode(hiddens)
-        return stft
-
-
-    def forward(self, x):
-        mu, logvar = self.encode(x)
-        z = vae_reparameterize(mu, logvar)
-        return self.decode(z), mu, logvar
-        
-                
-    def forward_loss(self, inputs):
-        outputs, mus, logvars = self.forward(inputs)
-        loss = vae_loss_function(inputs, outputs, mus, logvars)
         return loss, outputs
