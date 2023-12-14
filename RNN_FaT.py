@@ -39,9 +39,9 @@ class RNNFreqAndTime(nn.Module): # no VAE
         self.encode_time = torch.nn.RNN(sequence_length, time_size, num_layers = time_depth, batch_first = True, dropout = dropout)
         self.decode_time = torch.nn.RNN(time_size, sequence_length, num_layers = time_depth, batch_first = True, dropout = dropout)
 
+        compression = (freq_buckets * sequence_length) / (freq_size * time_size)
         
-        
-        print(f"RNNAutoEncoder {count_trainable_parameters(self):,} parameters, compression={freq_buckets/freq_size:.1f}")        
+        print(f"RNN Frequency & Time {count_trainable_parameters(self):,} parameters, compression={compression:.1f}")
         
     def encode(self, x):
         batch_size = x.size(0)
@@ -54,7 +54,7 @@ class RNNFreqAndTime(nn.Module): # no VAE
 
         periodically_display_2D_output(x)
 
-        x = torch.sigmoid(x)
+        #x = torch.tanh(x) # Unnecessary as the RNN uses TanH by default.
 
         x = x.flatten(-2)
         

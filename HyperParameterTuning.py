@@ -165,10 +165,10 @@ def optimise_hyper_parameters(model_name):
             search_space.append(Real   (0.1,      10,   'uniform',      name='vae_ratio'))
         
         case "RNN_F&T":
-            search_space.append(Integer(10,      50,   'uniform',       name='freq_size'))
-            search_space.append(Integer(2,        6,   'uniform',       name='freq_depth'))
-            search_space.append(Integer(10,      28,   'uniform',       name='time_size'))
-            search_space.append(Integer(2,        6,   'uniform',       name='time_depth'))
+            search_space.append(Integer(10,     100,   'log-uniform',       name='freq_size'))
+            search_space.append(Integer(1,        3,   'log-uniform',       name='freq_depth'))
+            search_space.append(Integer(10,      40,   'log-uniform',       name='time_size'))
+            search_space.append(Integer(1,        3,   'log-uniform',       name='time_depth'))
 
         
         case _:
@@ -208,8 +208,8 @@ def train_best_params(model_name):
     max_epochs = 2000 # we don't hit this in practice.
     max_loss = 1e9
     
-    params[0] =  2 # override the batch-size
-    params[1] = -7 # override the learning rate
+#    params[0] =  2 # override the batch-size
+#    params[1] = -7 # override the learning rate
     
     #set_display_hiddens(True) # Displays the internal auto-encoder output
     

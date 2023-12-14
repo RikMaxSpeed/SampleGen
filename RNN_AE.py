@@ -41,7 +41,7 @@ class RNNAutoEncoder(nn.Module): # no VAE
         # Check that the encoded layer is between -1 and 1
         #print(f"RNNAutoEncoder: hidden={hiddens.shape}, min={hiddens.min():.3f}, max={hiddens.max():.3f}")
         #assert(hiddens.abs().max() <= 1)
-        hiddens = torch.sigmoid(hiddens)
+        #hiddens = torch.sigmoid(hiddens) # do we really need this?
         
         periodically_display_2D_output(hiddens)
 

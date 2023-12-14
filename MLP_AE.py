@@ -77,7 +77,7 @@ class StepWiseMLPAutoEncoder(nn.Module):
         assert(hiddens.size(1) == self.sequence_length * self.hidden_size)
         #assert(hiddens.abs().max() <= 1)
         
-        hiddens = torch.sigmoid(hiddens)
+        hiddens = torch.tanh(hiddens)
         
         return hiddens
 
