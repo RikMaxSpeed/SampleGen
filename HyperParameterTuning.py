@@ -89,7 +89,7 @@ def generate_parameters(search_space, amount):
 def optimise_hyper_parameters(model_name):
     # use a smaller data-set here to speed things up? Could favour small models that can't handle the entire data-set.
     #samples, _ = generate_training_stfts(None)
-    samples, _ = generate_training_stfts(100)
+    samples, _ = generate_training_stfts(160) # 10 x batch=16
     print(f"Training data set has {samples} samples.")
     
     global max_params, max_loss
@@ -99,7 +99,7 @@ def optimise_hyper_parameters(model_name):
     
     # Optimiser:
     search_space = list()
-    search_space.append(Integer(4,      6,    'uniform',  name='batch'))         # batch_size = 2^batch
+    search_space.append(Integer(3,      6,    'log-uniform',  name='batch'))         # batch_size = 2^batch
     search_space.append(Integer(-7,    -3,    'uniform',  name='learning_rate')) # 10^lr * batch_size
 
     # Model:
@@ -177,6 +177,7 @@ def optimise_hyper_parameters(model_name):
 
     print("Optimising hyper-parameters:")
     display(search_space)
+    start_new_stft_video(f"STFT - hyper-train {model_name}")
 
     # Generate starting parameters, around the minimum sizes which tend to generate smaller networks
     if False:
@@ -196,13 +197,17 @@ def optimise_hyper_parameters(model_name):
 
 
 
-def train_best_params(model_name):
+def train_best_params(model_name, params = None):
     #generate_training_stfts(100) # Small dataset of the most diverse samples
     generate_training_stfts(None) # Full dataset with no augmentation
     #generate_training_stfts(3000) # use a large number of samples with augmentation
     
-    model_name, params, _ = get_best_configuration_for_model(model_name)
-
+    if params is None:
+        model_name, params, _ = get_best_configuration_for_model(model_name)
+        
+    print(f"train_best_params: {model_name}: {params}")
+    start_new_stft_video(f"STFT - train {model_name}")
+    
     max_time = 12 * 3600 # we should converge way before this!
     max_overfit = 100.0 # ignore: we're aiming for the highest precision possible on the training set
     max_params = 1e9 # ignore - we want high fidelity on the training set, though this could result in less diversity on the generated audio... Mmm...
@@ -220,7 +225,15 @@ def train_best_params(model_name):
 
 
 if __name__ == '__main__':
-    model_name = "StepWiseMLP"
+    # Edit this to perform whatever operation is required.
+    
+    #config = "StepWiseMLP", None # hyper-optimised
+    #config = "MLP_VAE", None
+    #config = "MLPVAE_Incremental", None
+    config = "StepWiseMLP", [3, -5, 35, 4, 0.1] # hand-specified
+    
+    model_name, params = config
+    
     #optimise_hyper_parameters(model_name)
-    train_best_params(model_name)
+    train_best_params(model_name, params)
 

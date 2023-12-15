@@ -3,6 +3,7 @@ from MakeModels import load_saved_model
 from SampleCategory import *
 from Train import predict_stft
 from Graph import *
+from VariationalAutoEncoder import vae_reparameterize
 
 import matplotlib.patches as patches
 
@@ -77,33 +78,46 @@ class Sample_Generator():
         raise Exception(f"No sample matches '{pattern}' :(")
 
 
-    def encode_sample_matching(self, pattern):
+    def is_vae(self):
+        return "V" in self.model_name # simple, but a bit hacky!!
+
+
+    def encode_input(self, stft, noise_range):
+        if self.is_vae():
+            mu, logvar = self.model.encode(stft)
+            return vae_reparameterize(mu, logvar * noise_range)
+        else:
+            encode = self.model.encode(stft)
+            encode += (2 * torch.randn(encode.shape) - 1) * noise_range
+            return encode
+
+
+    def encode_sample_matching(self, pattern, noise_range):
         name, stft = self.find_samples_matching(pattern)
         input_stft = convert_stft_to_input(stft).unsqueeze(0).to(device)
-        encode = self.model.encode(input_stft, False)
+        encode = self.encode_input(input_stft, noise_range)
         print(f"Encoded {name} to {encode.shape}")
         return name, stft.numpy(), encode
 
 
-    def decode_and_save(self, encode, save_to_file, play_sound):
+    def decode_and_save(self, encode_z, save_to_file, play_sound):
         with torch.no_grad():
-            decode = self.model.decode(encode)
+            decode = self.model.decode(encode_z)
             
-        stft = convert_stft_to_output(decode)
+        stft = convert_stft_to_output(decode[0])
     
         plot_stft(save_to_file, stft, sample_rate, stft_hop)
         save_and_play_audio_from_stft(stft, sample_rate, stft_hop, "Results/" + save_to_file + ".wav", play_sound)
 
     
     def interpolate_vae(self, pattern1, pattern2, play_sound=True, steps = 5):
-        name1, stft1, encode1 = self.encode_sample_matching(pattern1)
-        name2, stft2, encode2 = self.encode_sample_matching(pattern2)
+        name1, stft1, encode1 = self.encode_sample_matching(pattern1, 0.0)
+        name2, stft2, encode2 = self.encode_sample_matching(pattern2, 0.0)
         
-        #plot_multiple_histograms_vs_gaussian([numpify(encode1), numpify(encode2)], [name1, name2])
         plot_bar_charts([numpify(encode1), numpify(encode2)], [name1, name2], self.model_name + " encodings")
         
         plot_stft(name1, stft1, sample_rate, stft_hop)
-        save_and_play_audio_from_stft(stft1, sample_rate, stft_hop, None, play_sound)
+        save_and_play_audio_from_stft(stft1, sample_rate, stft_hop, None, play_sound) # broken
 
         for i in range(steps):
             t = i / (steps - 1)
@@ -112,7 +126,7 @@ class Sample_Generator():
             self.decode_and_save(encode, save_file, play_sound)
 
         plot_stft(name2, stft2, sample_rate, stft_hop)
-        save_and_play_audio_from_stft(stft2, sample_rate, stft_hop, None, play_sound)
+        save_and_play_audio_from_stft(stft2, sample_rate, stft_hop, None, play_sound) # broken
 
 
     def interpolate_no_ai(self, pattern1, pattern2, play_sound=True, steps = 5):
@@ -149,17 +163,14 @@ class Sample_Generator():
             save_and_play_audio_from_stft(stft, sample_rate, stft_hop, "Results/" + save_file + ".wav", play_sound)
 
 
-    def randomise_sample(self, pattern, max_noise=1, play_sound=True, steps=5):
-        name, stft, encode = self.encode_sample_matching(pattern)
-        #plot_multiple_histograms_vs_gaussian([numpify(encode)], [name])
+    def randomise_sample(self, pattern, max_noise=2, play_sound=True, steps=5):
+        name, stft, encode = self.encode_sample_matching(pattern, 0.0)
         plot_bar_charts([numpify(encode)], [name], self.model_name + " encoding")
 
         for i in range(steps):
             amount = max_noise * i / (steps - 1)
-            
-            noise = (amount * (2 * torch.rand(encode.shape) - 1)).to(device)
-            noisy_encode = encode * (1 + noise) # This can become extremely loud?
-            save_file = f"noise={100*amount:.1f}% {name}"
+            name, stft, noisy_encode = self.encode_sample_matching(name, amount)
+            save_file = f"{self.model_name}: noise={100*amount:.1f}% {name}"
             self.decode_and_save(noisy_encode, save_file, play_sound)
 
 
@@ -173,24 +184,30 @@ class Sample_Generator():
     
     
     def generate_main_encodings(self, values, play_sound=True):
+        start_new_stft_video(f"{self.model_name} - main encodings", False)
         # Determine the latent size:
         stft = self.stfts[0]
         input_stft = convert_stft_to_input(stft).unsqueeze(0).to(device)
-        encode = self.model.encode(input_stft)
-        debug("encode", encode)
-        latent_size = encode.shape[1]
+        
+        with torch.no_grad():
+            mu, logvar = self.model.encode(input_stft)
+            
+        print(f"encode: mu={mu}, logvar={logvar}")
+        latent_size = mu.size(1)
         print(f"latent_size={latent_size}")
         
         # Decode each variable one by one
         for var in range(latent_size):
-            encode = torch.zeros(encode.shape).to(device)
+            mus  = torch.zeros(mu.shape).to(device)
+            vars = torch.zeros(logvar.shape).to(device)
+            
             for value in values:
                 if value == 0 and var > 0: # we only need to generate 0,0,0,0... once
                     continue
                     
-                encode[0, var] = value
-                self.decode_and_save(encode, f"{encode[0]}", play_sound)
-                
+                mus[0, var] = value
+                z = vae_reparameterize(mus, vars)
+                self.decode_and_save(z, f"{self.model_name} var[{var+1}]={value}", play_sound)
             
             
     def test_all(self):
@@ -307,6 +324,10 @@ class Sample_Generator():
                 for handle in legend.legendHandles:
                     handle.set_sizes([4 * dot_size])
         
+        # Hide the unused plots
+        for i in range(encode_size, rows * cols):
+            hide_sub_plot(i)
+        
         plt.show()
         
 
@@ -333,19 +354,18 @@ def use_model(model):
 
 
 def generate_morphs():
+    start_new_stft_video(f"{g.model_name} - morphs", False)
+    
     for i in range(0, len(examples)-1, 2):
         g.interpolate_vae(examples[i], examples[i+1])
         #g.interpolate_no_ai(examples[i], examples[i+1]) # Linear interpolation over STFTs.
 
 
 def generate_variations():
+    start_new_stft_video(f"{g.model_name} - variations", False)
+    
     for sample in examples[:5]:
         g.randomise_sample(sample)
-
-
-def plot_encodings():
-    for type in ["organ", "piano", "epiano", "string", "acoustic guitar", "marimba", "pad", "fm", "voice", "moog", ""]:
-        g.plot_encodings(type, 1000)
 
 
 def plot_categories(categories = None):
@@ -357,15 +377,17 @@ def plot_categories(categories = None):
         g.plot_categories(categories)
 
 
-def generate_main_encodings():
-    g.generate_main_encodings([-2, -1, 0, +1, +2])
-
 def test_all():
     g.test_all()
 
 
-def demo_all():
-    plot_encodings()
-    plot_categories()
-    generate_main_encodings()
+def demo_encodings():
+#    generate_variations()
+#    g.generate_main_encodings([-2, -1, 0, +1, +2])
+    
+    generate_morphs()
+    
+#    plot_encodings()
+#    plot_categories()
+
 

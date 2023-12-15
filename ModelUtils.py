@@ -231,11 +231,12 @@ def set_display_hiddens(onOff):
     
 def periodically_display_2D_output(hiddens):
 
-    global count, last_count, do_display_hiddens
-    if do_display_hiddens:
+    global count, last_count, do_display_hiddens, is_interactive
+    
+    if do_display_hiddens and is_interactive:
         count += hiddens.size(0)
         
-        if count - last_count > 10_000: # approx every 5 epochs
+        if count - last_count > 10_000: # approx every 10 epochs
             last_count = count
             hiddens = hiddens.detach().cpu()
             width = hiddens[0].size(0)

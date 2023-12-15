@@ -85,6 +85,18 @@ def compute_stft(data, sr, n_fft, hop_length, win_length=None, window='hann'):
 
 stft_video = PlotVideoMaker("STFT_Video", True)
 
+def save_stft_video():
+    global stft_video
+    stft_video.automatic_save()
+    
+    
+def start_new_stft_video(name, auto_save):
+    global stft_video
+    stft_video.automatic_save() # save anything that might be outstanding.
+    stft_video = PlotVideoMaker(name, auto_save)
+
+
+
 def plot_stft(name, stft_result, sr, hop_length):
     """Plots the STFT"""
     # Convert amplitude to dB for visualization
@@ -179,50 +191,6 @@ def amplitude_to_dB(amplitude):
 
 def dB_to_amplitude(dB):
     return 10.0 ** (dB / 20.0)
-
-
-## WaveNet uses Mu-Law encoding which is simlar but constrained to the range [-1, 1].
-## So let's normalise the results to [0, 1] = min amplitude, max amplitude
-#
-#min_dB = -60
-#
-#def complex_to_dB_amplitude(complex_tensor):
-#    # Compute the magnitude
-#    magnitude = torch.abs(complex_tensor)
-#
-#    threshold = min_dB
-#    result = amplitude_to_dB(magnitude)
-#    
-#    # Remove low-volume data:
-#    result[result < min_dB] = min_dB
-#    
-#    return 1 - (result / min_dB) # normalise
-#
-#    
-#def dB_amplitude_to_zero_phase_complex(dB_tensor):
-#    dB_tensor = (1 - dB_tensor) * min_dB
-#    
-#    result = dB_to_amplitude(dB_tensor)
-#
-#    # Create a complex tensor with the linear amplitude as the real part and 0 as the imaginary part
-#    #return torch.complex(result, torch.zeros_like(result).to(device)) # not supported on MPS!
-#    stacked = torch.stack([result, torch.zeros_like(result).to(device)], dim=-1)
-#    return torch.view_as_complex(stacked)
-#    
-#    
-#def test_dB_conversion():
-#    a=0.1
-#    real_part = torch.tensor([1.0, 0.5, 0.25, 0.0])
-#    imaginary_part = torch.tensor([a, a, a, a])
-#    complex_tensor = torch.complex(real_part, imaginary_part)
-#    print("       signal=", complex_tensor)
-#    amps = complex_to_dB_amplitude(complex_tensor)
-#    print("         amps=", amps)
-#    resynth = dB_amplitude_to_zero_phase_complex(amps)
-#    print("      resynth=", resynth)
-#    amps2 = complex_to_dB_amplitude(resynth)
-#    print("amps(resynth)=", amps)
-#    print("         diff=", amps2-amps)
 
 
 class MuLawCodec:

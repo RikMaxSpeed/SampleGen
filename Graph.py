@@ -3,11 +3,19 @@ import matplotlib.pyplot as plt
 from scipy.stats import qmc, gmean, norm
 import torch
 import time
+import inspect
 from Debug import *
 
 
-is_interactive = plt.isinteractive()
-print(f"MatPlotLib.isinteractive={is_interactive}")
+def is_running_in_jupyter():
+    stack = inspect.stack()
+    for item in stack:
+        if 'IPython' in item[1] or 'ipykernel' in item[1]:
+            return True
+    return False
+
+is_interactive = is_running_in_jupyter()
+print(f"Jupyter={is_interactive}, MatPlotLib.isinteractive()={plt.isinteractive()}")
 
 
 start_time = time.time()
@@ -43,6 +51,7 @@ class PlotVideoMaker:
         self.name = name
         self.auto_save = auto_save
         self.last_save = time.time()
+        self.needs_saving = False
         print(f"PlotVideoMaker: {self.name}, auto-save={self.auto_save}")
         
     def add_plot(self, show):
@@ -52,6 +61,7 @@ class PlotVideoMaker:
         buf.seek(0)
         image = imageio.imread(buf)
         self.images.append(image)
+        self.needs_saving = True
         buf.close()
         print(f"PlotVideoMaker: {self.name}, frames={len(self.images):,}")
         
@@ -65,11 +75,16 @@ class PlotVideoMaker:
             now = time.time()
             elapsed = time.time() - self.last_save
             if elapsed > 30:
-                count = len(self.images)
-                duration = max(2, count / 30)
-                self.save_video(self.name + " - " + unique_id + ".gif", duration)
-                self.last_save = time.time()
-        
+                perform_auto_save
+                
+    def automatic_save(self):
+        if self.needs_saving:
+            count = len(self.images)
+            duration = max(2, count / 30)
+            self.save_video(self.name + " - " + unique_id + ".gif", duration)
+            self.last_save = time.time()
+            self.needs_saving = False
+    
     def save_video(self, file_name, duration):
         # Save the images as an animated GIF
         count = len(self.images)
@@ -77,8 +92,12 @@ class PlotVideoMaker:
         print(f"saving video {file_name}, {len(self.images)} frames = {duration:.1f} sec @ {fps:.1f} FPS")
         imageio.mimsave(file_name, self.images, duration=duration / count)
 
+#    def __del__(self):
+#        self.automatic_save() # crashes.
+
+
 if __name__ == '__main__':
-    plot_video_maker = PlotVideoMaker("SineWaveDemo")
+    plot_video_maker = PlotVideoMaker("SineWaveDemo", False)
 
     # Create some plots independently and add them to the video maker
     x = np.linspace(0, 2 * np.pi, 100)
@@ -234,6 +253,8 @@ def plot_train_test_losses(train_losses, test_losses, title):
     plt.show()
 
 
+hyperVideo = PlotVideoMaker("Hyper-Training", True)
+
 def plot_multiple_losses(losses, names, min_count, title):
     plt.figure(figsize=(12, 6))
     plt.yscale('log')
@@ -274,7 +295,8 @@ def plot_multiple_losses(losses, names, min_count, title):
     plt.xlabel("Epoch")
     plt.legend(loc='upper right')
     plt.tight_layout()
-    plt.show()
+    
+    hyperVideo.add_plot(True)
 
 
 def plot_hypertrain_loss(loss, names, model_name):
@@ -348,7 +370,8 @@ def plot_bar_charts(encodings, names, title):
     plt.show()
 
 
-#plot_bar_charts([[1, 2, 3], [2, 4, 8], [-3, 6, 9]], ["counting", "powers", "threes"], "demo")
+if __name__ == '__main__':
+    plot_bar_charts([[1, 2, 3], [2, 4, 8], [-3, 6, 9]], ["counting", "powers", "threes"], "demo")
 
 
 
@@ -368,6 +391,15 @@ def display_image(ax, image, title, colour_map = 'gray'):
     ax.set_frame_on(False)  # Remove frame around the image
     if title:
         ax.set_title(title)
+
+def hide_sub_plot(i):
+    axs = plt.gcf().get_axes()
+    assert(i < len(axs))
+    ax = axs[i]
+    ax.axis('off')
+    ax.set_xticks([])  # Remove x-axis ticks
+    ax.set_yticks([])  # Remove y-axis ticks
+    ax.set_frame_on(False)  # Remove frame around the image
 
 
 def display_image_grid(images, title, colour_map = 'gray', min_width=15):
@@ -394,15 +426,12 @@ def display_image_grid(images, title, colour_map = 'gray', min_width=15):
 
     # Hide any unused subplots
     for i in range(count, rows*cols):
-        axs.flatten()[i].axis('off')
-        axs.flatten()[i].set_xticks([])  # Remove x-axis ticks
-        axs.flatten()[i].set_yticks([])  # Remove y-axis ticks
-        axs.flatten()[i].set_frame_on(False)  # Remove frame around the image
+        hide_sub_plot(i)
     
     plt.tight_layout()
     plt.show()
 
-#images = [torch.rand(57, 150).mul(np.random.uniform(x)) for x in range(11)]
-#display_image_grid(images, "Example")
 
-
+if __name__ == '__main__':
+    images = [torch.rand(57, 150).mul(np.random.uniform(x)) for x in range(11)]
+    display_image_grid(images, "Example")
