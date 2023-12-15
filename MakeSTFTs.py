@@ -15,11 +15,12 @@ mu_law = None
 
 # Configure the Audio -> STFT conversion
 sample_rate = 44100
+nyquist = sample_rate // 2
 stft_size = 1024 # tried 512
 stft_buckets = 2 * stft_size # full frequency range
 stft_hop = int(stft_buckets * 3 / 4) # with some overlap
 
-max_freq = 11_025 # strip the high frequencies
+max_freq = nyquist // 2 # strip the high frequencies
 freq_buckets = 2 * int(max_freq * 2 * stft_size / sample_rate)
 
 sample_duration = 2.0 # seconds

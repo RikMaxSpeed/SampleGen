@@ -26,14 +26,14 @@ def evaluate_model(params):
     print(f"Hyper-Parameter tuning#{tuning_count}: {hyper_model} {params}\n")
     
     #max_time = 5 * 60 # seconds
-    max_overfit = 1.2 # Ensure we retain the models that generalise reasonably well.
+    max_overfit = 1.5 # Ensure we retain the models that generalise reasonably well.
     
     if is_incremental(hyper_model):
         max_overfit = 3.0 # the internal layer may have been deliberately over-fit.
         print(f"Overriding max_overfit={max_overfit:.1f}")
         
     max_epochs = 100 # This is sufficient to figure out which model will converge best if we let it run for longer.
-    max_time = 300 # we don't like slow models...
+    max_time = 600 # we don't like slow models...
     verbose = False # avoid printing lots of detail for each run
     
     if break_on_exceptions: # this is easier when debugging
@@ -87,7 +87,7 @@ def generate_parameters(search_space, amount):
 
 
 def optimise_hyper_parameters(model_name):
-    # use a smaller data-set here to speed things up? Not a good idea as the model may be too limited in size
+    # use a smaller data-set here to speed things up? Could favour small models that can't handle the entire data-set.
     #samples, _ = generate_training_stfts(None)
     samples, _ = generate_training_stfts(100)
     print(f"Training data set has {samples} samples.")
@@ -99,7 +99,7 @@ def optimise_hyper_parameters(model_name):
     
     # Optimiser:
     search_space = list()
-    search_space.append(Integer(4,      5,    'uniform',  name='batch'))         # batch_size = 2^batch
+    search_space.append(Integer(2,      6,    'uniform',  name='batch'))         # batch_size = 2^batch
     search_space.append(Integer(-7,    -4,    'uniform',  name='learning_rate')) # 10^lr * batch_size
 
     # Model:
@@ -111,9 +111,10 @@ def optimise_hyper_parameters(model_name):
         case "STFT_VAE":
             # Train the naive STFTVariationalAutoEncoder
             max_params = 50_000_000 # this model needs a huge number of parameters
-            max_loss = 100_000 # and the loss starts off extremely high
-            search_space.append(Integer(4,        10,   'uniform',      name='latent_size'))
-            search_space.append(Integer(1,         3,   'uniform',      name='vae_depth'))
+            max_loss = 300_000 # and the loss starts off extremely high
+            max_overfit = 10
+            search_space.append(Integer(4,        7,    'uniform',      name='latent_size'))
+            search_space.append(Integer(1,        4,    'uniform',      name='vae_depth'))
             search_space.append(Real   (0.1,      10,   'log-uniform',  name='vae_ratio'))
             
         case "StepWiseMLP":
