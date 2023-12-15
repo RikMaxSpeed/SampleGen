@@ -99,8 +99,8 @@ def optimise_hyper_parameters(model_name):
     
     # Optimiser:
     search_space = list()
-    search_space.append(Integer(2,      6,    'uniform',  name='batch'))         # batch_size = 2^batch
-    search_space.append(Integer(-7,    -4,    'uniform',  name='learning_rate')) # 10^lr * batch_size
+    search_space.append(Integer(4,      6,    'uniform',  name='batch'))         # batch_size = 2^batch
+    search_space.append(Integer(-7,    -3,    'uniform',  name='learning_rate')) # 10^lr * batch_size
 
     # Model:
     global hyper_model
@@ -134,7 +134,7 @@ def optimise_hyper_parameters(model_name):
             # VAE parameters:
             search_space.append(Integer(5,         8,   'uniform',      name='latent_size'))
             search_space.append(Integer(2,         5,   'uniform',      name='vae_depth'))
-            search_space.append(Real   (0.1,      10,   'uniform',      name='vae_ratio'))
+            search_space.append(Real   (0.1,      10,   'log-uniform',      name='vae_ratio'))
         
         case "MLPVAE_Incremental":
             # We only need the VAE parameters, as the StepWiseMLP has already been trained.
@@ -216,3 +216,11 @@ def train_best_params(model_name):
     
     verbose = True
     train_model(model_name, params, max_epochs, max_time, max_params, max_overfit, max_loss, verbose)
+
+
+
+if __name__ == '__main__':
+    model_name = "StepWiseMLP"
+    #optimise_hyper_parameters(model_name)
+    train_best_params(model_name)
+

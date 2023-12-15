@@ -6,6 +6,10 @@ import time
 from Debug import *
 
 
+is_interactive = plt.isinteractive()
+print(f"MatPlotLib.isinteractive={is_interactive}")
+
+
 start_time = time.time()
 
 def total_time():
@@ -14,15 +18,33 @@ def total_time():
 
 
 # Crazy idea: let's make training videos!
-import matplotlib.pyplot as plt
-import numpy as np
 import imageio.v2 as imageio
 import io
+import uuid
+import base64
+
+# Generate a random UUID (GUID)
+def uuid_to_base64(uuid_value = uuid.uuid4()):
+    # Convert UUID to bytes
+    uuid_bytes = uuid_value.bytes
+
+    # Encode the bytes to base64
+    base64_encoded = base64.urlsafe_b64encode(uuid_bytes)
+
+    # Convert to string and remove '=' padding characters
+    return base64_encoded.decode('utf-8').rstrip('=')
+
+unique_id = uuid_to_base64()
+print(f"Unique ID: {unique_id}")
 
 class PlotVideoMaker:
-    def __init__(self):
+    def __init__(self, name, auto_save):
         self.images = []
-
+        self.name = name
+        self.auto_save = auto_save
+        self.last_save = time.time()
+        print(f"PlotVideoMaker: {self.name}, auto-save={self.auto_save}")
+        
     def add_plot(self, show):
         # Save the current figure as an in-memory image and add to the list
         buf = io.BytesIO()
@@ -31,24 +53,36 @@ class PlotVideoMaker:
         image = imageio.imread(buf)
         self.images.append(image)
         buf.close()
-
+        print(f"PlotVideoMaker: {self.name}, frames={len(self.images):,}")
+        
         # Optionally display
-        if show:
+        if show and is_interactive:
             plt.show()
         else:
             plt.close()
-
-    def save_video(self, file_name, fps):
+        
+        if self.auto_save:
+            now = time.time()
+            elapsed = time.time() - self.last_save
+            if elapsed > 30:
+                count = len(self.images)
+                duration = max(2, count / 30)
+                self.save_video(self.name + " - " + unique_id + ".gif", duration)
+                self.last_save = time.time()
+        
+    def save_video(self, file_name, duration):
         # Save the images as an animated GIF
-        imageio.mimsave(file_name, self.images, duration=1000/fps)
-
+        count = len(self.images)
+        fps = count / duration
+        print(f"saving video {file_name}, {len(self.images)} frames = {duration:.1f} sec @ {fps:.1f} FPS")
+        imageio.mimsave(file_name, self.images, duration=duration / count)
 
 if __name__ == '__main__':
-    plot_video_maker = PlotVideoMaker()
+    plot_video_maker = PlotVideoMaker("SineWaveDemo")
 
     # Create some plots independently and add them to the video maker
     x = np.linspace(0, 2 * np.pi, 100)
-    frames = 60
+    frames = 45
     fps = 30
     for i in range(frames):
         #plt.figure()  # Create a new figure for each plot
@@ -58,9 +92,7 @@ if __name__ == '__main__':
         plot_video_maker.add_plot(False)  # Add the current plot to the video maker
 
     # Save the plots as a GIF
-    plot_video_maker.save_video('sine_wave_animation.gif', fps)
-
-    exit()
+    plot_video_maker.save_video("SineWaveDemo.gif", frames / fps)
 
 
 # Heuristic of number of buckets in a histogram

@@ -11,6 +11,15 @@ def reconstruction_loss(inputs, outputs):
     return F.mse_loss(inputs, outputs, reduction='sum')
 
 
+def weighted_stft_reconstruction_loss(inputs, outputs):
+    debug("loss", inputs)
+    first_window_weight = 10
+    mse_loss = F.mse_loss(inputs, outputs, reduction='sum')
+    first_window_loss = F.mse_loss(inputs[:, 0, :], outputs[:, 0, :], reduction='sum')
+    total_loss = mse_loss - first_window_loss + first_window_weight * first_window_loss
+    return total_loss
+
+
 def kl_divergence(mu, logvar):
     # see https://stackoverflow.com/questions/74865368/kl-divergence-loss-equation
     return -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())

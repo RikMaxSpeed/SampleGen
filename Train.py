@@ -239,11 +239,14 @@ def train_model(model_type, hyper_params, max_epochs, max_time, max_params, max_
 #            norm = (sanity_test_stft[:, :, resynth.size(2)] - resynth).norm()
 #            print(f"Resynth loss={loss.item():.2f} for {sanity_test_name}, norm={norm:.2f}")
             save_and_play_audio_from_stft(resynth, sample_rate, stft_hop, f"Results/{model_type} {sanity_test_name} - resynth.wav", False)
+            
+            # This now saves to video too
             plot_stft("Resynth " + sanity_test_name, resynth, sample_rate, stft_hop)
             
 
         if verbose and now - lastGraph > graph_interval and len(train_losses) > 1:
-            plot_train_test_losses(train_losses, test_losses, model_type)
+            if is_interactive:
+                plot_train_test_losses(train_losses, test_losses, model_type)
             lastGraph = now
             graph_interval = int(min(3600, 1.5*graph_interval))
 
@@ -300,9 +303,10 @@ def train_model(model_type, hyper_params, max_epochs, max_time, max_params, max_
     all_test_losses.append(test_losses)
     all_test_names.append("loss={:.1f}, {}, {}".format(np.min(test_losses), model_text, optimiser_text))
     
-    plot_multiple_losses(all_test_losses, all_test_names, 5, model_type) # can have 100+ curves.
+    if is_interactive:
+        plot_multiple_losses(all_test_losses, all_test_names, 5, model_type) # can have 100+ curves.
     
-    if verbose:
+    if verbose and is_interactive:
         plot_train_test_losses(train_losses, test_losses, model_type)
     
     return np.min(test_losses) + size_penalty, description

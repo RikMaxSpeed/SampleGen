@@ -12,6 +12,8 @@ import time
 import Device
 from Debug import debug
 
+from Graph import PlotVideoMaker
+
 
 def is_power_of_2(n):
     return n > 0 and (n & (n - 1)) == 0
@@ -80,6 +82,9 @@ def compute_stft(data, sr, n_fft, hop_length, win_length=None, window='hann'):
     return librosa.stft(data, n_fft=n_fft, hop_length=hop_length, win_length=win_length, window=window)
     
 
+
+stft_video = PlotVideoMaker("STFT_Video", True)
+
 def plot_stft(name, stft_result, sr, hop_length):
     """Plots the STFT"""
     # Convert amplitude to dB for visualization
@@ -89,7 +94,8 @@ def plot_stft(name, stft_result, sr, hop_length):
     plt.colorbar(format='%+2.0f dB')
     plt.title(name + f" ({sr} Hz)")
     plt.tight_layout()
-    plt.show()
+    
+    stft_video.add_plot(True)
 
 
 def save_to_wav(file_name, data, sr):
