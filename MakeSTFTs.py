@@ -13,17 +13,27 @@ from Debug import *
 #mu_law = MuLawCodec(8) # Yet another hyper-parameter but we can't tune this one as it's outside the model's loss function.
 mu_law = None
 
+amps = AmplitudeCodec()
+#amps = None
+
+
 # Configure the Audio -> STFT conversion
 sample_rate = 44100
 nyquist = sample_rate // 2
 stft_size = 1024 # tried 512
 stft_buckets = 2 * stft_size # full frequency range
-stft_hop = int(stft_buckets * 3 / 4) # with some overlap
+overlap = 0.5 # 50% gives best quality, 75% has notable artefacts, 66% is low-quality
+stft_hop = int(stft_buckets * overlap)
 
-max_freq = nyquist // 2 # strip the high frequencies
-freq_buckets = 2 * int(max_freq * 2 * stft_size / sample_rate)
+if amps is None:
+    max_freq = nyquist // 2 # strip the high frequencies
+    freq_buckets = 2 * int(max_freq * 2 * stft_size / sample_rate)
+else:
+    max_freq = nyquist
+    freq_buckets = stft_size + 1
 
-sample_duration = 2.0 # seconds
+
+sample_duration = 1.95 # seconds (many of the samples in the library are approx 2 seconds and we get an off-by-one error on the length
 sequence_length = int(sample_duration * sample_rate / stft_hop)
 
 print(f"Using sample rate={sample_rate} Hz, FFT={stft_buckets} buckets, hop={stft_hop} samples, duration={sample_duration:.1f} sec = {sequence_length:,} time steps")
@@ -58,7 +68,7 @@ def exclude_frequency(freq):
     return out_of_range(freq, 0.5) and out_of_range(freq, 1) and out_of_range(freq, 2)
 
 
-def lowest_frequency(stft, sample_rate, name):
+def lowest_frequency(stft, sample_rate, name, verbose):
     assert(stft.shape[0] == stft_size + 1)
     amplitudes = np.abs(stft).sum(axis=1)
         
@@ -78,7 +88,7 @@ def lowest_frequency(stft, sample_rate, name):
             if a > maxAmp / 8:
                 if amplitudes[i-1] < a > amplitudes[i+1]: # peak
                 
-                    if exclude_frequency(f):
+                    if verbose and exclude_frequency(f):
                         plot_amplitudes_vs_frequency(amplitudes, name)
             
                     return f
@@ -86,12 +96,11 @@ def lowest_frequency(stft, sample_rate, name):
     return 0
 
 
-def compute_stft_from_file(file_name):
-    """Computes the STFT of the audio file and returns it as a tensor"""
+def compute_stft_from_file(file_name, verbose):
     sr, stft = compute_stft_for_file(file_name, stft_buckets, stft_hop)
     assert(stft.shape[0] == stft_size + 1)
     
-    low_hz = lowest_frequency(stft, sr, file_name)
+    low_hz = lowest_frequency(stft, sr, file_name, verbose)
 
     return sr, torch.tensor(stft), low_hz
 
@@ -107,7 +116,7 @@ def display_time(start, count, unit):
 
     
     
-def gather_stfts_from_directory(directory, notes, requiredSR):
+def gather_stfts_from_directory(directory, notes, requiredSR, verbose):
     """Loops over all .wav files in the given directory and computes their STFTs"""
 
     start = time.time()
@@ -126,7 +135,7 @@ def gather_stfts_from_directory(directory, notes, requiredSR):
                         
                         try:
                             #print("\n\nReading: ", filepath)
-                            sr, stft_tensor, low_hz = compute_stft_from_file(filepath)
+                            sr, stft_tensor, low_hz = compute_stft_from_file(filepath, verbose)
                             
                             if sr != requiredSR:
                                 print("Skipping {}: sample rate={} Hz".format(filepath, sr))
@@ -144,7 +153,7 @@ def gather_stfts_from_directory(directory, notes, requiredSR):
                         except Exception as e:
                             print("Error reading file {}: {}".format(filepath, e))
     
-    print("\n\nDone!!")
+    print("\nDone!!")
     display_time(start, len(stft_tensors), "file")
 
     return stft_tensors, file_names
@@ -160,16 +169,23 @@ def load_from_file(file_name):
         return pickle.load(file)
 
 
-stft_file = "STFTs.pkl"
-
-
-def make_STFTs():
+stft_file = f"STFT {sample_rate} Hz, size={stft_size}, hop={stft_hop}.pkl"
+    
+def make_STFTs(verbose):
     #notes = ["C5", "C4", "C3", "C2"]
     notes = ["C3", "C4"] # There's confusion over what C4 means, so we have a frequency check instead
-    stft_list, file_names = gather_stfts_from_directory("../WaveFiles", notes, 44100)
+    stft_list, file_names = gather_stfts_from_directory("../WaveFiles", notes, 44100, verbose)
     save_to_file((stft_list, file_names), stft_file)
 
 
+
+if os.path.exists(stft_file):
+    print("STFT file already created: {stft_file}")
+else:
+    print("STFT not found: {stft_file}")
+    make_STFTs(False)
+
+    
 def load_STFTs():
     stfts, file_names = load_from_file(stft_file)
     print("Loaded {} STFTs from {}".format(len(stfts), stft_file))
@@ -235,23 +251,23 @@ def convert_stft_to_input(stft):
     
     stft = adjust_stft_length(stft, sequence_length)
     
-    # Truncate the frequency range
-    stft = stft[:freq_buckets//2,:] # complex, so divide by 2.
-
     # Normalise to [-1, 1]
     stft /= torch.max(stft.abs())
 
-    stft = convert_to_reals(stft)
+    if amps is None:
+        # Truncate the frequency range
+        stft = stft[:freq_buckets//2,:] # complex, so divide by 2.
+        stft = convert_to_reals(stft)
+    else:
+        stft = amps.encode(stft)
         
+    assert(stft.size(0) == freq_buckets)
+    assert(stft.size(1) == sequence_length)
+    
     # Mu-Law
     if mu_law is not None:
         stft = mu_law.encode(stft)
 
-    # Normalise to [0, 1]
-    #stft = (1 + stft) / 2 # normalise
-    #stft = torch.sigmoid(stft)
-    #display_min_max("input", stft)
-    
     assert(stft.dtype == torch.float32)
     return stft.to(device)
 
@@ -262,37 +278,40 @@ def convert_stfts_to_inputs(stfts):
 
 def convert_stft_to_output(stft):
     assert(stft.dtype == torch.float32)
-    
-    # Re-append truncated frequencies
-    assert(stft.size(0) == freq_buckets)
-    missing_buckets = torch.full((stft_buckets - freq_buckets +2, sequence_length), 0.0, device=device)
-    stft = torch.cat((stft, missing_buckets), dim = 0)
-    assert(stft.size(0) == stft_buckets + 2)
-    
-    
-    #display_min_max("before", stft)
-    #stft = 2 * stft - 1
-    
-#    epsilon = 1e-5  # Small value to avoid log(0)
-#    stft = torch.clamp(stft, epsilon, 1 - epsilon)
-#    stft = torch.logit(stft)
-    #display_min_max("output", stft)
-    
+
     if mu_law is not None:
         stft = mu_law.decode(stft)
     
-    stft = convert_to_complex(stft)
-    
-    global maxAmp
-    stft *= maxAmp
+    if amps is None:
+        # Re-append truncated frequencies
+        assert(stft.size(0) == freq_buckets)
+        missing_buckets = torch.full((stft_buckets - freq_buckets +2, sequence_length), 0.0, device=device)
+        stft = torch.cat((stft, missing_buckets), dim = 0)
+        assert(stft.size(0) == stft_buckets + 2)
+        
+        stft = convert_to_complex(stft)
+        global maxAmp
+        stft = stft.cpu().detach() * maxAmp
+
+    else:
+        stft = stft.cpu().detach() * maxAmp # re-amplify
+        iterations = 50
+        stft = torch.tensor(recover_audio_from_magnitude(stft, stft_buckets, stft_hop, sample_rate, iterations))
+        assert(stft.size(0) == stft_size + 1)
+        assert(stft.size(1) == sequence_length)
+
     
     assert(stft.dtype == torch.complex64)
-    return stft.cpu().detach().numpy()
+    return stft.numpy()
+
 
 
 def test_stft_conversions(file_name):
     sr, stft = compute_stft_for_file(file_name, stft_buckets, stft_hop)
-    stft = stft[:, :sequence_length] # truncate
+    debug("stft.raw", stft)
+    assert(stft.shape[0] == stft_size + 1)
+    
+    stft = stft[:, :sequence_length]
     debug("truncated", stft)
     
     if False: # Generate a synthetic spectrum
@@ -331,9 +350,9 @@ def test_stft_conversions(file_name):
                     print("f={}, t={}, diff={:.3f}, stft={:.3f}, output={:.3f}".format(f, t, d, stft[f, t], output[f, t]))
 
 
-#test_stft_conversions("Samples/Piano C4 Major 13.wav")
-#test_stft_conversions("/Users/Richard/Coding/WaveFiles/FreeWaveSamples/Alesis-S4-Plus-Clean-Gtr-C4.wav")
-#sys.exit(1)
+if __name__ == '__main__':
+    #test_stft_conversions("Samples/Piano C4 Major 13.wav")
+    test_stft_conversions("/Users/Richard/Coding/WaveFiles/Essential Synths/Multis/Hoover/Hoover C4.wav")
 
 
 def display_average_stft(stfts, playAudio):
@@ -387,6 +406,7 @@ from SampleCategory import *
 
 # Utility to help categorise samples:
 def display_sample_categories():
+    print("\n\n\nTesting sample category labbling\n")
     stfts, file_names = load_STFTs()
     others = []
     
@@ -404,5 +424,6 @@ def display_sample_categories():
     infer_sample_categories(file_names)
     
 
-#display_sample_categories()
+#if __name__ == '__main__':
+#    display_sample_categories()
 

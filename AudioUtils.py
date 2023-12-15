@@ -7,9 +7,10 @@ import soundfile as sf
 import torch
 import math
 import os
+import time
 
 import Device
-import Debug
+from Debug import debug
 
 
 def is_power_of_2(n):
@@ -253,6 +254,7 @@ class AmplitudeCodec:
 
 
 def testAmplitudeCodec():
+    print("\n\n\nTesting Amplitude conversion\n")
     codec = AmplitudeCodec()
     
     complex = torch.rand(5, 3, dtype=torch.complex32)
@@ -271,7 +273,8 @@ def testAmplitudeCodec():
     print(f"diff={diff}")
 
 
-#testAmplitudeCodec()
+if __name__ == '__main__':
+    testAmplitudeCodec()
 
 
 # We normalise all amplitudes to [0, 1] on input.
@@ -327,7 +330,8 @@ def test_mulaw_conversion():
     plt.show()
     
     
-#test_mulaw_conversion()
+if __name__ == '__main__':
+    test_mulaw_conversion()
 
 
 def complex_to_normalised_polar(complex_tensor):
@@ -350,6 +354,7 @@ def normalised_polar_to_complex(interleaved_tensor):
 
 
 def test_complex_to_polar_and_back():
+    print("\n\n\nTesting Complex <--> Polar\n")
     N = 10
     magnitudes = torch.rand(N) * 100
     phases     = (torch.rand(N) - 0.5) * 2 * torch.pi
@@ -378,5 +383,18 @@ def test_complex_to_polar_and_back():
     assert(norm < 1e-4) # we expect some numeric noise with float32
 
 
-#test_complex_to_polar_and_back()
+if __name__ == '__main__':
+    test_complex_to_polar_and_back()
+
+
+# Minimise the flutter when converting from a magnitude spectogram back to audio
+def recover_audio_from_magnitude(magnitude_spectrogram, stft_size, stft_hop, sample_rate, iterations=32):
+    # Griffin-Lim phase reconstruction
+    magnitudes = magnitude_spectrogram.detach().cpu().numpy()
+    
+    audio = librosa.griffinlim(magnitudes, n_iter=iterations, hop_length=stft_hop, win_length=stft_size)
+
+
+    # We convert back to STFT to ease integration with the rest of the code!!
+    return compute_stft(audio, sample_rate, stft_size, stft_hop)
 
