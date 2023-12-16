@@ -75,7 +75,7 @@ class PlotVideoMaker:
             now = time.time()
             elapsed = time.time() - self.last_save
             if elapsed > 30:
-                perform_auto_save
+                self.automatic_save()
                 
     def automatic_save(self):
         if self.needs_saving:
@@ -314,12 +314,10 @@ def plot_hypertrain_loss(loss, names, model_name):
     order = np.argsort(loss)
     top = 3
     if len(loss) >= top:
-        print("\n\nBest Models:")
         for rank in range(top):
             i = order[rank]
             plt.scatter(i+1, loss[i], marker="o", s=12, c='r')
             plt.text(i+1, loss[i], f"#{rank+1} = {loss[i]:.1f}")
-            print(f"\t{rank+1}: loss={loss[i]:.1f}, for {names[i]}")
     
     # running average
     window = int(1 + len(loss)/5)
@@ -334,7 +332,7 @@ def plot_hypertrain_loss(loss, names, model_name):
     plt.show()
     
     
-if False:
+if __name__ == '__main__':
     from num2words import num2words
     N = 100
     plot_hypertrain_loss([np.random.uniform(0, 1) * np.exp(-t/N) for t in range(N)], [num2words(n+1) for n in range(N)], "Test Crash Dummy")

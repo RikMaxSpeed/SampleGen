@@ -236,8 +236,7 @@ def train_model(model_type, hyper_params, max_epochs, max_time, max_params, max_
             
             # Generate a test tone:
             resynth, loss = predict_stft(model, sanity_test_stft)
-#            norm = (sanity_test_stft[:, :, resynth.size(2)] - resynth).norm()
-#            print(f"Resynth loss={loss.item():.2f} for {sanity_test_name}, norm={norm:.2f}")
+            print("Resynth {sanity_test_name}: loss={loss:.1f}")
             save_and_play_audio_from_stft(resynth, sample_rate, stft_hop, f"Results/{model_type} {sanity_test_name} - resynth.wav", False)
             
             # This now saves to video too
@@ -303,8 +302,7 @@ def train_model(model_type, hyper_params, max_epochs, max_time, max_params, max_
     all_test_losses.append(test_losses)
     all_test_names.append("loss={:.1f}, {}, {}".format(np.min(test_losses), model_text, optimiser_text))
     
-    if is_interactive:
-        plot_multiple_losses(all_test_losses, all_test_names, 5, model_type) # can have 100+ curves.
+    plot_multiple_losses(all_test_losses, all_test_names, 5, model_type) # can have 100+ curves.
     
     if verbose and is_interactive:
         plot_train_test_losses(train_losses, test_losses, model_type)

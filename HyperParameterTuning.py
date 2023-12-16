@@ -50,10 +50,19 @@ def evaluate_model(params):
             print(f"*** Breaking Bad :(")
             return max_loss
         
-    if loss < max_loss:
+    if loss < max_loss: # skip the models that failed in some way.
         hyper_losses.append(loss)
         hyper_names.append(model_text)
-        plot_hypertrain_loss(hyper_losses, hyper_names, hyper_model)
+        
+        order = np.argsort(hyper_losses)
+        print("Best hyper parameters:")
+        for i in range(min(5, len(hyper_losses))):
+            o = order[i]
+            print(f"\t#{i} {hyper_losses[o]:.1f}, {hyper_names[o]}")
+        print("\n")
+        
+        if is_interactive:
+            plot_hypertrain_loss(hyper_losses, hyper_names, hyper_model)
     
     return loss
 
@@ -87,9 +96,9 @@ def generate_parameters(search_space, amount):
 
 
 def optimise_hyper_parameters(model_name):
-    # use a smaller data-set here to speed things up? Could favour small models that can't handle the entire data-set.
-    #samples, _ = generate_training_stfts(None)
-    samples, _ = generate_training_stfts(160) # 10 x batch=16
+    # Use a smaller data-set here to speed things up? Could favour small models that can't handle the entire data-set.
+    samples, _ = generate_training_stfts(None) # full data-set, this may be more representative
+    #samples, _ = generate_training_stfts(160) # 10 x batch=16
     print(f"Training data set has {samples} samples.")
     
     global max_params, max_loss
@@ -132,9 +141,9 @@ def optimise_hyper_parameters(model_name):
             search_space.append(Real   (0.1,      10,   'log-uniform',  name='ratio'))
             
             # VAE parameters:
-            search_space.append(Integer(5,         8,   'uniform',      name='latent_size'))
+            search_space.append(Integer(5,         8,   'uniform',      name='latent_size')) # somehow it looks as though the latent size doesn't matter much?
             search_space.append(Integer(2,         5,   'uniform',      name='vae_depth'))
-            search_space.append(Real   (0.1,      10,   'log-uniform',      name='vae_ratio'))
+            search_space.append(Real   (0.1,      10,   'log-uniform',  name='vae_ratio'))
         
         case "MLPVAE_Incremental":
             # We only need the VAE parameters, as the StepWiseMLP has already been trained.
@@ -176,22 +185,18 @@ def optimise_hyper_parameters(model_name):
             raise Exception(f"Invalid model type = {model_name}")
 
     print("Optimising hyper-parameters:")
-    display(search_space)
-    start_new_stft_video(f"STFT - hyper-train {model_name}")
+    print(search_space)
+    start_new_stft_video(f"STFT - hyper-train {model_name}", True)
 
     # Generate starting parameters, around the minimum sizes which tend to generate smaller networks
-    if False:
-        generate = 3 * len(search_space)
-        amount = 0.7
-        initial_params = [generate_parameters(search_space, amount) for amount in np.arange(0.0, amount, amount/generate)]
-        result = gp_minimize(evaluate_model, search_space, n_calls=1000, x0 = initial_params, noise='gaussian', verbose=False, acq_func='LCB')
-    else:
-        result = gp_minimize(evaluate_model, search_space, n_calls=1000, n_initial_points=8, initial_point_generator='sobol', noise='gaussian', verbose=False, acq_func='LCB')
-        
+    max_loops = 80
+    result = gp_minimize(evaluate_model, search_space, n_calls=max_loops, noise='gaussian', verbose=False, acq_func='LCB')
+    #n_initial_points=8, initial_point_generator='sobol',
+    
     # I've never reached this point! :)
     print("\n\nHyper Parameter Optimisation Done!!")
-    print("Best result={:.2f}".format(result.fun))
-    print("Best parameters={}".format(result.x))
+    print(f"Best result={result.fun:.2f}")
+    print(f"Best parameters={result.x}")
 
 
 
@@ -206,7 +211,7 @@ def train_best_params(model_name, params = None):
         model_name, params, _ = get_best_configuration_for_model(model_name)
         
     print(f"train_best_params: {model_name}: {params}")
-    start_new_stft_video(f"STFT - train {model_name}")
+    start_new_stft_video(f"STFT - train {model_name}", True)
     
     max_time = 12 * 3600 # we should converge way before this!
     max_overfit = 100.0 # ignore: we're aiming for the highest precision possible on the training set
@@ -227,13 +232,14 @@ def train_best_params(model_name, params = None):
 if __name__ == '__main__':
     # Edit this to perform whatever operation is required.
     
-    #config = "StepWiseMLP", None # hyper-optimised
-    #config = "MLP_VAE", None
-    #config = "MLPVAE_Incremental", None
-    config = "StepWiseMLP", [3, -5, 35, 4, 0.1] # hand-specified
+    # MLP VAE model
+    #optimise_hyper_parameters("StepWiseMLP")
+    #train_best_params("StepWiseMLP") # hand-specified
+    optimise_hyper_parameters("MLPVAE_Incremental")
+    train_best_params("MLPVAE_Incremental", None)
     
-    model_name, params = config
-    
-    #optimise_hyper_parameters(model_name)
-    train_best_params(model_name, params)
-
+    # RNN VAE model
+#    optimise_hyper_parameters("RNNAutoEncoder")
+#    train_best_params("RNNAutoEncoder", None)
+#    optimise_hyper_parameters("RNN_VAE_Incremental")
+#    train_best_params("RNN_VAE_Incremental")
