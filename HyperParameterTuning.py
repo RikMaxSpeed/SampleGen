@@ -11,7 +11,7 @@ print(f"1 sample = {freq_buckets:,} x {sequence_length:,} = {one_sample:,}")
 
 max_params = None
 tuning_count = 0
-break_on_exceptions = True # True=Debugging, False allows the GPR to continue even if the model blows up (useful for long tuning runs!)
+break_on_exceptions = False # True=Debugging, False allows the GPR to continue even if the model blows up (useful for long tuning runs!)
 max_loss = 10_000 # default
 
 hyper_model = None
@@ -59,21 +59,21 @@ def evaluate_model(params):
         topN = min(5, len(hyper_losses))
         
         print("Best hyper parameters:")
-        for i in range(top):
+        for i in range(topN):
             o = order[i]
-            print(f"\t#{i} {hyper_losses[o]:.1f}, {hyper_names[o]}")
+            print(f"#{i} {hyper_losses[o]:.1f}, {hyper_names[o]}")
         print("\n")
         
         file_name = hyper_model + " hyper parameters.txt"
         with open(file_name, 'w') as file:
-            for i in range(top):
+            for i in range(topN):
                 o = order[i]
                 file.write(str(hyper_params[o]) + "\n")
         
             file.write("\n\n")
-            for i in range(top):
+            for i in range(topN):
                 o = order[i]
-                file.write(f"\t#{i} {hyper_losses[o]:.1f}, {hyper_names[o]}\n")
+                file.write(f"#{i} {hyper_losses[o]:.1f}, {hyper_names[o]}\n")
         
         if is_interactive:
             plot_hypertrain_loss(hyper_losses, hyper_names, hyper_model)
@@ -110,6 +110,8 @@ def generate_parameters(search_space, amount):
 
 
 def optimise_hyper_parameters(model_name):
+    print(f"\n\n\nOptimising Hyper Parameters for {model_name}\n")
+
     # Use a smaller data-set here to speed things up? Could favour small models that can't handle the entire data-set.
     samples, _ = generate_training_stfts(None) # full data-set, this may be more representative
     #samples, _ = generate_training_stfts(160) # 10 x batch=16
@@ -142,7 +144,7 @@ def optimise_hyper_parameters(model_name):
             
         case "StepWiseMLP":
             # Train just the StepWiseMLPAutoEncode (with no VAE)
-            search_space.append(Integer(10,       50,   'uniform',      name='hidden_size'))
+            search_space.append(Integer(10,       75,   'uniform',      name='hidden_size'))
             search_space.append(Integer(2,         5,   'uniform',      name='depth'))
             search_space.append(Real   (0.1,      10,   'log-uniform',  name='ratio'))
             
@@ -161,7 +163,7 @@ def optimise_hyper_parameters(model_name):
         
         case "MLPVAE_Incremental":
             # We only need the VAE parameters, as the StepWiseMLP has already been trained.
-            search_space.append(Integer(5,        15,   'uniform',      name='latent_size'))
+            search_space.append(Integer(4,         8,   'uniform',      name='latent_size'))
             search_space.append(Integer(2,         5,   'uniform',      name='vae_depth'))
             search_space.append(Real   (0.1,      10,   'uniform',      name='vae_ratio'))
             
@@ -214,9 +216,16 @@ def optimise_hyper_parameters(model_name):
 
 
 
+def fine_tune(model_name):
+    train_best_params(model_name, None, True)
 
 
-def train_best_params(model_name, params = None):
+def train_best_params(model_name, params = None, finest = False):
+    if finest:
+        print(f"\n\n\nTraining {model_name}\n")
+    else:
+        print(f"\n\n\nFine-Tuning model {model_name}\n")
+    
     #generate_training_stfts(100) # Small dataset of the most diverse samples
     generate_training_stfts(None) # Full dataset with no augmentation
     #generate_training_stfts(3000) # use a large number of samples with augmentation
@@ -233,8 +242,9 @@ def train_best_params(model_name, params = None):
     max_epochs = 2000 # we don't hit this in practice.
     max_loss = 1e9
     
-#    params[0] =  2 # override the batch-size
-#    params[1] = -7 # override the learning rate
+    if finest:
+        params[0] =  0 # override the batch-size
+        params[1] = -6 # override the learning rate
     
     #set_display_hiddens(True) # Displays the internal auto-encoder output
     
@@ -242,26 +252,31 @@ def train_best_params(model_name, params = None):
     train_model(model_name, params, max_epochs, max_time, max_params, max_overfit, max_loss, verbose)
 
 
+def full_hypertrain(model_name):
+    optimise_hyper_parameters(model_name)
+    train_best_params(model_name)
+    fine_tune(model_name)
+
 
 if __name__ == '__main__':
     # Edit this to perform whatever operation is required.
     
     # MLP VAE model
-    #optimise_hyper_parameters("StepWiseMLP")
-    #train_best_params("StepWiseMLP") # hand-specified
+    full_hypertrain("StepWiseMLP")
+    full_hypertrain("MLPVAE_Incremental")
+    
     #optimise_hyper_parameters("MLPVAE_Incremental")
-    #train_best_params("MLPVAE_Incremental", None)
+    #train_best_params(, None)
     
     # The best models from the hyper-tuning above:
-    train_best_params("MLPVAE_Incremental", [3, -5, 5, 4, 0.1])  # params=2,399,218
-    train_best_params("MLPVAE_Incremental", [3, -5, 5, 2, 0.5])  # params=5,008,308
-    train_best_params("MLPVAE_Incremental", [3, -5, 9, 2, 1.02]) # params=8,644,643
-    train_best_params("MLPVAE_Incremental", [3, -5, 9, 2, 0.79]) # params=7,155,698
-    train_best_params("MLPVAE_Incremental", [3, -5, 11, 2, 1.1]) # params=9,097,747
+#    train_best_params("MLPVAE_Incremental", [3, -5, 5, 4, 0.1])  # params=2,399,218
+#    train_best_params("MLPVAE_Incremental", [3, -5, 5, 2, 0.5])  # params=5,008,308
+#    train_best_params("MLPVAE_Incremental", [3, -5, 9, 2, 1.02]) # params=8,644,643
+#    train_best_params("MLPVAE_Incremental", [3, -5, 9, 2, 0.79]) # params=7,155,698
+#    train_best_params("MLPVAE_Incremental", [3, -5, 11, 2, 1.1]) # params=9,097,747
     
     # RNN VAE model
-    #optimise_hyper_parameters("RNNAutoEncoder")
-    #train_best_params("RNNAutoEncoder", None)
-    #optimise_hyper_parameters("RNN_VAE_Incremental")
-    #train_best_params("RNN_VAE_Incremental")
+    full_hypertrain("RNNAutoEncoder")
+    full_hypertrain("RNN_VAE_Incremental")
+    
     

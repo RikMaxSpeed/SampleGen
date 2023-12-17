@@ -60,7 +60,7 @@ class VariationalAutoEncoder(nn.Module):
         super(VariationalAutoEncoder, self).__init__()
         
         # Encoder layers
-        self.encoder_layers = sequential_fully_connected(sizes[:-1], nn.ReLU())
+        self.encoder_layers = sequential_fully_connected(sizes[:-1], nn.GELU())
 
         # Latent space layers (for mean and log variance)
         self.fc_mu     = nn.Linear(sizes[-2], sizes[-1])

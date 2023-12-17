@@ -154,7 +154,7 @@ def fully_connected_size(layer_sizes):
     return total_params
 
 
-# Builds multiple fully-connected layers with ReLU() in between:
+# Builds multiple fully-connected layers with and activation function in between:
 def sequential_fully_connected(layer_sizes, final_activation):
 
     if len(layer_sizes) < 2:
@@ -164,8 +164,8 @@ def sequential_fully_connected(layer_sizes, final_activation):
     
     for i in range(len(layer_sizes) - 1):
         layers.append(nn.Linear(layer_sizes[i], layer_sizes[i+1]))
-        if i < len(layer_sizes) - 2:  # Add ReLU activation for all but the last layer
-            layers.append(nn.ReLU())
+        if i < len(layer_sizes) - 2:  # Add activation for all but the last layer
+            layers.append(nn.GELU())
     
     assert(len(layers) == 2*(len(layer_sizes)-1) - 1)
     
