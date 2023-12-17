@@ -6,15 +6,15 @@ The overall goal is to be able to implement a sythesizer that can generate new s
 
 The synthesizer itself would be written as an audio plug-in, typically written in C++ using libraries such as JUCE and released as AU and VST.
 
-Machine Learning hopefully provides an opportunity to create interesting new wave forms, see the google NSynth released in 2016 which leverages the WaveNet research.
+Machine Learning hopefully provides an opportunity to create interesting new wave forms. The google NSynth released in 2016 aimed to do something similar, this leverages the WaveNet research.
 
-My proposal here is to create a deep-learning model that can regenerate audio samples of musical instruments reasonably faithfully. The model should then be able to generate new samples, either by interpolation between samples, or randomly. The "reasonably faithfully" is important, the goal is not to replicate sample libraries, but rather to generate new and interesting sounds.
+My proposal here is to create a deep-learning model that can regenerate audio samples of musical instruments reasonably faithfully. The model should then be able to generate new samples, either by interpolation between samples, or randomly. The "reasonably faithfully" is important, the goal is not to replicate existing sample libraries, but rather to generate new and interesting sounds.
 
 ## Data
 
 The model is trained on a dataset of public domain samples acquired from websites such as https://freewavesamples.com.
 
-Currently approx 950 samples have been gathered, when restricted purely to middle-C. Interpolation at other frequencies is currently out of scope.
+Currently, over 1000 samples have been gathered, when restricted purely to middle-C, or the octave below or above. Other notes are currently excluded in order to ensure that the samples all contain similar harmonics.
 
 The samples cover many musical instruments, both acoustic, and electronic, including a large number of synthesized sounds. 
 
@@ -25,21 +25,17 @@ If needed, the data can be augmented by simply mixing 2 samples, other means may
 
 ### Spectograms vs Audio Samples
 
-When working with audio and digital signal processing, an immediate question is whether to work in the time domain with audio samples, or in the frequency domain using the short-time fourier transform (STFT) for example.
+When working with audio and digital signal processing, an immediate question is whether to work in the time domain with audio samples, or in the frequency domain using the *Short-Time Fourier Transform* (STFT) for example.
 
 Algorithms such as the seminal 2016 WaveNet paper by google work in the audio sample space - this has since been significantly improved, and the current state-of-the-art is to work in using audio samples to generate ultra-realistic speech or vocal synthesis.
 
 However working with samples, at 44.1kHz, requires a huge amount of compute, and it is also more difficult to interpret. The loss function would probably require an STFT to make sense.
 
-Therefore I decided for a first foray to work using spectrogram and specifically the STFT.
+Therefore I decided for a first foray to work using spectrograms, specifically the STFT.
 
 Other frequency spectrum representations could be considered:
 - Mel Frequency Cepstrum Coefficient (MFCC) could be considered, however these are not suitable for audio reconstruction.
 - Constant-Q transforms: these could be useful for analysing music itself where precise note onset and end times are necessary. However this is not the scope of the current project.
-
-### An early compromise
-
-In a first pass I discarded all phase information, using only the amplitudes. Whilst this reduces the data-size by half, and considerably simplifies the interpretation, it did introduce significant artefacts, even if replaying the original data. Ultimately I switched to using both the real & imaginary parts of the STFT, and whilst this doubled the amount of data to be modelled, it did significantly reduce the systemic artefacts dues to zeroing the phases.
 
 
 ### Auto-Encoder
@@ -77,11 +73,22 @@ In practice the RNN is maybe 2 to 3x faster than the MLP and can reach similer a
 
 4: GRUs, LSTMs, ...: further models could be explored with better modelling of the evolution of the spectrum over time.
 
+### Complex Numbers...
+
+In a first pass I discarded all phase information, using only the amplitudes. Whilst this reduces the data-size by half, and considerably simplifies the interpretation, it did introduce significant artefacts, even if replaying the original data. 
+
+Once I had a working model, I thought I'd convert the inputs to using complex numebrs instead. The model was presented with pairs of floats, representing the real and imaginary parts of the numbers. This effectively doubled the data size, but I compensated for that by reducing the frequency range to 11 kHz. Having the phase information does significantly reduce the systemic artefacts dues to zeroing the phases.
+
+However, whilst the base models worked, the more complex variational auto-encoders simply failed to reach a usable accuracy. I spent a long time looking into this, but overall, it is extremely difficult to infer patterns from complex numbers, magnitudes are much more straightforard to deal with. It might be possible in future work to use magnitude and phase instead.  
+
+I then discovered the Griffin-Lim algorithm which aims to infer plausible phase information purely from the magnitudes. This has greatly reduced the artefacts introduced by discarding phases, so the current model now works using solely phases which has the benefit of being easier to interpret too.
+
+
 ## Training & Hyper-Parameters
 
 Training has proven extremely difficult. As we already know from the practical experience gathered during this course, hyper-parameter tuning is paramount.
 
-To keep things simple, I used skopt's gp_minimise (https://scikit-optimize.github.io/stable/modules/generated/skopt.gp_minimize.html). Internally this uses a Matern kernel  + Gaussian noise, and provides a configurable search-space for integers, reals and categories, with uniform or log distributions. Generating plots of the hyper-parameter tuning over time has been helpful to prove that it generally works.
+To keep things simple, I used skopt's gp_minimise (https://scikit-optimize.github.io/stable/modules/generated/skopt.gp_minimize.html). Internally this uses a Matern kernel  + Gaussian noise, and provides a configurable search-space for integers, reals and categories, with uniform or log distributions. Generating plots of the hyper-parameter tuning over time has been helpful to prove that it generally works, but I have found instances where gp_minimize gets stuck in sub-optimal local minima, even when it has already found better points.
 
 Lessons & Obeservations:
 
@@ -93,9 +100,13 @@ Lessons & Obeservations:
 
 - I don't believe it's possible to reduce the training data-set size when optimising hyper-parameters, because the purpose of this model is to learn as many wave forms as possible. If the training data-set is shrunk, a smaller model may be found by the hyper-parameter tuning that wouldn't then be able to learn the larger data-set.
 
+- However I write a method to automatically identify the most 'diverse' set of samples from an input vector. This works by finding the sample closest to the average of the training set (so we have the "mid-point" effecitvely) and then iteratively adding the samples that are furthest away from the average of the subset so far. This has been useful for generating ball-park hyper-parameter estimates but in the final version I had to use the full data-set.
+
 - Stopping conditions can be complex: the Adam optimiser sometimes jumps to a significantly worse loss, then recovers to an overall better loss. I therefore stop if the moving average of the loss is stalled.
 
-- The hyper-parameter optimiser seems minimise the the weight-decay. Somehow this concept doesn't appear useful in this use-case.
+- The hyper-parameter optimiser seems to always minimise the the weight-decay, this makes sense as the amount of over-fitting is not included in the loss function.
+
+- When stopping the hyper-parametrisation early, it might be worthwhile taking the rate of change of the loss at the point into account, instead of purely the minimal loss achieved: indeed, a model that has stalled will not improve any furhter, whilst a model that is still improving at 0.5% per epoch may be able to progress much further given more time.
 
 
 ## Over-fitting
@@ -104,7 +115,7 @@ Whilst training I output an overfitting ratio: train loss / test loss. This is h
 
 However, for this audio generation problem, it would be nice to be able to reproduce important samples as accurately as possible, so overfitting the original training samples may not necessarily be a bad thing.
 
-But over-fitting could also lead to the Auto-Encoder being less able to generate diverse outputs outside the original training dataset. 
+Over-fitting may also lead to the Auto-Encoder being less able to generate diverse outputs outside the original training dataset. 
 
 
 ## Incremental Training
@@ -117,6 +128,7 @@ Naive-Encoder -> VAE-Encoder -> Latent Space -> VAE-Decoder -> Naive-Decoder
 The model is simply too deep with possibly over 15 layers. The hyper-parameter tuning space is also the product of the spaces for each individual model.
 
 As the performance of the end-to-end VAE will be gated by the performance of the outer naive encoder, I decided to split the training as follows:
+
 1. Find the best hyper-parameters for the outer "naive" auto-encoder.
 
 2. Train the "naive" outer auto-encoder with longer time scales.
@@ -124,6 +136,7 @@ As the performance of the end-to-end VAE will be gated by the performance of the
 3. Hyper-train train the VAE part of the full auto-encoder using a frozen set of optimal parameters for the outer auto-encoder.
 
 4. Train the full auto-encoder with longer time-scales.
+
 
 This has several benefits:
 
@@ -133,9 +146,9 @@ This has several benefits:
 
 - Importantly: the end-to-end model training would fail because it was too complicated (disappearing gradients etc.)
 
-- The search space for the hyper parameter tuning is significantly reduced. If the outer model had a search-space of N parameters, and the inner VAE had a search space of M, the original search-space would be N * M, whilst it is now N + M. (ie: 9 vs 6 in my use-case)
+- The search space for the hyper parameter tuning is significantly reduced. If the outer model had a search-space of N parameters, and the inner VAE had a search space of M, the original search-space would be N * M, whilst it is now N + M. (ie: 9 vs 6 in my use-case, this makes a huge difference!)
 
-- We can use different optimiser hyper-parameters (learning rate, batch size, weight decay) for the VAE than for the outer auto-encoder.
+- We can use different hyper-parameters for the otimiser (Adam: learning rate, batch size, weight decay) for the VAE than for the outer auto-encoder.
 
 
 ## Tests
@@ -146,21 +159,10 @@ Identifying a suitable loss metric for audio is complex. Converting to a log sca
 
 Ultimately I'm simply using the MSE Loss between the original and regenerated spectograms, and whilst this has no human perceptual meaning, it does allow the models to converge reasonably.
 
-An option I did explore but haven't re-enabled is using mu-law encoding. This would enable the model to prioritise loud parts of the sound vs quiter ones (similarly to using a decibel scale). However, it's also important to capture the "decay" or "tail-off" portions of sounds, the amplitudes can scale down by a factor of 100, which to the human ear is just the same sound but not as loud.
+In addition I have implemented mu-law encoding to emphasise the louder parts of the spectrum. However, it is also very important to capture the "decay" or "tail-off" portions of sounds: scaling a sound by a factor of 100 is perceived as the same sound, just not as loud. The human ear accomodates for a factor over 100,000 in amplitudes! (The internal ear mechanisms include a variable gain adjustment, which is why sudden loud sound will be painful if unexpected).
 
 Ultimately the best test is simply human perception, and at present the models don't sound that great anyway, so this isn't really an tough issue.
   
-
-### Artefacts
-
-Whilst I originally thought to work purely in the Magnitude (amplitude) space, which also allowed for a decibel-conversion and loss calcuations, it turned out the artefacts this introduced were unnacceptable. I therfore doubled the model size, using the complex STFT, scaled to magnitude 1, so the real & imaginary parts are all in the range [-1, 1] which is also helpful for the models.
-
-At this point there are no systemic artefacts introduced by the data representation itself, this can be verified by transforming a sample to an STFT, then normalising it, the de-normalising it, converting it back to a complex STFT, amplifying it and playing the sound (as well as displaying the reconstituted spectogram.
-
-All artefacts are therefore a consequene of the model's own encoding.
-
-Using a custom loss function (currently disabled) could help focus the model's attention on the critical parts of the audio spectrum, and also the critical time: human's identify sounds primarily through their attack section (ie: the first 250 msec).
-
 
 ### VAE Distribution
 
@@ -168,6 +170,7 @@ I've created plots of all the variables in the latent space: individually, in pa
 
 This has been helpful to highlight the size of the latent space required (sometimes a variable will be barely used), and that generally we are achieving our ideal mu=0, std=1 distribution for each variable.  
 
+Surprisingly, when hyper-optimising, there was little difference in accuracy when the latent space was 5 or 11 variables. However on examining the plots of the encodings, it became apparent that some of the variables were not actually be used much and had a tiny stdev. So it would seem that a 5 (or possibly 6) dimensional latent space is sufficient! 
 
 ## Key Lessons Learnt
 
@@ -192,6 +195,8 @@ The key points here are very similar to my work on the CapStone hyper-parameter 
 The key item to work on is better modelling in the time-domain. I don't know whether LSTMs or some other transformer model will crack this, but this is the current gating factor.
 
 Increasing the sample dataset would also be helpful.
+
+The model has many possible uses, including as a back-end for a "text to audio" generator.
 
 Ideally I would like to shift to working using audio samples rather than spectograms, that appears to be what is used in all the state-of-the-art models and publications.
 

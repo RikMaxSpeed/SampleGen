@@ -14,10 +14,10 @@ tuning_count = 0
 break_on_exceptions = True # True=Debugging, False allows the GPR to continue even if the model blows up (useful for long tuning runs!)
 max_loss = 10_000 # default
 
-hyper_losses = []
-hyper_names = []
 hyper_model = None
-    
+hyper_losses = []
+hyper_names  = []
+hyper_params = []
     
 def evaluate_model(params):
     global hyper_model, hyper_losses, hyper_names, tuning_count
@@ -53,13 +53,27 @@ def evaluate_model(params):
     if loss < max_loss: # skip the models that failed in some way.
         hyper_losses.append(loss)
         hyper_names.append(model_text)
+        hyper_params.append(params)
         
         order = np.argsort(hyper_losses)
+        topN = min(5, len(hyper_losses))
+        
         print("Best hyper parameters:")
-        for i in range(min(5, len(hyper_losses))):
+        for i in range(top):
             o = order[i]
             print(f"\t#{i} {hyper_losses[o]:.1f}, {hyper_names[o]}")
         print("\n")
+        
+        file_name = hyper_model + " hyper parameters.txt"
+        with open(file_name, 'w') as file:
+            for i in range(top):
+                o = order[i]
+                file.write(str(hyper_params[o]) + "\n")
+        
+            file.write("\n\n")
+            for i in range(top):
+                o = order[i]
+                file.write(f"\t#{i} {hyper_losses[o]:.1f}, {hyper_names[o]}\n")
         
         if is_interactive:
             plot_hypertrain_loss(hyper_losses, hyper_names, hyper_model)
@@ -147,7 +161,7 @@ def optimise_hyper_parameters(model_name):
         
         case "MLPVAE_Incremental":
             # We only need the VAE parameters, as the StepWiseMLP has already been trained.
-            search_space.append(Integer(5,         8,   'uniform',      name='latent_size'))
+            search_space.append(Integer(5,        15,   'uniform',      name='latent_size'))
             search_space.append(Integer(2,         5,   'uniform',      name='vae_depth'))
             search_space.append(Real   (0.1,      10,   'uniform',      name='vae_ratio'))
             
@@ -235,11 +249,19 @@ if __name__ == '__main__':
     # MLP VAE model
     #optimise_hyper_parameters("StepWiseMLP")
     #train_best_params("StepWiseMLP") # hand-specified
-    optimise_hyper_parameters("MLPVAE_Incremental")
-    train_best_params("MLPVAE_Incremental", None)
+    #optimise_hyper_parameters("MLPVAE_Incremental")
+    #train_best_params("MLPVAE_Incremental", None)
+    
+    # The best models from the hyper-tuning above:
+    train_best_params("MLPVAE_Incremental", [3, -5, 5, 4, 0.1])  # params=2,399,218
+    train_best_params("MLPVAE_Incremental", [3, -5, 5, 2, 0.5])  # params=5,008,308
+    train_best_params("MLPVAE_Incremental", [3, -5, 9, 2, 1.02]) # params=8,644,643
+    train_best_params("MLPVAE_Incremental", [3, -5, 9, 2, 0.79]) # params=7,155,698
+    train_best_params("MLPVAE_Incremental", [3, -5, 11, 2, 1.1]) # params=9,097,747
     
     # RNN VAE model
-#    optimise_hyper_parameters("RNNAutoEncoder")
-#    train_best_params("RNNAutoEncoder", None)
-#    optimise_hyper_parameters("RNN_VAE_Incremental")
-#    train_best_params("RNN_VAE_Incremental")
+    #optimise_hyper_parameters("RNNAutoEncoder")
+    #train_best_params("RNNAutoEncoder", None)
+    #optimise_hyper_parameters("RNN_VAE_Incremental")
+    #train_best_params("RNN_VAE_Incremental")
+    

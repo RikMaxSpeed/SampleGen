@@ -130,7 +130,9 @@ def train_model(model_type, hyper_params, max_epochs, max_time, max_params, max_
     # Create the model
     model, model_text, model_size = make_model(model_type, model_params, max_params, verbose)
     
-    size_penalty = np.log10(model_size) # slightly favour smaller models
+    # As it stands this is useless. It just confuses the results, larger models may be able to further improve their accuracy.
+    # A more informative measure could be the model's rate of improvement when it stopped at max time.
+    size_penalty = 0 #np.log10(model_size) # slightly favour smaller models
 
     if model is None:
         return max_loss + size_penalty, model_text
