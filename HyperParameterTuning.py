@@ -11,7 +11,7 @@ print(f"1 sample = {freq_buckets:,} x {sequence_length:,} = {one_sample:,}")
 
 max_params = None
 tuning_count = 0
-break_on_exceptions = False # True=Debugging, False allows the GPR to continue even if the model blows up (useful for long tuning runs!)
+break_on_exceptions = True # True=Debugging, False allows the GPR to continue even if the model blows up (useful for long tuning runs!)
 max_loss = 10_000 # default
 
 hyper_model = None
@@ -32,16 +32,16 @@ def evaluate_model(params):
         max_overfit = 3.0 # the internal layer may have been deliberately over-fit.
         print(f"Overriding max_overfit={max_overfit:.1f}")
         
-    max_epochs = 100 # This is sufficient to figure out which model will converge best if we let it run for longer.
-    max_time = 600 # we don't like slow models...
+    max_epochs = 80 # This is sufficient to figure out which model will converge best if we let it run for longer.
+    max_time = 600  # we don't like slow models...
     verbose = False # avoid printing lots of detail for each run
-    
+
     if break_on_exceptions: # this is easier when debugging
-        loss, model_text = train_model(hyper_model, params, max_epochs, max_time, max_params, max_overfit, max_loss, verbose)
+        model_text, model_size, loss, rate = train_model(hyper_model, params, max_epochs, max_time, max_params, max_overfit, max_loss, verbose)
         
     else: # we need this for long overnight runs in case something weird happens
         try:
-            loss, model_text = train_model(hyper_model, params, max_epochs, max_time, max_params, max_overfit, max_loss, verbose)
+            model_text, model_size, loss, rate = train_model(hyper_model, params, max_epochs, max_time, max_params, max_overfit, max_loss, verbose)
             
         except Exception as e:
             print(f"*** Exception: {e}")
@@ -51,8 +51,14 @@ def evaluate_model(params):
             return max_loss
         
     if loss < max_loss: # skip the models that failed in some way.
-        hyper_losses.append(loss)
-        hyper_names.append(model_text)
+        # Bake the learning_rate into the loss:
+        final_loss = loss
+        if rate < 0:
+            final_loss *= (1 + rate) ** 10 # favourise models that have more scope to improve
+        print(f"adjusted final loss={final_loss:.1f}, from loss={loss:.1f} and rate={rate*100:.3f}%")
+        
+        hyper_losses.append(final_loss)
+        hyper_names.append(model_text + f" | real loss={loss:.1f}, rate={rate * 100:.3f}%") # Record the final learning rate
         hyper_params.append(params)
         
         order = np.argsort(hyper_losses)
@@ -124,7 +130,7 @@ def optimise_hyper_parameters(model_name):
     
     # Optimiser:
     search_space = list()
-    search_space.append(Integer(3,      6,    'log-uniform',  name='batch'))         # batch_size = 2^batch
+    search_space.append(Integer(4,      6,    'log-uniform',  name='batch'))         # batch_size = 2^batch
     search_space.append(Integer(-7,    -3,    'uniform',  name='learning_rate')) # 10^lr * batch_size
 
     # Model:
@@ -144,7 +150,7 @@ def optimise_hyper_parameters(model_name):
             
         case "StepWiseMLP":
             # Train just the StepWiseMLPAutoEncode (with no VAE)
-            search_space.append(Integer(10,       75,   'uniform',      name='hidden_size'))
+            search_space.append(Integer(10,       40,   'uniform',      name='hidden_size'))
             search_space.append(Integer(2,         5,   'uniform',      name='depth'))
             search_space.append(Real   (0.1,      10,   'log-uniform',  name='ratio'))
             
@@ -152,14 +158,14 @@ def optimise_hyper_parameters(model_name):
             max_loss = 50_000
             
             # StepWiseMLP parameters
-            search_space.append(Integer(20,       50,   'uniform',      name='hidden_size'))
-            search_space.append(Integer(3,         5,   'uniform',      name='depth'))
+            search_space.append(Integer(10,       40,   'uniform',      name='hidden_size'))
+            search_space.append(Integer(2,         5,   'uniform',      name='depth'))
             search_space.append(Real   (0.1,      10,   'log-uniform',  name='ratio'))
             
             # VAE parameters:
-            search_space.append(Integer(5,         8,   'uniform',      name='latent_size')) # somehow it looks as though the latent size doesn't matter much?
+            search_space.append(Integer(4,         8,   'uniform',      name='latent_size'))
             search_space.append(Integer(2,         5,   'uniform',      name='vae_depth'))
-            search_space.append(Real   (0.1,      10,   'log-uniform',  name='vae_ratio'))
+            search_space.append(Real   (0.1,      10,   'uniform',      name='vae_ratio'))
         
         case "MLPVAE_Incremental":
             # We only need the VAE parameters, as the StepWiseMLP has already been trained.
@@ -222,9 +228,9 @@ def fine_tune(model_name):
 
 def train_best_params(model_name, params = None, finest = False):
     if finest:
-        print(f"\n\n\nTraining {model_name}\n")
+        print(f"\n\n\nFine-Tuning {model_name}\n")
     else:
-        print(f"\n\n\nFine-Tuning model {model_name}\n")
+        print(f"\n\n\nTraining model {model_name}\n")
     
     #generate_training_stfts(100) # Small dataset of the most diverse samples
     generate_training_stfts(None) # Full dataset with no augmentation
@@ -236,10 +242,10 @@ def train_best_params(model_name, params = None, finest = False):
     print(f"train_best_params: {model_name}: {params}")
     start_new_stft_video(f"STFT - train {model_name}", True)
     
-    max_time = 12 * 3600 # we should converge way before this!
+    max_time = 12 * 3600 # hopefully the model converges way before this!
     max_overfit = 100.0 # ignore: we're aiming for the highest precision possible on the training set
-    max_params = 1e9 # ignore - we want high fidelity on the training set, though this could result in less diversity on the generated audio... Mmm...
-    max_epochs = 2000 # we don't hit this in practice.
+    max_params = 1e9  # not relevant, we have a valid model
+    max_epochs = 9999 # ignore
     max_loss = 1e9
     
     if finest:
@@ -255,14 +261,17 @@ def train_best_params(model_name, params = None, finest = False):
 def full_hypertrain(model_name):
     optimise_hyper_parameters(model_name)
     train_best_params(model_name)
-    fine_tune(model_name)
+    #fine_tune(model_name)
 
 
 if __name__ == '__main__':
     # Edit this to perform whatever operation is required.
     
     # MLP VAE model
-    full_hypertrain("StepWiseMLP")
+#    full_hypertrain("MLP_VAE")
+
+    train_best_params("StepWiseMLP")
+#    full_hypertrain("StepWiseMLP")
     full_hypertrain("MLPVAE_Incremental")
     
     #optimise_hyper_parameters("MLPVAE_Incremental")
@@ -276,7 +285,7 @@ if __name__ == '__main__':
 #    train_best_params("MLPVAE_Incremental", [3, -5, 11, 2, 1.1]) # params=9,097,747
     
     # RNN VAE model
-    full_hypertrain("RNNAutoEncoder")
-    full_hypertrain("RNN_VAE_Incremental")
+#    full_hypertrain("RNNAutoEncoder")
+#    full_hypertrain("RNN_VAE_Incremental")
     
     

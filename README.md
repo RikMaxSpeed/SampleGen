@@ -194,9 +194,19 @@ The key points here are very similar to my work on the CapStone hyper-parameter 
 
 The key item to work on is better modelling in the time-domain. I don't know whether LSTMs or some other transformer model will crack this, but this is the current gating factor.
 
-Increasing the sample dataset would also be helpful.
+A related issue: it would be brilliant to have a model that was independent of the sample length, using some sort of time dilation.
 
-The model has many possible uses, including as a back-end for a "text to audio" generator.
+Increasing the sample dataset would be beneficial, particularly with more synth, vocal and rhythmic sounds. Generating basic synth sounds could be implemented algorithmically.
+
+The model has many possible uses:
+- morphing between samples with randomisation to generate new sounds,
+- as a back-end for a "text to audio" generator,
+- sample classification using the encoder,
+
+There's also way more to model: 
+- different pitches, including how the timbre changes as you move up and down the note range.
+- different note velocities, modelling how the timbre changes on acoustic instruments played pianissimo to fortissimo.
+- modulations: for example vibrato on violin and voice.
 
 Ideally I would like to shift to working using audio samples rather than spectograms, that appears to be what is used in all the state-of-the-art models and publications.
 

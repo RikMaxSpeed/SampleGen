@@ -10,6 +10,9 @@ from torch.utils.data import DataLoader, random_split
 import numpy as np
 
 
+#default_activation_function = nn.ReLU()
+default_activation_function = nn.GELU()
+
 
 # Interpolates N values exponentially in the range [start, end]
 def exponential_interpolation(start, end, N):
@@ -165,7 +168,7 @@ def sequential_fully_connected(layer_sizes, final_activation):
     for i in range(len(layer_sizes) - 1):
         layers.append(nn.Linear(layer_sizes[i], layer_sizes[i+1]))
         if i < len(layer_sizes) - 2:  # Add activation for all but the last layer
-            layers.append(nn.GELU())
+            layers.append(default_activation_function)
     
     assert(len(layers) == 2*(len(layer_sizes)-1) - 1)
     
@@ -243,3 +246,23 @@ def periodically_display_2D_output(hiddens):
             height = hiddens[0].size(1)
             display_image_grid(hiddens.transpose(2, 1), f"Hidden outputs {width} x {height}", "magma")
 
+
+
+def compute_final_learning_rate(name, losses, window):
+    count = len(losses)
+    
+    if count < window:
+        return 1.0 # ideally the final_learning_rate should be < 0.
+        
+    ratios = [ (losses[i] / losses[i - 1]) - 1 for i in range(count - window + 1, count)]
+    average = np.mean(ratios)
+    print(f"{name}: final learning-rate={average*100:.2f}%")
+    return average
+
+
+if __name__ == '__main__':
+    window = 6
+    
+    for i in range(0, 20, 3):
+        data = [20-i for i in range(i)]
+        compute_final_learning_rate(f"example#{i+1}", data, window)

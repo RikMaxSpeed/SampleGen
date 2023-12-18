@@ -108,6 +108,7 @@ best_train_losses = []
 use_exact_train_loss = False # Setting to True is more accurate but very expensive in CPU time
 
 
+
 # Main entry point for training the model
 def train_model(model_type, hyper_params, max_epochs, max_time, max_params, max_overfit, max_loss, verbose):
     
@@ -130,18 +131,13 @@ def train_model(model_type, hyper_params, max_epochs, max_time, max_params, max_
     # Create the model
     model, model_text, model_size = make_model(model_type, model_params, max_params, verbose)
     
-    # As it stands this is useless. It just confuses the results, larger models may be able to further improve their accuracy.
-    # A more informative measure could be the model's rate of improvement when it stopped at max time.
-    size_penalty = 0 #np.log10(model_size) # slightly favour smaller models
-
     if model is None:
-        return max_loss + size_penalty, model_text
+        return model_text, model_size, max_loss, 1.0
         
     trainable = count_trainable_parameters(model)
-
     model_text += f" (params={model_size:,}, trainable={trainable:,} = {100*trainable/model_size:.1f}%)"
-    print(f"model: {model_text}")
     description = model_text + " | " + optimiser_text
+    print(f"model: {model_text}")
 
     # Train/Test & DataLoader
     dataloader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
@@ -151,7 +147,6 @@ def train_model(model_type, hyper_params, max_epochs, max_time, max_params, max_
     optimizer = optim.Adam(model.parameters(), lr=learning_rate, weight_decay=weight_decay)
 
     print(f"Adam: {trainable:,} trainable parameters") # check this is as expected.
-    print(f"model size penalty={size_penalty:.1f}")
     
     # Training loop
     start = time.time()
@@ -184,7 +179,8 @@ def train_model(model_type, hyper_params, max_epochs, max_time, max_params, max_
             
             if np.isnan(numeric_loss) or numeric_loss > max_loss:
                 print(f"*** Aborting: model exploded! loss={loss:.2f} vs max={max_loss}")
-                return max_loss + size_penalty, model_text
+                loss = np.min(train_losses) if len(train_losses) else max_loss
+                return description, model_size, loss, 9.99
 
             sum_train_loss += numeric_loss * len(inputs)
             sum_batches += len(inputs)
@@ -208,7 +204,7 @@ def train_model(model_type, hyper_params, max_epochs, max_time, max_params, max_
         
         if np.isnan(train_losses[-1]) or np.isnan(test_losses[-1]):
             print("Aborting: model returns NaNs :(") # High learning rate or unstable model?
-            return min(max_loss, min(train_losses)), model_text
+            return description, model_size, np.min(train_losses), 9.99
 
         
         # Progress
@@ -283,9 +279,8 @@ def train_model(model_type, hyper_params, max_epochs, max_time, max_params, max_
             ratio = train_losses[epoch] / best_train_losses[epoch]
             if ratio > 3:
                 print(f"Early stopping at epoch={epoch}, train loss={train_losses[epoch-1]:.1f} vs best={best_train_losses[epoch]:.1f}, ratio={ratio:.1f}")
-                return min(best_train_losses) * ratio, description # approximation in order not to mess up the GPR too much.
-                break
-
+                return description, model_size, max_loss, 0.0, max_loss, 0.0
+                return description, model_size, min(best_train_losses) * ratio, compute_final_learning_rate(train_losses) # approximation in order not to mess up the GPR too much.
 
     # Done!
     
@@ -298,9 +293,13 @@ def train_model(model_type, hyper_params, max_epochs, max_time, max_params, max_
     testL   = test_losses[-1]
     elapsed = time.time() - start
     epochs  = len(train_losses)
+    
     print("\n\nFinished Training after {} epochs in {:.1f} sec ({:.2f} sec/epoch), sample duration={:.1f} sec, test loss={:.2f}, train loss={:.2f}, overfit={:.1f}"\
     .format(epochs, elapsed, elapsed/epochs, sample_duration, testL, trainL, testL/trainL))
-    
+
+    train_rate = compute_final_learning_rate("Train", train_losses, window)
+    test_rate = compute_final_learning_rate("Test", test_losses, window)
+
     all_test_losses.append(test_losses)
     all_test_names.append("loss={:.1f}, {}, {}".format(np.min(test_losses), model_text, optimiser_text))
     
@@ -309,9 +308,5 @@ def train_model(model_type, hyper_params, max_epochs, max_time, max_params, max_
     if verbose and is_interactive:
         plot_train_test_losses(train_losses, test_losses, model_type)
     
-    return np.min(test_losses) + size_penalty, description
-
-
-
-
-
+    # We return the Test Loss: ultimatley we're looking for the model that trains best on the training set. Maximum overfit is handled in the stopping condition.
+    return description, model_size, np.min(train_losses), train_rate
