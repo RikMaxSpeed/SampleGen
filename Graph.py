@@ -102,6 +102,7 @@ class PlotVideoMaker:
             
         count = len(save_images)
         duration = count / fps
+        file_name = "Videos/" + file_name
         print(f"saving video {file_name}, {count} frames = {duration:.1f} sec @ {fps:.1f} FPS")
         imageio.mimsave(file_name, save_images, duration = duration / count)
 
