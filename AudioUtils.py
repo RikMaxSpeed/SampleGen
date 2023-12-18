@@ -83,7 +83,7 @@ def compute_stft(data, sr, n_fft, hop_length, win_length=None, window='hann'):
     
 
 
-stft_video = PlotVideoMaker("STFT_Video", True)
+stft_video = PlotVideoMaker("STFT_Video", True, 0.5)
 
 def save_stft_video():
     global stft_video
@@ -93,7 +93,7 @@ def save_stft_video():
 def start_new_stft_video(name, auto_save):
     global stft_video
     stft_video.automatic_save() # save anything that might be outstanding.
-    stft_video = PlotVideoMaker(name, auto_save)
+    stft_video = PlotVideoMaker(name, auto_save, 0.5)
 
 
 
@@ -104,7 +104,7 @@ def plot_stft(name, stft_result, sr, hop_length):
     plt.figure(figsize=(10, 4))
     librosa.display.specshow(dB, sr=sr, hop_length=hop_length, x_axis='time', y_axis='log')
     plt.colorbar(format='%+2.0f dB')
-    plt.title(name + f" ({sr} Hz)")
+    plt.title(name)
     plt.tight_layout()
     
     stft_video.add_plot(True)

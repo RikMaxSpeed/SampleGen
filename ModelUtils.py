@@ -265,4 +265,4 @@ if __name__ == '__main__':
     
     for i in range(0, 20, 3):
         data = [20-i for i in range(i)]
-        compute_final_learning_rate(f"example#{i+1}", data, window)
+        compute_final_learning_rate(f"Example#{i+1}", data, window)

@@ -19,6 +19,8 @@ print(f"Jupyter={is_interactive}, MatPlotLib.isinteractive()={plt.isinteractive(
 
 
 start_time = time.time()
+hour = 3600
+
 
 def total_time():
     return time.time() - start_time
@@ -46,12 +48,13 @@ unique_id = uuid_to_base64()
 print(f"Unique ID: {unique_id}")
 
 class PlotVideoMaker:
-    def __init__(self, name, auto_save):
+    def __init__(self, name, auto_save, pad_time):
         self.images = []
         self.name = name
         self.auto_save = auto_save
         self.last_save = time.time()
         self.needs_saving = False
+        self.pad_time = pad_time
         print(f"PlotVideoMaker: {self.name}, auto-save={self.auto_save}")
         
     def add_plot(self, show):
@@ -80,24 +83,34 @@ class PlotVideoMaker:
     def automatic_save(self):
         if self.needs_saving:
             count = len(self.images)
-            duration = max(2, count / 30)
+            duration = max(3, count / 10) # use a low FPS
             self.save_video(self.name + " - " + unique_id + ".gif", duration)
             self.last_save = time.time()
             self.needs_saving = False
     
     def save_video(self, file_name, duration):
         # Save the images as an animated GIF
-        count = len(self.images)
-        fps = count / duration
-        print(f"saving video {file_name}, {len(self.images)} frames = {duration:.1f} sec @ {fps:.1f} FPS")
-        imageio.mimsave(file_name, self.images, duration=duration / count)
+        # Because the GIF cycles, we added some duplicates of the first & last images
+        fps = len(self.images) / duration
+        
+        if False: # for some reason this doesn't work, the GIF doesn't repeat the additional frames!! :(
+            duplicate = int(self.pad_time * fps)
+            print(f"count={len(self.images)}, fps={fps:.1}, pad_time={self.pad_time}, duplicate={duplicate}")
+            save_images = duplicate * [self.images[0]] + self.images + duplicate * [self.images[-1]]
+        else:
+            save_images = self.images
+            
+        count = len(save_images)
+        duration = count / fps
+        print(f"saving video {file_name}, {count} frames = {duration:.1f} sec @ {fps:.1f} FPS")
+        imageio.mimsave(file_name, save_images, duration = duration / count)
 
 #    def __del__(self):
 #        self.automatic_save() # crashes.
 
 
 if __name__ == '__main__':
-    plot_video_maker = PlotVideoMaker("SineWaveDemo", False)
+    plot_video_maker = PlotVideoMaker("SineWaveDemo", False, 1.0)
 
     # Create some plots independently and add them to the video maker
     x = np.linspace(0, 2 * np.pi, 100)
@@ -253,7 +266,7 @@ def plot_train_test_losses(train_losses, test_losses, title):
     plt.show()
 
 
-hyperVideo = PlotVideoMaker("Hyper-Training", True)
+hyperVideo = PlotVideoMaker("Hyper-Training", True, 0.5)
 
 def plot_multiple_losses(losses, names, min_count, title):
     plt.figure(figsize=(12, 6))

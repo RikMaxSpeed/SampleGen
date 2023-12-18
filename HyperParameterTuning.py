@@ -54,7 +54,7 @@ def evaluate_model(params):
         # Bake the learning_rate into the loss:
         final_loss = loss
         if rate < 0:
-            final_loss *= (1 + rate) ** 10 # favourise models that have more scope to improve
+            final_loss *= (1 + rate) ** 20 # favourise models that have more scope to improve
         print(f"adjusted final loss={final_loss:.1f}, from loss={loss:.1f} and rate={rate*100:.3f}%")
         
         hyper_losses.append(final_loss)
@@ -242,15 +242,17 @@ def train_best_params(model_name, params = None, finest = False):
     print(f"train_best_params: {model_name}: {params}")
     start_new_stft_video(f"STFT - train {model_name}", True)
     
-    max_time = 12 * 3600 # hopefully the model converges way before this!
+    max_time = 12 * hour # hopefully the model converges way before this!
     max_overfit = 100.0 # ignore: we're aiming for the highest precision possible on the training set
     max_params = 1e9  # not relevant, we have a valid model
     max_epochs = 9999 # ignore
     max_loss = 1e9
     
+     # This does improve the final accuracy, but it's very slow.
     if finest:
         params[0] =  0 # override the batch-size
         params[1] = -6 # override the learning rate
+        #max_time = hour
     
     #set_display_hiddens(True) # Displays the internal auto-encoder output
     
@@ -268,14 +270,12 @@ if __name__ == '__main__':
     # Edit this to perform whatever operation is required.
     
     # MLP VAE model
-#    full_hypertrain("MLP_VAE")
-
-    train_best_params("StepWiseMLP")
 #    full_hypertrain("StepWiseMLP")
+    #fine_tune("StepWiseMLP")
     full_hypertrain("MLPVAE_Incremental")
-    
-    #optimise_hyper_parameters("MLPVAE_Incremental")
-    #train_best_params(, None)
+
+#    full_hypertrain("MLP_VAE")
+#    train_best_params("StepWiseMLP")
     
     # The best models from the hyper-tuning above:
 #    train_best_params("MLPVAE_Incremental", [3, -5, 5, 4, 0.1])  # params=2,399,218

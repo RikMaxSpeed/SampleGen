@@ -191,15 +191,15 @@ def train_model(model_type, hyper_params, max_epochs, max_time, max_params, max_
             optimizer.step()
         
         # Store the loss after each epoch:
-        approx_train_loss = sum_train_loss / sum_batches # effectively the loss at the previous time step before the most recent back-propagation
+        train_loss = sum_train_loss / sum_batches # effectively the loss at the previous time step before the most recent back-propagation
         if use_exact_train_loss:
             exact_train_loss = compute_average_loss(model, train_dataset, batch_size) # expensive operation
-            pct_error = 100 * (approx_train_loss/exact_train_loss - 1)
-            print(f"training loss: exact={exact_train_loss:.2f}, approx={approx_train_loss:.2f}, diff={pct_error:.2f}%")
-            approx_train_loss = exact_train_loss
+            pct_error = 100 * (train_loss/exact_train_loss - 1)
+            print(f"training loss: exact={exact_train_loss:.2f}, approx={train_loss:.2f}, diff={pct_error:.2f}%")
+            train_loss = exact_train_loss
             
         test_loss = compute_average_loss(model, test_dataset, batch_size) # this is an acceptable overhead if the test set is several times smaller than the train set.
-        train_losses.append(approx_train_loss)
+        train_losses.append(train_loss)
         test_losses.append(test_loss)
         
         if np.isnan(train_losses[-1]) or np.isnan(test_losses[-1]):
@@ -229,23 +229,23 @@ def train_model(model_type, hyper_params, max_epochs, max_time, max_params, max_
                 file.write(f"{count_trainable_parameters(model):,} weights & biases\n\n")
                 file.write(f"optimiser: {optimiser_text}\n")
                 file.write("\n")
-                file.write(f"train loss={train_losses[-1]:.1f}, test  loss={test_losses[-1]:.1f}, overfit={train_losses[-1]/test_losses[-1]:.2f}\n")
+                file.write(f"train loss={train_loss:.1f}, test loss={test_loss:.1f}, overfit={train_loss/test_loss:.2f}\n")
                 file.write(f"time={total_time:.0f} sec, train_size={len(train_dataset)}, batch_size={batch_size}, epoch={epoch} = {total_time/epoch:.1f} sec/epoch\n")
             
             # Generate a test tone:
             resynth, loss = predict_stft(model, sanity_test_stft)
-            print("Resynth {sanity_test_name}: loss={loss:.1f}")
+            print(f"Resynth {sanity_test_name}: loss={loss:.1f}")
             save_and_play_audio_from_stft(resynth, sample_rate, stft_hop, f"Results/{model_type} {sanity_test_name} - resynth.wav", False)
             
             # This now saves to video too
-            plot_stft("Resynth " + sanity_test_name, resynth, sample_rate, stft_hop)
+            plot_stft(f"{sanity_test_name}, loss={loss:.1f} @ epoch {epoch}", resynth, sample_rate, stft_hop)
             
 
         if verbose and now - lastGraph > graph_interval and len(train_losses) > 1:
             if is_interactive:
                 plot_train_test_losses(train_losses, test_losses, model_type)
             lastGraph = now
-            graph_interval = int(min(3600, 1.5*graph_interval))
+            graph_interval = int(min(hour, 1.5 * graph_interval)) # less & less frequently!
 
 
         if stop_condition(train_losses, test_losses, window, min_change, max_overfit, total_time):
@@ -279,8 +279,7 @@ def train_model(model_type, hyper_params, max_epochs, max_time, max_params, max_
             ratio = train_losses[epoch] / best_train_losses[epoch]
             if ratio > 3:
                 print(f"Early stopping at epoch={epoch}, train loss={train_losses[epoch-1]:.1f} vs best={best_train_losses[epoch]:.1f}, ratio={ratio:.1f}")
-                return description, model_size, max_loss, 0.0, max_loss, 0.0
-                return description, model_size, min(best_train_losses) * ratio, compute_final_learning_rate(train_losses) # approximation in order not to mess up the GPR too much.
+                return description, model_size, min(best_train_losses) * ratio, compute_final_learning_rate("Train", train_losses, window) # approximation in order not to mess up the GPR too much.
 
     # Done!
     
