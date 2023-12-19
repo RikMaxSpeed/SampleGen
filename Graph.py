@@ -5,6 +5,7 @@ import torch
 import time
 import inspect
 from Debug import *
+import math
 
 
 def is_running_in_jupyter():
@@ -75,7 +76,6 @@ class PlotVideoMaker:
             plt.close()
         
         if self.auto_save:
-            now = time.time()
             elapsed = time.time() - self.last_save
             if elapsed > 30:
                 self.automatic_save()
@@ -347,16 +347,16 @@ def plot_hypertrain_loss(loss, names, model_name):
     
     
 if __name__ == '__main__':
-    from num2words import num2words
+    import num2words
     N = 100
     plot_hypertrain_loss([np.random.uniform(0, 1) * np.exp(-t/N) for t in range(N)], [num2words(n+1) for n in range(N)], "Test Crash Dummy")
 
 
 def plot_bar_charts(encodings, names, title):
     assert(len(encodings) == len(names))
-    vars = len(encodings[0])
+    dimensions = len(encodings[0])
     count = len(names)
-    x = np.arange(vars)
+    x = np.arange(dimensions)
 
     bar_width = 0.7 / count
 
@@ -365,14 +365,14 @@ def plot_bar_charts(encodings, names, title):
     e = bar_width * count * 0.05
     var_width = bar_width * count + 2 * e
     
-    for j in range(vars):
+    for j in range(dimensions):
         vx = x[j] - bar_width / 2 - e
         plt.hlines(0, vx, vx + var_width, colors='black')
         
     for i in range(count):
         plt.bar(x + i * bar_width, encodings[i], width=bar_width, label=names[i])
 
-    plt.xticks(x + bar_width * (count - 1) / 2, [f'#{j+1}' for j in range(vars)])
+    plt.xticks(x + bar_width * (count - 1) / 2, [f'#{j+1}' for j in range(dimensions)])
     plt.title(title)
     
     if count <= 30:

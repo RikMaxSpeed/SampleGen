@@ -1,24 +1,25 @@
 # Use a GPR to adjust the hpyer-parameters.
 # The best models are saved to disk.
-
+from appscript.terminology import params
 from skopt import gp_minimize
 from skopt.space import Integer, Real, Categorical
+
+max_params = 0
+tuning_count = 0
+break_on_exceptions = True # True=Debugging, False allows the GPR to continue even if the model blows up (useful for long tuning runs!)
+max_loss = 10_000 # default
+
+hyper_model = "None"
+hyper_losses = []
+hyper_names  = []
+hyper_params = []
 
 from Train import *
 
 one_sample = freq_buckets * sequence_length
 print(f"1 sample = {freq_buckets:,} x {sequence_length:,} = {one_sample:,}")
 
-max_params = None
-tuning_count = 0
-break_on_exceptions = True # True=Debugging, False allows the GPR to continue even if the model blows up (useful for long tuning runs!)
-max_loss = 10_000 # default
 
-hyper_model = None
-hyper_losses = []
-hyper_names  = []
-hyper_params = []
-    
 def evaluate_model(params):
     global hyper_model, hyper_losses, hyper_names, tuning_count
     
@@ -33,7 +34,7 @@ def evaluate_model(params):
         print(f"Overriding max_overfit={max_overfit:.1f}")
         
     max_epochs = 80 # This is sufficient to figure out which model will converge best if we let it run for longer.
-    max_time = 600  # we don't like slow models...
+    max_time = int(hour/3)  # we don't like slow models...
     verbose = False # avoid printing lots of detail for each run
 
     if break_on_exceptions: # this is easier when debugging
@@ -62,12 +63,12 @@ def evaluate_model(params):
         hyper_params.append(params)
         
         order = np.argsort(hyper_losses)
-        topN = min(5, len(hyper_losses))
+        topN = min(20, len(hyper_losses))
         
         print("Best hyper parameters:")
         for i in range(topN):
             o = order[i]
-            print(f"#{i} {hyper_losses[o]:.1f}, {hyper_names[o]}")
+            print(f"#{i+1} {hyper_losses[o]:.1f}, {hyper_names[o]}")
         print("\n")
         
         file_name = hyper_model + " hyper parameters.txt"
@@ -79,7 +80,7 @@ def evaluate_model(params):
             file.write("\n\n")
             for i in range(topN):
                 o = order[i]
-                file.write(f"#{i} {hyper_losses[o]:.1f}, {hyper_names[o]}\n")
+                file.write(f"#{i+1} {hyper_losses[o]:.1f}, {hyper_names[o]}\n")
         
         if is_interactive:
             plot_hypertrain_loss(hyper_losses, hyper_names, hyper_model)
@@ -232,7 +233,7 @@ def train_best_params(model_name, params = None, finest = False):
     else:
         print(f"\n\n\nTraining model {model_name}\n")
     
-    #generate_training_stfts(100) # Small dataset of the most diverse samples
+    #generate_training_stfts(200) # Small dataset of the most diverse samples
     generate_training_stfts(None) # Full dataset with no augmentation
     #generate_training_stfts(3000) # use a large number of samples with augmentation
     
@@ -265,27 +266,37 @@ def full_hypertrain(model_name):
     train_best_params(model_name)
     #fine_tune(model_name)
 
+def grid_search():
+    global hyper_model, max_params
+    hyper_model = "MLPVAE_Incremental"
+    max_params = 20_000_000
+    samples, _ = generate_training_stfts(None)  # full data-set, this may be more representative
+    params = [4, -5, 4, 2, 0.1] # this is where gp_minimize got stuck...
+    for vae_depth in range(2, 5):
+        for latent in range(4, 8):
+            params[2] = latent
+            params[3] = vae_depth
+            print(f"\n\n\nGrid Hyper-train: latent={latent}, vae_depth={vae_depth}")
+            evaluate_model(params)
 
 if __name__ == '__main__':
     # Edit this to perform whatever operation is required.
     
     # MLP VAE model
-#    full_hypertrain("StepWiseMLP")
-    #fine_tune("StepWiseMLP")
-    full_hypertrain("MLPVAE_Incremental")
+    #full_hypertrain("StepWiseMLP")
+    #full_hypertrain("MLPVAE_Incremental") # Gets stuck in at a local minimum...
 
-#    full_hypertrain("MLP_VAE")
-#    train_best_params("StepWiseMLP")
-    
-    # The best models from the hyper-tuning above:
-#    train_best_params("MLPVAE_Incremental", [3, -5, 5, 4, 0.1])  # params=2,399,218
-#    train_best_params("MLPVAE_Incremental", [3, -5, 5, 2, 0.5])  # params=5,008,308
-#    train_best_params("MLPVAE_Incremental", [3, -5, 9, 2, 1.02]) # params=8,644,643
-#    train_best_params("MLPVAE_Incremental", [3, -5, 9, 2, 0.79]) # params=7,155,698
-#    train_best_params("MLPVAE_Incremental", [3, -5, 11, 2, 1.1]) # params=9,097,747
-    
+    #full_hypertrain("MLP_VAE") # Just to see whether this stands a chance of working
+    #train_best_params("MLP_VAE", [4, -5, 32, 2, 0.2, 7, 4, 0.1])
+
+    #grid_search()
+    train_best_params("StepWiseMLP")
+    fine_tune("StepWiseMLP")
+    train_best_params("MLPVAE_Incremental")
+    fine_tune("MLPVAE_Incremental")
+
     # RNN VAE model
-#    full_hypertrain("RNNAutoEncoder")
-#    full_hypertrain("RNN_VAE_Incremental")
-    
+    #full_hypertrain("RNNAutoEncoder")
+    #full_hypertrain("RNN_VAE_Incremental")
+
     

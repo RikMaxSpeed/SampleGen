@@ -377,17 +377,18 @@ def plot_categories(categories = None):
         g.plot_categories(categories)
 
 
+def plot_encodings():
+    for type in ["organ", "piano", "epiano", "string", "acoustic guitar", "marimba", "pad", "fm", "voice", ""]:
+        g.plot_encodings(type, 1000)
+
 def test_all():
     g.test_all()
 
 
 def demo_encodings():
+   plot_encodings()
+   plot_categories()
 #    generate_variations()
 #    g.generate_main_encodings([-2, -1, 0, +1, +2])
-    
-    generate_morphs()
-    
-#    plot_encodings()
-#    plot_categories()
-
+#    generate_morphs()
 
