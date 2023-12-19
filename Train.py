@@ -40,6 +40,9 @@ test_dataset     = None
 sanity_test_stft = None
 sanity_test_name = None
 
+def is_incremental_vae(model_name):
+    return "VAE_Incremental" in model_name
+
 
 def generate_training_stfts(how_many):
     global sanity_test_stft, sanity_test_name, train_dataset, test_dataset
@@ -83,15 +86,20 @@ def generate_training_stfts(how_many):
     train_size = int(how_many * ratio)
     if how_many is not None and len(train_stfts) < how_many * ratio:
         train_stfts = augment_stfts(train_stfts, int(how_many * ratio))
-    
+
     train_dataset = train_stfts
     test_dataset  = test_stfts
-    
     print(f"Using train={len(train_dataset)} samples, test={len(test_dataset)} samples.")
-    
+
     return len(train_dataset), len(test_dataset)
     
-    
+# If training an incremental VAE, we encode the STFTs just once using the auto-encoder
+def encode_stfts(model, stfts):
+    if len(stfts[0].shape) == 1:
+        return stfts # already encoded
+
+    print(f"Encoding {len(stfts)} STFTs")
+    return [model.encode(stft.unsqueeze(0)).squeeze(0) for stft in stfts] # add/remove batch dimension
 
 
 # Hyper-parameter optimisation
@@ -104,14 +112,14 @@ all_test_names = []
 # Compare the training loss to the best we've found, and abort if it's too far off.
 best_train_losses = []
 
-
 use_exact_train_loss = False # Setting to True is more accurate but very expensive in CPU time
 
 
 
 # Main entry point for training the model
-def train_model(model_type, hyper_params, max_epochs, max_time, max_params, max_overfit, max_loss, verbose):
-    
+def train_model(model_type, hyper_params, max_epochs, max_time, max_params, max_overfit, max_loss, verbose, load_existing):
+    global train_dataset, test_dataset
+
     # We split the hyper-params into optimiser parameters & model parameters:
     opt_params   = hyper_params[:2]
     model_params = hyper_params[2:]
@@ -129,7 +137,10 @@ def train_model(model_type, hyper_params, max_epochs, max_time, max_params, max_
     print(f"optimiser: {optimiser_text}")
     
     # Create the model
-    model, model_text, model_size = make_model(model_type, model_params, max_params, verbose)
+    if load_existing:
+        model, model_text, model_params, model_size = load_saved_model(model_type)
+    else:
+        model, model_text, model_size = make_model(model_type, model_params, max_params, verbose)
     
     if model is None:
         return model_text, model_size, max_loss, 1.0
@@ -138,6 +149,17 @@ def train_model(model_type, hyper_params, max_epochs, max_time, max_params, max_
     model_text += f" (params={model_size:,}, trainable={trainable:,} = {100*trainable/model_size:.1f}%)"
     description = model_text + " | " + optimiser_text
     print(f"model: {model_text}")
+
+    # Optimisation for Incremental VAE: encode the STFTs using the auto_encoder layers only.
+    is_vae = is_incremental_vae(model_type)
+
+    if is_vae:
+        # We will only be training the inner VAE, so we first encode the STFTs
+        active_model = model.vae
+        train_dataset = encode_stfts(model.auto_encoder, train_dataset)
+        test_dataset = encode_stfts(model.auto_encoder, test_dataset)
+    else:
+        active_model = model
 
     # Train/Test & DataLoader
     dataloader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
@@ -165,7 +187,7 @@ def train_model(model_type, hyper_params, max_epochs, max_time, max_params, max_
     graph_interval = 5
     
     for epoch in range(0, max_epochs):
-        model.train() # ensure we compute gradients
+        active_model.train() # ensure we compute gradients
         
         sum_train_loss = 0
         sum_batches = 0
@@ -173,7 +195,7 @@ def train_model(model_type, hyper_params, max_epochs, max_time, max_params, max_
             inputs = inputs.to(device)
         
             # Forward pass
-            loss, _ = model.forward_loss(inputs)
+            loss, _ = active_model.forward_loss(inputs)
             
             numeric_loss = loss.item() # loss is a tensor
             
@@ -193,12 +215,12 @@ def train_model(model_type, hyper_params, max_epochs, max_time, max_params, max_
         # Store the loss after each epoch:
         train_loss = sum_train_loss / sum_batches # effectively the loss at the previous time step before the most recent back-propagation
         if use_exact_train_loss:
-            exact_train_loss = compute_average_loss(model, train_dataset, batch_size) # expensive operation
+            exact_train_loss = compute_average_loss(active_model, train_dataset, batch_size) # expensive operation
             pct_error = 100 * (train_loss/exact_train_loss - 1)
             print(f"training loss: exact={exact_train_loss:.2f}, approx={train_loss:.2f}, diff={pct_error:.2f}%")
             train_loss = exact_train_loss
             
-        test_loss = compute_average_loss(model, test_dataset, batch_size) # this is an acceptable overhead if the test set is several times smaller than the train set.
+        test_loss = compute_average_loss(active_model, test_dataset, batch_size) # this is an acceptable overhead if the test set is several times smaller than the train set.
         train_losses.append(train_loss)
         test_losses.append(test_loss)
         
@@ -218,7 +240,7 @@ def train_model(model_type, hyper_params, max_epochs, max_time, max_params, max_
             
             # Save the model:
             file_name = "Models/" + model_type # keep over-writing the same file as the loss improves
-            print(f"*** Best! loss={last_saved_loss:.2f}")
+            print(f"\n*** Best! loss={last_saved_loss:.2f}")
             print(f"{model_text}\n{optimiser_text}\nhyper-parameters: {hyper_params}")
             torch.save(model.state_dict(), file_name + ".wab")
             
@@ -239,7 +261,7 @@ def train_model(model_type, hyper_params, max_epochs, max_time, max_params, max_
             
             # This now saves to video too
             plot_stft(f"{sanity_test_name}, loss={loss:.1f} @ epoch {epoch}", resynth, sample_rate, stft_hop)
-            
+            print("\n")
 
         if verbose and now - lastGraph > graph_interval and len(train_losses) > 1:
             if is_interactive:
@@ -257,18 +279,7 @@ def train_model(model_type, hyper_params, max_epochs, max_time, max_params, max_
         if total_time > max_time:
             print("Total time={:.1f} sec exceeds max={:.0f} sec".format(total_time, max_time))
             break
-            
-        # Early stopping based on average convergence:
-        # In practice this didn't work well: the mean can fluctuate to much, even when removing outliers, and it's not sufficiently aggressive.
-        # Note: this should really be time-based rather than epoch as models run at different speeds depending on batch size, learning rate and model size.
-        # ie: if after 1mn the model is worse than the average at 1mn then give up...
-        # In practice, the current implementation doesn't work too well, the stdev can be very high. Could try mean - 0.1 x stdev ? ...
-#        if epoch > 30 and epoch % 10 == 0:
-#            mean, stdev = compute_epoch_stats(all_test_losses, epoch, 10)
-#            loss = test_losses[-1]
-#            if mean is not None and loss > mean: # we could make this more aggressive, for example: mean - 0.5 * stdev
-#                print(f"Early stopping at epoch={epoch}, test loss={loss:.1f} vs mean={mean:.1f}")
-#                break
+
 
         # Early stopping: abort if a model is converging too slowly vs the best.
         # Unfortunately this is not in time space, but in epochs.

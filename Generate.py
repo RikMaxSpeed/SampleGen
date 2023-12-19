@@ -41,7 +41,8 @@ class Sample_Generator():
         
     def load_data(self, model_name):
         self.model_name = model_name
-        self.model = load_saved_model(model_name)
+        self.model, model_text, params, model_size = load_saved_model(model_name)
+        print("Generate samples using {model_text}")
         self.stfts, self.file_names = load_STFTs()
         self.categories = infer_sample_categories(self.file_names)
 

@@ -242,5 +242,5 @@ def load_saved_model(model_name):
     model.to(device)
     print(f"{model_type} has {count_trainable_parameters(model):,} weights & biases")
     
-    return model
+    return model, model_text, params, model_size
 
