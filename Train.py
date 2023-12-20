@@ -115,6 +115,12 @@ best_train_losses = []
 use_exact_train_loss = False # Setting to True is more accurate but very expensive in CPU time
 
 
+def reset_train_losses():
+    global all_test_losses, all_test_names, best_train_losses
+    all_test_names = []
+    all_test_losses = []
+    best_train_losses = []
+
 
 # Main entry point for training the model
 def train_model(model_type, hyper_params, max_epochs, max_time, max_params, max_overfit, max_loss, verbose, load_existing):
@@ -251,9 +257,10 @@ def train_model(model_type, hyper_params, max_epochs, max_time, max_params, max_
                 file.write(f"{count_trainable_parameters(model):,} weights & biases\n\n")
                 file.write(f"optimiser: {optimiser_text}\n")
                 file.write("\n")
-                file.write(f"train loss={train_loss:.1f}, test loss={test_loss:.1f}, overfit={train_loss/test_loss:.2f}\n")
+                file.write(f"train loss={train_loss:.1f}, test loss={test_loss:.1f}, overfit={test_loss/train_loss:.2f}\n")
                 file.write(f"time={total_time:.0f} sec, train_size={len(train_dataset)}, batch_size={batch_size}, epoch={epoch} = {total_time/epoch:.1f} sec/epoch\n")
-            
+                file.write(f"\n{active_model}\n")
+
             # Generate a test tone:
             resynth, loss = predict_stft(model, sanity_test_stft)
             print(f"Resynth {sanity_test_name}: loss={loss:.1f}")

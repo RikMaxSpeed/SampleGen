@@ -164,14 +164,14 @@ class Sample_Generator():
             save_and_play_audio_from_stft(stft, sample_rate, stft_hop, "Results/" + save_file + ".wav", play_sound)
 
 
-    def randomise_sample(self, pattern, max_noise=2, play_sound=True, steps=5):
+    def randomise_sample(self, pattern, max_noise=0.5, play_sound=True, steps=5):
         name, stft, encode = self.encode_sample_matching(pattern, 0.0)
         plot_bar_charts([numpify(encode)], [name], self.model_name + " encoding")
 
         for i in range(steps):
             amount = max_noise * i / (steps - 1)
             name, stft, noisy_encode = self.encode_sample_matching(name, amount)
-            save_file = f"{self.model_name}: noise={100*amount:.1f}% {name}"
+            save_file = f"{self.model_name}: {name} + noise={100*amount:.1f}% "
             self.decode_and_save(noisy_encode, save_file, play_sound)
 
 
@@ -389,7 +389,9 @@ def test_all():
 def demo_encodings():
    plot_encodings()
    plot_categories()
-#    generate_variations()
-#    g.generate_main_encodings([-2, -1, 0, +1, +2])
-#    generate_morphs()
+
+def demo_sounds():
+   generate_variations()
+   g.generate_main_encodings([-2, -1, 0, +1, +2])
+   generate_morphs()
 

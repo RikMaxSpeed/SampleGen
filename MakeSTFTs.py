@@ -15,7 +15,7 @@ mu_law = MuLawCodec(8) # Yet another hyper-parameter but we can't tune this one 
 
 amps = AmplitudeCodec()
 #amps = None
-
+min_amp = dB_to_amplitude(-40)
 
 # Configure the Audio -> STFT conversion
 sample_rate = 44100
@@ -259,7 +259,7 @@ def convert_stft_to_input(stft):
         stft = stft[:freq_buckets//2,:] # complex, so divide by 2.
         stft = convert_to_reals(stft)
     else:
-        stft = amps.encode(stft)
+        stft = amps.encode(stft).clamp(min_amp)
         
     assert(stft.size(0) == freq_buckets)
     assert(stft.size(1) == sequence_length)
@@ -295,6 +295,7 @@ def convert_stft_to_output(stft):
 
     else:
         stft = stft.cpu().detach() * maxAmp # re-amplify
+        stft = stft.clamp(min_amp)
         iterations = 50
         stft = torch.tensor(recover_audio_from_magnitude(stft, stft_buckets, stft_hop, sample_rate, iterations))
         assert(stft.size(0) == stft_size + 1)

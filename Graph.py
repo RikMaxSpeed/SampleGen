@@ -6,6 +6,7 @@ import time
 import inspect
 from Debug import *
 import math
+from num2words import num2words
 
 
 def is_running_in_jupyter():
@@ -347,13 +348,12 @@ def plot_hypertrain_loss(loss, names, model_name):
     
     
 if __name__ == '__main__':
-    import num2words
     N = 100
     plot_hypertrain_loss([np.random.uniform(0, 1) * np.exp(-t/N) for t in range(N)], [num2words(n+1) for n in range(N)], "Test Crash Dummy")
 
 
 def plot_bar_charts(encodings, names, title):
-    assert(len(encodings) == len(names))
+    assert (len(encodings) == len(names))
     dimensions = len(encodings[0])
     count = len(names)
     x = np.arange(dimensions)
@@ -361,24 +361,36 @@ def plot_bar_charts(encodings, names, title):
     bar_width = 0.7 / count
 
     plt.figure(figsize=(12, 6))
-    
+
     e = bar_width * count * 0.05
     var_width = bar_width * count + 2 * e
-    
+
     for j in range(dimensions):
         vx = x[j] - bar_width / 2 - e
         plt.hlines(0, vx, vx + var_width, colors='black')
-        
-    for i in range(count):
-        plt.bar(x + i * bar_width, encodings[i], width=bar_width, label=names[i])
 
-    plt.xticks(x + bar_width * (count - 1) / 2, [f'#{j+1}' for j in range(dimensions)])
+    for i in range(count):
+        bx = x + i * bar_width
+        plt.bar(bx, encodings[i], width=bar_width, label=names[i])
+
+    # Calculate and display mean & std for each dimension across all groups
+    if len(encodings) > 1:
+        means = np.mean(encodings, axis=0)
+        stds = np.std(encodings, axis=0)
+        font_size = 8
+        for j in range(dimensions):
+            mean = means[j]
+            std = stds[j]
+            plt.text(x[j] + bar_width * count / 2, mean, f"μ={mean:.2f}\nσ={std:.2f}", ha='center', va='bottom',
+                     fontsize=font_size)
+
+    plt.xticks(x + bar_width * (count - 1) / 2, [f'#{j + 1}' for j in range(dimensions)])
     plt.title(title)
-    
+
     if count <= 30:
         plt.legend(loc='upper left', bbox_to_anchor=(1, 1))
         plt.tight_layout()
-        
+
     plt.show()
 
 

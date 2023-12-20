@@ -92,7 +92,7 @@ def stop_condition(train_losses, test_losses, window, min_change, max_overfit, t
     if now - last_progress > progress_seconds:
         last_progress = now
         print("total={:.0f} sec, epoch={} ({:.1f} sec/epoch), train={:.1f} ({:.2f}%), test={:.1f} ({:.2f}%), overfit={:.2f}"\
-        .format(total, epochs, total/epochs, train_losses[-1], delta(train_losses), test_losses[-1], delta(test_losses), train_losses[-1]/test_losses[-1]))
+        .format(total, epochs, total/epochs, train_losses[-1], delta(train_losses), test_losses[-1], delta(test_losses), test_losses[-1]/train_losses[-1]))
         
     if len(test_losses) < 2*window: # Too few epochs
         return False

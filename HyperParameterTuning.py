@@ -14,6 +14,15 @@ hyper_losses = []
 hyper_names  = []
 hyper_params = []
 
+def reset_hyper_training():
+    global hyper_model, hyper_losses, hyper_names, hyper_params
+    hyper_model = "None"
+    hyper_losses = []
+    hyper_names = []
+    hyper_params = []
+    reset_train_losses()
+
+
 from Train import *
 
 one_sample = freq_buckets * sequence_length
@@ -39,13 +48,14 @@ def evaluate_model(params):
 
     max_time = int(hour/3)  # we don't like slow models...
     verbose = False # avoid printing lots of detail for each run
+    preload = False
 
     if break_on_exceptions: # this is easier when debugging
-        model_text, model_size, loss, rate = train_model(hyper_model, params, max_epochs, max_time, max_params, max_overfit, max_loss, verbose)
+        model_text, model_size, loss, rate = train_model(hyper_model, params, max_epochs, max_time, max_params, max_overfit, max_loss, verbose, preload)
 
     else: # we need this for long overnight runs in case something weird happens
         try:
-            model_text, model_size, loss, rate = train_model(hyper_model, params, max_epochs, max_time, max_params, max_overfit, max_loss, verbose)
+            model_text, model_size, loss, rate = train_model(hyper_model, params, max_epochs, max_time, max_params, max_overfit, max_loss, verbose, preload)
 
         except Exception as e:
             print(f"*** Exception: {e}")
@@ -121,10 +131,11 @@ def generate_parameters(search_space, amount):
 
 def optimise_hyper_parameters(model_name):
     print(f"\n\n\nOptimising Hyper Parameters for {model_name}\n")
+    reset_hyper_training()
 
     # Use a smaller data-set here to speed things up? Could favour small models that can't handle the entire data-set.
     samples, _ = generate_training_stfts(None) # full data-set, this may be more representative
-    #samples, _ = generate_training_stfts(160) # 10 x batch=16
+    #samples, _ = generate_training_stfts(200) # 80% = 10 x batch=16
     print(f"Training data set has {samples} samples.")
 
     global max_params, max_loss
@@ -215,7 +226,7 @@ def optimise_hyper_parameters(model_name):
     start_new_stft_video(f"STFT - hyper-train {model_name}", True)
 
     # Generate starting parameters, around the minimum sizes which tend to generate smaller networks
-    max_loops = 80
+    max_loops = 60 # it frequently gets stuck at some local minimum before this.
     result = gp_minimize(evaluate_model, search_space, n_calls=max_loops, noise='gaussian', verbose=False, acq_func='LCB')
     #n_initial_points=8, initial_point_generator='sobol',
 
@@ -235,6 +246,8 @@ def train_best_params(model_name, params = None, finest = False):
         print(f"\n\n\nFine-Tuning {model_name}\n")
     else:
         print(f"\n\n\nTraining model {model_name}\n")
+
+    reset_train_losses()
 
     #generate_training_stfts(200) # Small dataset of the most diverse samples
     generate_training_stfts(None) # Full dataset with no augmentation
@@ -289,7 +302,8 @@ if __name__ == '__main__':
     #full_hypertrain("StepWiseMLP")
     #full_hypertrain("MLPVAE_Incremental") # Gets stuck in at a local minimum...
 
-    #train_best_params("StepWiseMLP")
+    # train_best_params("StepWiseMLP")
+    # fine_tune("StepWiseMLP")
     train_best_params("MLPVAE_Incremental")
     fine_tune("MLPVAE_Incremental")
 
