@@ -39,9 +39,12 @@ class StepWiseMLPAutoEncoder(nn.Module):
         self.sequence_length = sequence_length
         self.hidden_size = hidden_size
         encode_layer_sizes, decode_layer_sizes = StepWiseMLPAutoEncoder.get_layer_sizes(freq_buckets, hidden_size, depth, ratio)
-        
-        self.encoder = sequential_fully_connected(encode_layer_sizes, None) #nn.Tanh()) # The VAE may work better with normalised inputs?
-        self.decoder = sequential_fully_connected(decode_layer_sizes, None)
+
+
+        final = nn.Tanh() # The VAE may work better with normalised inputs?
+
+        self.encoder = sequential_fully_connected(encode_layer_sizes, final)
+        self.decoder = sequential_fully_connected(decode_layer_sizes, final)
 
         print(f"StepWiseMLPAutoEncoder {count_trainable_parameters(self):,} parameters, compression={freq_buckets/hidden_size:.1f}")
 

@@ -372,3 +372,14 @@ def recover_audio_from_magnitude(magnitude_spectrogram, stft_size, stft_hop, sam
     # We convert back to STFT to ease integration with the rest of the code!!
     return compute_stft(audio, sample_rate, stft_size, stft_hop)
 
+
+import subprocess
+
+def speak_macos(text, voice="Reed"):
+    try:
+        subprocess.run(['say', '-v', voice, text], check=True)
+    except subprocess.CalledProcessError as e:
+        print(f"An error occurred: {e}")
+
+if __name__ == '__main__':
+    speak_macos("Testing 1, 2, 3.")

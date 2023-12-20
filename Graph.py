@@ -249,7 +249,7 @@ def plot_loss(losses, name=None, colour=None, linewidth = 1):
     
     plt.scatter(i+1, min_loss, c=colour, s=8)
     if name is not None:
-        plt.text(i+1, min_loss, f"{min_loss:.1f}", color = colour)
+        plt.text(i+1, min_loss, f"{min_loss:.2f}", color = colour)
 
 
 def plot_train_test_losses(train_losses, test_losses, title):
@@ -332,7 +332,7 @@ def plot_hypertrain_loss(loss, names, model_name):
         for rank in range(top):
             i = order[rank]
             plt.scatter(i+1, loss[i], marker="o", s=12, c='r')
-            plt.text(i+1, loss[i], f"#{rank+1} = {loss[i]:.1f}")
+            plt.text(i+1, loss[i], f"#{rank+1} = {loss[i]:.2f}")
     
     # running average
     window = int(1 + len(loss)/5)
@@ -376,12 +376,14 @@ def plot_bar_charts(encodings, names, title):
     # Calculate and display mean & std for each dimension across all groups
     if len(encodings) > 1:
         means = np.mean(encodings, axis=0)
-        stds = np.std(encodings, axis=0)
+        stds  = np.std(encodings, axis=0)
+        Ys  = np.max(encodings, axis=0)
+
         font_size = 8
         for j in range(dimensions):
             mean = means[j]
             std = stds[j]
-            plt.text(x[j] + bar_width * count / 2, mean, f"μ={mean:.2f}\nσ={std:.2f}", ha='center', va='bottom',
+            plt.text(x[j] + bar_width * count *.4, Ys[j], f"μ={mean:.2f}\nσ={std:.2f}", ha='center', va='bottom',
                      fontsize=font_size)
 
     plt.xticks(x + bar_width * (count - 1) / 2, [f'#{j + 1}' for j in range(dimensions)])

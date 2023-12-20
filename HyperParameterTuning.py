@@ -69,10 +69,10 @@ def evaluate_model(params):
         final_loss = loss
         if rate < 0:
             final_loss *= (1 + rate) ** 20 # favourise models that have more scope to improve
-        print(f"adjusted final loss={final_loss:.1f}, from loss={loss:.1f} and rate={rate*100:.3f}%")
+        print(f"adjusted final loss={final_loss:.2f}, from loss={loss:.2f} and rate={rate*100:.3f}%")
 
         hyper_losses.append(final_loss)
-        hyper_names.append(model_text + f" | real loss={loss:.1f}, rate={rate * 100:.3f}%") # Record the final learning rate
+        hyper_names.append(model_text + f" | real loss={loss:.2f}, rate={rate * 100:.3f}%") # Record the final learning rate
         hyper_params.append(params)
 
         order = np.argsort(hyper_losses)
@@ -81,7 +81,7 @@ def evaluate_model(params):
         print("Best hyper parameters:")
         for i in range(topN):
             o = order[i]
-            print(f"#{i+1} {hyper_losses[o]:.1f}, {hyper_names[o]}")
+            print(f"#{i+1} {hyper_losses[o]:.2f}, {hyper_names[o]}")
         print("\n")
 
         file_name = hyper_model + " hyper parameters.txt"
@@ -93,7 +93,7 @@ def evaluate_model(params):
             file.write("\n\n")
             for i in range(topN):
                 o = order[i]
-                file.write(f"#{i+1} {hyper_losses[o]:.1f}, {hyper_names[o]}\n")
+                file.write(f"#{i+1} {hyper_losses[o]:.2f}, {hyper_names[o]}\n")
 
         if is_interactive:
             plot_hypertrain_loss(hyper_losses, hyper_names, hyper_model)
@@ -302,10 +302,10 @@ if __name__ == '__main__':
     #full_hypertrain("StepWiseMLP")
     #full_hypertrain("MLPVAE_Incremental") # Gets stuck in at a local minimum...
 
-    # train_best_params("StepWiseMLP")
-    # fine_tune("StepWiseMLP")
-    train_best_params("MLPVAE_Incremental")
-    fine_tune("MLPVAE_Incremental")
+    train_best_params("StepWiseMLP", [3, -5, 35, 2, 1.0]) # small batches converge faster!!
+    fine_tune("StepWiseMLP")
+    # train_best_params("MLPVAE_Incremental")
+    # fine_tune("MLPVAE_Incremental")
 
     #optimise_hyper_parameters("MLPVAE_Incremental") # finds the optimal config and keeps looping over that...
 

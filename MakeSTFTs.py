@@ -15,7 +15,7 @@ mu_law = MuLawCodec(8) # Yet another hyper-parameter but we can't tune this one 
 
 amps = AmplitudeCodec()
 #amps = None
-min_amp = dB_to_amplitude(-40)
+min_amp = 0 #dB_to_amplitude(-40)
 
 # Configure the Audio -> STFT conversion
 sample_rate = 44100
@@ -259,7 +259,7 @@ def convert_stft_to_input(stft):
         stft = stft[:freq_buckets//2,:] # complex, so divide by 2.
         stft = convert_to_reals(stft)
     else:
-        stft = amps.encode(stft).clamp(min_amp)
+        stft = amps.encode(stft)
         
     assert(stft.size(0) == freq_buckets)
     assert(stft.size(1) == sequence_length)

@@ -8,7 +8,7 @@ from ModelUtils import *
 
 # Loss functions
 def reconstruction_loss(inputs, outputs):
-    return F.mse_loss(inputs, outputs, reduction='sum')
+    return F.mse_loss(inputs, outputs, reduction='sum') / inputs.size(0) # normalise
 
 
 def weighted_stft_reconstruction_loss(inputs, outputs):

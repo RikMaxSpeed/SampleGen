@@ -241,7 +241,7 @@ def train_model(model_type, hyper_params, max_epochs, max_time, max_params, max_
 
         # Save the best models (but not too often)
         global last_saved_loss
-        if epoch >= 5 and train_losses[-1] < last_saved_loss * 0.95:
+        if train_losses[-1] < last_saved_loss * 0.95:
             last_saved_loss = train_losses[-1]
             
             # Save the model:
@@ -249,7 +249,9 @@ def train_model(model_type, hyper_params, max_epochs, max_time, max_params, max_
             print(f"\n*** Best! loss={last_saved_loss:.2f}")
             print(f"{model_text}\n{optimiser_text}\nhyper-parameters: {hyper_params}")
             torch.save(model.state_dict(), file_name + ".wab")
-            
+
+            speak_macos(f"Best loss {last_saved_loss:.2f}")
+
             # Write the parameters to file:
             with open(file_name+".txt", 'w') as file:
                 file.write(str(hyper_params) + "\n\n")
@@ -257,17 +259,17 @@ def train_model(model_type, hyper_params, max_epochs, max_time, max_params, max_
                 file.write(f"{count_trainable_parameters(model):,} weights & biases\n\n")
                 file.write(f"optimiser: {optimiser_text}\n")
                 file.write("\n")
-                file.write(f"train loss={train_loss:.1f}, test loss={test_loss:.1f}, overfit={test_loss/train_loss:.2f}\n")
-                file.write(f"time={total_time:.0f} sec, train_size={len(train_dataset)}, batch_size={batch_size}, epoch={epoch} = {total_time/epoch:.1f} sec/epoch\n")
+                file.write(f"train loss={train_loss:.2f}, test loss={test_loss:.2f}, overfit={test_loss/train_loss:.2f}\n")
+                file.write(f"time={total_time:.0f} sec, train_size={len(train_dataset)}, batch_size={batch_size}, epoch={epoch} = {total_time/(epoch+1):.1f} sec/epoch\n")
                 file.write(f"\n{active_model}\n")
 
             # Generate a test tone:
             resynth, loss = predict_stft(model, sanity_test_stft)
-            print(f"Resynth {sanity_test_name}: loss={loss:.1f}")
+            print(f"Resynth {sanity_test_name}: loss={loss:.2f}")
             save_and_play_audio_from_stft(resynth, sample_rate, stft_hop, f"Results/{model_type} {sanity_test_name} - resynth.wav", False)
             
             # This now saves to video too
-            plot_stft(f"{sanity_test_name}, loss={loss:.1f} @ epoch {epoch}", resynth, sample_rate, stft_hop)
+            plot_stft(f"{sanity_test_name}, loss={loss:.2f} @ epoch {epoch}", resynth, sample_rate, stft_hop)
             print("\n")
 
         if verbose and now - lastGraph > graph_interval and len(train_losses) > 1:
@@ -296,7 +298,7 @@ def train_model(model_type, hyper_params, max_epochs, max_time, max_params, max_
         if epoch >= 20 and epoch < len(best_train_losses):
             ratio = train_losses[epoch] / best_train_losses[epoch]
             if ratio > 3:
-                print(f"Early stopping at epoch={epoch}, train loss={train_losses[epoch-1]:.1f} vs best={best_train_losses[epoch]:.1f}, ratio={ratio:.1f}")
+                print(f"Early stopping at epoch={epoch}, train loss={train_losses[epoch-1]:.2f} vs best={best_train_losses[epoch]:.2f}, ratio={ratio:.1f}")
                 return description, model_size, min(best_train_losses) * ratio, compute_final_learning_rate("Train", train_losses, window) # approximation in order not to mess up the GPR too much.
 
     # Done!
@@ -314,16 +316,21 @@ def train_model(model_type, hyper_params, max_epochs, max_time, max_params, max_
     print("\n\nFinished Training after {} epochs in {:.1f} sec ({:.2f} sec/epoch), sample duration={:.1f} sec, test loss={:.2f}, train loss={:.2f}, overfit={:.1f}"\
     .format(epochs, elapsed, elapsed/epochs, sample_duration, testL, trainL, testL/trainL))
 
+    if elapsed > 300: # don't blab about failed attempts
+        speak_macos(f"Training stopped at epoch {len(train_losses)}, after {elapsed:.1f} seconds, loss {np.min(train_losses):.2f}")
+
     train_rate = compute_final_learning_rate("Train", train_losses, window)
     test_rate = compute_final_learning_rate("Test", test_losses, window)
 
     all_test_losses.append(test_losses)
-    all_test_names.append("loss={:.1f}, {}, {}".format(np.min(test_losses), model_text, optimiser_text))
+    all_test_names.append("loss={:.2f}, {}, {}".format(np.min(test_losses), model_text, optimiser_text))
     
     plot_multiple_losses(all_test_losses, all_test_names, 5, model_type) # can have 100+ curves.
     
     if verbose and is_interactive:
         plot_train_test_losses(train_losses, test_losses, model_type)
-    
+
+
+
     # We return the Test Loss: ultimatley we're looking for the model that trains best on the training set. Maximum overfit is handled in the stopping condition.
     return description, model_size, np.min(train_losses), train_rate
