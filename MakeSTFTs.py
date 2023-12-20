@@ -10,12 +10,12 @@ from Device import *
 from Debug import *
 
 
-mu_law = MuLawCodec(8) # Yet another hyper-parameter but we can't tune this one as it's outside the model's loss function.
-#mu_law = None
+#mu_law = MuLawCodec(8) # Yet another hyper-parameter but we can't tune this one as it's outside the model's loss function.
+mu_law = None
 
 amps = AmplitudeCodec()
 #amps = None
-min_amp = 0 #dB_to_amplitude(-40)
+min_amp = 1e-3
 
 # Configure the Audio -> STFT conversion
 sample_rate = 44100

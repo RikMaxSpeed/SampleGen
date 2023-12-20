@@ -250,7 +250,7 @@ def train_model(model_type, hyper_params, max_epochs, max_time, max_params, max_
             print(f"{model_text}\n{optimiser_text}\nhyper-parameters: {hyper_params}")
             torch.save(model.state_dict(), file_name + ".wab")
 
-            speak_macos(f"Best loss {last_saved_loss:.2f}")
+            speak_macos(f"Best is {last_saved_loss:.2f}".replace(".", " spot "))
 
             # Write the parameters to file:
             with open(file_name+".txt", 'w') as file:
@@ -259,7 +259,7 @@ def train_model(model_type, hyper_params, max_epochs, max_time, max_params, max_
                 file.write(f"{count_trainable_parameters(model):,} weights & biases\n\n")
                 file.write(f"optimiser: {optimiser_text}\n")
                 file.write("\n")
-                file.write(f"train loss={train_loss:.2f}, test loss={test_loss:.2f}, overfit={test_loss/train_loss:.2f}\n")
+                file.write(f"train loss={train_loss:.2f}, test loss={test_loss:.2f}, overfit={train_loss/test_loss:.2f}\n")
                 file.write(f"time={total_time:.0f} sec, train_size={len(train_dataset)}, batch_size={batch_size}, epoch={epoch} = {total_time/(epoch+1):.1f} sec/epoch\n")
                 file.write(f"\n{active_model}\n")
 
@@ -313,7 +313,7 @@ def train_model(model_type, hyper_params, max_epochs, max_time, max_params, max_
     elapsed = time.time() - start
     epochs  = len(train_losses)
     
-    print("\n\nFinished Training after {} epochs in {:.1f} sec ({:.2f} sec/epoch), sample duration={:.1f} sec, test loss={:.2f}, train loss={:.2f}, overfit={:.1f}"\
+    print("\n\nFinished Training after {} epochs in {:.1f} sec ({:.2f} sec/epoch), sample duration={:.1f} sec, test loss={:.2f}, train loss={:.2f}, overfit={:.2f}"\
     .format(epochs, elapsed, elapsed/epochs, sample_duration, testL, trainL, testL/trainL))
 
     if elapsed > 300: # don't blab about failed attempts

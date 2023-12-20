@@ -91,7 +91,7 @@ def stop_condition(train_losses, test_losses, window, min_change, max_overfit, t
     now = time.time()
     if now - last_progress > progress_seconds:
         last_progress = now
-        print("total={:.0f} sec, epoch={} ({:.1f} sec/epoch), train={:.1f} ({:.2f}%), test={:.1f} ({:.2f}%), overfit={:.2f}"\
+        print("total={:.0f} sec, epoch={} ({:.1f} sec/epoch), train={:.2f} ({:.2f}%), test={:.2f} ({:.2f}%), overfit={:.2f}"\
         .format(total, epochs, total/epochs, train_losses[-1], delta(train_losses), test_losses[-1], delta(test_losses), test_losses[-1]/train_losses[-1]))
         
     if len(test_losses) < 2*window: # Too few epochs
@@ -111,16 +111,16 @@ def stop_condition(train_losses, test_losses, window, min_change, max_overfit, t
         print("Training stalled.")
         return True
     
-    overfit = test_loss / train_loss
+    overfit = train_loss / test_loss
     if verbose:
-        print("overfit={:.1f}".format(overfit))
+        print("overfit={:.2f}".format(overfit))
     
     if epochs > 30 and overfit < 0.5: # this model is garbage
-        print(f"Model doesn't generalise: overfit={overfit:.1f}")
+        print(f"Model doesn't generalise: overfit={overfit:.2f}")
         return True
     
     if test_loss / train_loss > max_overfit:
-        print(f"Model is overfitting: overfit={overfit:.2f} vs max={max_overfit:.1f}")
+        print(f"Model is overfitting: overfit={overfit:.2f} vs max={max_overfit:.2f}")
         return True
         
     # Keep going...
