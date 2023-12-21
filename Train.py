@@ -94,16 +94,16 @@ def generate_training_stfts(how_many):
     return len(train_dataset), len(test_dataset)
     
 # If training an incremental VAE, we encode the STFTs just once using the auto-encoder
-def encode_stfts(model, stfts):
+def encode_stfts(model, name, stfts):
     if len(stfts[0].shape) == 1:
         return stfts # already encoded
 
-    print(f"Encoding {len(stfts)} STFTs")
+    print(f"Encoding {name} {len(stfts)} STFTs")
     return [model.encode(stft.unsqueeze(0)).squeeze(0) for stft in stfts] # add/remove batch dimension
 
 
 # Hyper-parameter optimisation
-last_saved_loss = 1500 # don't bother saving models above this threshold
+last_saved_loss = 200 # don't bother saving models above this threshold
 
 # Keep track of all the test-losses over multiple runs, so we can learn how to terminate early on poor hyper-parameters.
 all_test_losses = []
@@ -116,10 +116,11 @@ use_exact_train_loss = False # Setting to True is more accurate but very expensi
 
 
 def reset_train_losses():
-    global all_test_losses, all_test_names, best_train_losses
+    global all_test_losses, all_test_names, best_train_losses, last_saved_loss
     all_test_names = []
     all_test_losses = []
     best_train_losses = []
+    last_saved_loss = 200
 
 
 # Main entry point for training the model
@@ -162,8 +163,8 @@ def train_model(model_type, hyper_params, max_epochs, max_time, max_params, max_
     if is_vae:
         # We will only be training the inner VAE, so we first encode the STFTs
         active_model = model.vae
-        train_dataset = encode_stfts(model.auto_encoder, train_dataset)
-        test_dataset = encode_stfts(model.auto_encoder, test_dataset)
+        train_dataset = encode_stfts(model.auto_encoder, "Train", train_dataset)
+        test_dataset = encode_stfts(model.auto_encoder, "Test", test_dataset)
     else:
         active_model = model
 

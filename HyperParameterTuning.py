@@ -302,10 +302,10 @@ if __name__ == '__main__':
     #full_hypertrain("StepWiseMLP")
     #full_hypertrain("MLPVAE_Incremental") # Gets stuck in at a local minimum...
 
-    train_best_params("StepWiseMLP", [3, -5, 35, 3, 1.0]) # small batches converge faster!!
+    #train_best_params("StepWiseMLP", [3, -5, 35, 3, 1.0]) # small batches converge faster!!
     #fine_tune("StepWiseMLP")
-    train_best_params("MLPVAE_Incremental", [3, -5, 6, 4, 1])
-    fine_tune("MLPVAE_Incremental")
+    #train_best_params("MLPVAE_Incremental", [5, -7, 6, 3, 10])
+    #fine_tune("MLPVAE_Incremental")
 
     #optimise_hyper_parameters("MLPVAE_Incremental") # finds the optimal config and keeps looping over that...
 
@@ -319,7 +319,7 @@ if __name__ == '__main__':
     # fine_tune("MLPVAE_Incremental")
 
     # RNN VAE model
-    #full_hypertrain("RNNAutoEncoder")
-    #full_hypertrain("RNN_VAE_Incremental")
+    full_hypertrain("RNNAutoEncoder")
+    full_hypertrain("RNN_VAE_Incremental")
 
     

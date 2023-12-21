@@ -10,7 +10,7 @@ from ModelUtils import *
 def reconstruction_loss(inputs, outputs):
     return F.mse_loss(inputs, outputs, reduction='sum') / inputs.size(0) # normalise
 
-
+# Not currently used:
 def weighted_stft_reconstruction_loss(inputs, outputs):
     debug("loss", inputs)
     first_window_weight = 10
@@ -28,12 +28,10 @@ def kl_divergence(mu, logvar):
 def vae_loss_function(inputs, outputs, mu, logvar):
 
     error  = reconstruction_loss(inputs, outputs)
-    kl_div = kl_divergence(mu, logvar)
-            
+    kl_div = kl_divergence(mu, logvar) / inputs.size(0)
     loss = error + kl_div
     #print(f"loss={loss:.2f} <-- reconstruction={error:.2f} + kl_divergence={kl_div:.2f}")
-
-    return loss #/ inputs[0].numel()
+    return loss
     
 
 def vae_reparameterize(mu, logvar):

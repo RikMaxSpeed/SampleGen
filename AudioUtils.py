@@ -375,9 +375,9 @@ def recover_audio_from_magnitude(magnitude_spectrogram, stft_size, stft_hop, sam
 
 import subprocess
 
-def speak_macos(text, voice="Reed"):
+def speak_macos(text, voice="Reed", rate=130):
     try:
-        subprocess.run(['say', '-v', voice, text], check=True)
+        subprocess.run(['say', '-v', voice, '-r', str(rate), text], check=True)
     except subprocess.CalledProcessError as e:
         print(f"An error occurred: {e}")
 
