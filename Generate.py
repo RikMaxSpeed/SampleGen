@@ -252,8 +252,7 @@ class Sample_Generator():
             save_and_play_audio_from_stft(resynth, sample_rate, stft_hop, "Results/" + name + " - resynth.wav", noisy)
 
 
-        plot_multiple_histograms_vs_gaussian([losses], ["Resynthesis Loss"])
-
+        plot_multiple_histograms_vs_gaussian([losses], [f"{self.model_name} resynthesis loss for {len(losses):,} samples"])
 
         indices = [i[0] for i in sorted(enumerate(losses), key=lambda x:x[1])]
         pad = max([len(x) for x in names])

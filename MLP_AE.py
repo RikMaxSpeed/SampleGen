@@ -46,8 +46,8 @@ class StepWiseMLPAutoEncoder(nn.Module):
         self.encoder = sequential_fully_connected(encode_layer_sizes, final)
         self.decoder = sequential_fully_connected(decode_layer_sizes, final)
 
-        print(f"StepWiseMLPAutoEncoder {count_trainable_parameters(self):,} parameters, compression={freq_buckets/hidden_size:.1f}")
-
+        self.compression = freq_buckets/hidden_size
+        print(f"StepWiseMLPAutoEncoder {count_trainable_parameters(self):,} parameters, compression={self.compression:.1f}")
 
     def encode(self, x):
         batch_size = x.size(0)

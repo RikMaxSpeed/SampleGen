@@ -7,11 +7,12 @@ from ModelUtils import *
 
 
 # Loss functions
-def base_reconstruction_loss(inputs, outputs):
+def basic_reconstruction_loss(inputs, outputs):
     return F.mse_loss(inputs, outputs, reduction='sum') / inputs.size(0) # normalise
 
 # Weight the STFT over time: it's critical to get the first windows right.
 def weighted_stft_reconstruction_loss(inputs, outputs, weight, slope=0.5, verbose=False):
+    assert(weight >= 1)
     batch_size, sequence_length, _ = inputs.shape
     time_steps = torch.arange(sequence_length, dtype=torch.float32, device=inputs.device)
 
@@ -24,21 +25,24 @@ def weighted_stft_reconstruction_loss(inputs, outputs, weight, slope=0.5, verbos
     loss = torch.sum(loss, dim=2)
     loss = torch.sum(loss, dim=0)
     loss *= weights
+    loss = loss.sum() * sequence_length / (scale * batch_size)
 
-    return loss.sum() * sequence_length / (scale * batch_size)
+    assert loss >= 0, f"Negative loss={loss:.2f} in weighted_stft_reconstruction_loss, weight={weight:.2f}"
+
+    return loss
 
 
 def reconstruction_loss(inputs, outputs):
     if inputs.dim() == 3:
         return weighted_stft_reconstruction_loss(inputs, outputs, weight=10)
     else:
-        return base_reconstruction_loss(inputs, outputs)
+        return basic_reconstruction_loss(inputs, outputs)
 
 # Test the basic loss & weighted loss:
 if __name__ == '__main__':
     inputs = torch.randn(7, 10, 20)
     outputs = inputs + torch.randn(inputs.shape)*0.1
-    loss1 = base_reconstruction_loss(inputs, outputs).item()
+    loss1 = basic_reconstruction_loss(inputs, outputs).item()
     loss2 = weighted_stft_reconstruction_loss(inputs, outputs, 1).item()
     loss3 = weighted_stft_reconstruction_loss(inputs, outputs, 10, verbose=True).item()
     loss4 = reconstruction_loss(inputs, outputs)
@@ -54,11 +58,12 @@ def kl_divergence(mu, logvar):
 
 
 def vae_loss_function(inputs, outputs, mu, logvar):
-
     error  = reconstruction_loss(inputs, outputs)
     kl_div = kl_divergence(mu, logvar) / inputs.size(0)
     loss = error + kl_div
-    #print(f"loss={loss:.2f} <-- reconstruction={error:.2f} + kl_divergence={kl_div:.2f}")
+
+    assert loss >= 0, f"Negative loss!! loss={loss:.2f} (reconstruction={error:.2f}, kl_divergence={kl_div:.2f}) in vae_loss_function"
+
     return loss
     
 
@@ -95,8 +100,8 @@ class VariationalAutoEncoder(nn.Module):
         # Decoder layers
         d_sizes = VariationalAutoEncoder.decode_sizes(sizes)
         self.decoder_layers = sequential_fully_connected(d_sizes, None)
-
-        print(f"VariationalAutoEncoder: layers={sizes}, parameters={count_trainable_parameters(self):,}, compression={sizes[0]/sizes[-1]:.1f}")
+        self.compression = sizes[0]/sizes[-1]
+        print(f"VariationalAutoEncoder: layers={sizes}, parameters={count_trainable_parameters(self):,}, compression={self.compression:.1f}")
 
     def encode(self, x):
         if len(self.encoder_layers):
@@ -139,8 +144,8 @@ class CombinedVAE(nn.Module):
         self.latent_size = sizes[-1]
         
         self.vae = VariationalAutoEncoder(sizes)
-
-        print(f"CombinedVAE {count_trainable_parameters(self):,} parameters, compression={sizes[0]/sizes[-1]:.1f}")
+        self.compression = self.auto_encoder.compression * self.vae.compression
+        print(f"CombinedVAE {count_trainable_parameters(self):,} parameters, compression={self.compression:.1f}")
 
 
     def encode(self, x):

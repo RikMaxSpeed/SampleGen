@@ -1,3 +1,4 @@
+import Conv2D_AE
 from Debug import *
 from MakeSTFTs import *
 from ModelUtils import *
@@ -5,6 +6,7 @@ from STFT_VAE import *
 from MLP_AE import *
 from RNN_AE import *
 from RNN_FaT import *
+from Conv2D_AE import *
 import ast
 
 
@@ -48,6 +50,32 @@ def make_RNN_VAE(model_type, model_params, max_params):
     
     return model, model_text, approx_size, vae_size
 
+min_conv2_compression = 4
+def make_Conv2D_VAE(model_type, model_params, max_params):
+    layer_count, kernel_count, kernel_size, latent_size, vae_depth, vae_ratio = model_params
+    model_text = f"{model_type} conv layers={layer_count}, kernels={kernel_count}, size={kernel_size}, latent={latent_size}, VAE depth={vae_depth}, VAE ratio={vae_ratio:.2f}"
+    print(model_text)
+
+    # we'd need to know the output size of the CNN...
+    conv2_size = (freq_buckets * sequence_length) / min_conv2_compression # worst-case
+    vae_sizes = interpolate_layer_sizes(conv2_size, latent_size, vae_depth, vae_ratio)
+    print(f"VAE layers={vae_sizes}")
+
+    conv2d_size = Conv2DAutoEncoder.approx_trainable_parameters(layer_count, kernel_count, kernel_size)
+    vae_size = VariationalAutoEncoder.approx_trainable_parameters(vae_sizes)
+    approx_size = conv2d_size + vae_size
+    print(f"Conv2D={conv2d_size:,}, VAE={vae_size:,}, approx total={approx_size:,}")
+
+    if is_too_large(approx_size, max_params):
+        return None, model_text, approx_size, vae_size
+
+    conv2d = Conv2DAutoEncoder(freq_buckets, sequence_length, layer_count, kernel_count, kernel_size)
+
+    model = CombinedVAE(conv2d, vae_sizes)
+
+    return model, model_text, approx_size, vae_size
+
+
 
 def is_incremental(model_name):
     return "Incremental" in model_name
@@ -69,7 +97,9 @@ def invalid_model(size):
     return None, None, size
     
 def make_model(model_type, model_params, max_params, verbose):
-    
+
+    # TODO: Move this code into the individual models!
+
     match model_type:
         case "STFT_VAE":
             latent_size, depth, ratio = model_params
@@ -178,7 +208,8 @@ def make_model(model_type, model_params, max_params, verbose):
             freeze_model(model.auto_encoder)
             approx_size = vae_size # we're not re-training the RNN parameters
 
-        case "RNN_F&T":
+
+        case "RNN_F&T": # this model refused to train...
             freq_size, freq_depth, time_size, time_depth = [int(x) for x in model_params] # convert int64 to int32
             model_text = f"{model_type} frequency={freq_size} x {freq_depth}, time={time_size} x {time_depth}"
             print(model_text)
@@ -188,7 +219,49 @@ def make_model(model_type, model_params, max_params, verbose):
                 
             dropout = 0
             model = RNNFreqAndTime(freq_buckets, sequence_length, freq_size, freq_depth, time_size, time_depth, dropout)
-        
+
+
+        case "Conv2D_AE":
+            layer_count, kernel_count, kernel_size = [int(x) for x in model_params]  # convert int64 to int32
+            model_text = f"{model_type} layer_count={layer_count}, kernel_count={kernel_count}, kernel_size={kernel_size}"
+            print(model_text)
+            approx_size = Conv2DAutoEncoder.approx_trainable_parameters(layer_count, kernel_count, kernel_size)
+            if is_too_large(approx_size, max_params):
+                return invalid_model(approx_size)
+
+            model = Conv2DAutoEncoder(freq_buckets, sequence_length, layer_count, kernel_count, kernel_size)
+            model.float()
+            model.to(device)
+
+            if model.compression < min_conv2_compression:
+                print(f"Compression={model.compression:.1f} is too low, min={min_conv2_compression}")
+                return invalid_model(approx_size)
+
+            # This model can fail if the parameters don't work out:
+            try:
+                inputs = torch.randn((7, freq_buckets, sequence_length)).to(device)
+                _ = model(inputs) # crude: see whether we can run the model
+                print(f"Model is valid: {model_text}")
+            except Exception as e:
+                print(f"Model failed: {e}, {model_text}")
+                return invalid_model(approx_size)
+
+        case "Conv2D_VAE_Incremental":
+            conv_name, conv_params, file_name = get_best_configuration_for_model("Conv2D_AE")
+            conv_params = conv_params[2:]  # remove the optimiser params
+            print(f"conv_params={conv_params}")
+            print(f"model_params={model_params}")
+            combined_params = conv_params + model_params  # add the VAE params.
+            print(f"combined={combined_params}")
+            model, model_text, approx_size, vae_size = make_Conv2D_VAE(model_type, combined_params, max_params)
+            if is_too_large(approx_size, max_params):
+                return invalid_model(approx_size)
+
+            # Incremental training: load the previous saved state, and freeze the layers we won't re-train
+            load_weights_and_biases(model.auto_encoder, file_name)
+            freeze_model(model.auto_encoder)
+            approx_size = vae_size  # we're not re-training the Conv2D parameters
+
         case _:
             raise Exception(f"Unknown model: {model_type}")
 
@@ -201,7 +274,7 @@ def make_model(model_type, model_params, max_params, verbose):
     # Warn if the approximation was off:
     size_error = approx_size / size  - 1
     if np.abs(size_error) > 0.01:
-        print(f"*** Innaccurate approximate size={approx_size:,} vs actual size={size:,}, error={100*size_error:.2f}%")
+        print(f"*** Inaccurate approximate size={approx_size:,} vs actual size={size:,}, error={100*size_error:.2f}%")
     
     # Too big?
     if size > max_params:

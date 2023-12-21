@@ -111,7 +111,7 @@ def stop_condition(train_losses, test_losses, window, min_change, max_overfit, t
         print("Training stalled.")
         return True
     
-    overfit = train_loss / test_loss
+    overfit = test_loss / train_loss
     if verbose:
         print("overfit={:.2f}".format(overfit))
     
@@ -212,6 +212,8 @@ def rnn_size(input_size, hidden_size, num_layers):
     return total_params
 
 
+
+
 def load_weights_and_biases(model, file_name):
         print(f"{model.__class__.__name__}: loading weights & biases from file '{file_name}'")
         model.load_state_dict(torch.load(file_name))
@@ -266,3 +268,16 @@ if __name__ == '__main__':
     for i in range(0, 20, 3):
         data = [20-i for i in range(i)]
         compute_final_learning_rate(f"Example#{i+1}", data, window)
+
+
+def model_output_shape_and_size(model, input_shape):
+    model.float()
+    model.to(device)
+
+    input = torch.randn(input_shape).to(device)
+    output = model(input.unsqueeze(0)).squeeze(0)
+    size = output.numel()
+    shape = tuple(output.shape)
+    print(f"Model output: shape={shape}, size: {size:,}")
+    return shape, size
+

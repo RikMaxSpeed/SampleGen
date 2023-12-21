@@ -153,7 +153,7 @@ def train_model(model_type, hyper_params, max_epochs, max_time, max_params, max_
         return model_text, model_size, max_loss, 1.0
         
     trainable = count_trainable_parameters(model)
-    model_text += f" (params={model_size:,}, trainable={trainable:,} = {100*trainable/model_size:.1f}%)"
+    model_text += f" (params={model_size:,}, compression={model.compression:.1f}x)"
     description = model_text + " | " + optimiser_text
     print(f"model: {model_text}")
 
@@ -260,7 +260,7 @@ def train_model(model_type, hyper_params, max_epochs, max_time, max_params, max_
                 file.write(f"{count_trainable_parameters(model):,} weights & biases\n\n")
                 file.write(f"optimiser: {optimiser_text}\n")
                 file.write("\n")
-                file.write(f"train loss={train_loss:.2f}, test loss={test_loss:.2f}, overfit={train_loss/test_loss:.2f}\n")
+                file.write(f"train loss={train_loss:.2f}, test loss={test_loss:.2f}, overfit={test_loss/train_loss:.2f}\n")
                 file.write(f"time={total_time:.0f} sec, train_size={len(train_dataset)}, batch_size={batch_size}, epoch={epoch} = {total_time/(epoch+1):.1f} sec/epoch\n")
                 file.write(f"\n{active_model}\n")
 

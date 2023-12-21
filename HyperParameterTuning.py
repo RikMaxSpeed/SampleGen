@@ -13,6 +13,8 @@ hyper_model = "None"
 hyper_losses = []
 hyper_names  = []
 hyper_params = []
+max_hyper_runs = 60  # it usually gets stuck at some local minimum well before this.
+
 
 def reset_hyper_training():
     global hyper_model, hyper_losses, hyper_names, hyper_params
@@ -33,7 +35,7 @@ def evaluate_model(params):
     global hyper_model, hyper_losses, hyper_names, hyper_epochs, tuning_count
     
     tuning_count += 1
-    print(f"Hyper-Parameter tuning#{tuning_count}: {hyper_model} {params}\n")
+    print(f"\n\nHyper-Parameter tuning#{tuning_count}/{max_hyper_runs}: {hyper_model} {params}")
     
     #max_time = 5 * 60 # seconds
     max_overfit = 1.5 # Ensure we retain the models that generalise reasonably well.
@@ -67,7 +69,7 @@ def evaluate_model(params):
     if loss < max_loss: # skip the models that failed in some way.
         # Bake the learning_rate into the loss:
         final_loss = loss
-        if rate < 0:
+        if -0.05 < rate < 0: # only do this if the rate appears plausible
             final_loss *= (1 + rate) ** 20 # favourise models that have more scope to improve
         print(f"adjusted final loss={final_loss:.2f}, from loss={loss:.2f} and rate={rate*100:.3f}%")
 
@@ -145,13 +147,14 @@ def optimise_hyper_parameters(model_name):
 
     # Optimiser:
     search_space = list()
-    search_space.append(Integer(4,      6,    'log-uniform',  name='batch'))         # batch_size = 2^batch
+    search_space.append(Integer(2,      6,    'log-uniform',  name='batch'))         # batch_size = 2^batch
     search_space.append(Integer(-7,    -3,    'uniform',  name='learning_rate')) # 10^lr * batch_size
 
     # Model:
     global hyper_model
     hyper_model = model_name
 
+    # TODO: move this to the individual models.
     match model_name:
 
         case "STFT_VAE":
@@ -217,6 +220,17 @@ def optimise_hyper_parameters(model_name):
             search_space.append(Integer(10,      40,   'log-uniform',       name='time_size'))
             search_space.append(Integer(1,        3,   'log-uniform',       name='time_depth'))
 
+        case "Conv2D_AE":
+            max_loss = 50_000
+            search_space.append(Integer(2,        5,   'log-uniform',       name='layer_count'))
+            search_space.append(Integer(1,       10,   'log-uniform',       name='kernel_count'))
+            search_space.append(Integer(2,        10,   'log-uniform',       name='kernel_size'))
+
+        case "Conv2D_VAE_Incremental":
+            max_loss = 50_000
+            search_space.append(Integer(5,        12,   'uniform',      name='latent_size'))
+            search_space.append(Integer(2,         5,   'uniform',      name='vae_depth'))
+            search_space.append(Real   (0.1,      10,   'uniform',      name='vae_ratio'))
 
         case _:
             raise Exception(f"Invalid model type = {model_name}")
@@ -226,15 +240,14 @@ def optimise_hyper_parameters(model_name):
     start_new_stft_video(f"STFT - hyper-train {model_name}", True)
 
     # Generate starting parameters, around the minimum sizes which tend to generate smaller networks
-    max_loops = 60 # it frequently gets stuck at some local minimum before this.
-    result = gp_minimize(evaluate_model, search_space, n_calls=max_loops, noise='gaussian', verbose=False, acq_func='LCB')
+    result = gp_minimize(evaluate_model, search_space, n_calls=max_hyper_runs, noise='gaussian', verbose=False, acq_func='LCB', kappa=3.0)
     #n_initial_points=8, initial_point_generator='sobol',
 
     # I've never reached this point! :)
     print("\n\nHyper Parameter Optimisation Done!!")
     print(f"Best result={result.fun:.2f}")
     print(f"Best parameters={result.x}")
-
+    print("\n\n\n")
 
 # Load an existing model and see whether we can further train to the extreme
 def fine_tune(model_name):
@@ -267,10 +280,10 @@ def train_best_params(model_name, params = None, finest = False):
     start_new_stft_video(f"STFT - train {model_name}", True)
 
     max_time = 12 * hour # hopefully the model converges way before this!
-    max_overfit = 100.0 # ignore: we're aiming for the highest precision possible on the training set
+    max_overfit = 5.0 # ignore: we're aiming for the highest precision possible on the training set
     max_params = 1e9  # not relevant, we have a valid model
     max_epochs = 9999 # ignore
-    max_loss = 1e9
+    max_loss = 1e6
 
      # This does improve the final accuracy, but it's very slow.
     if finest:
@@ -321,7 +334,6 @@ if __name__ == '__main__':
 
     #grid_search()
     # train_best_params("StepWiseMLP")
-    # fine_tune("StepWiseMLP")
     # train_best_params("MLPVAE_Incremental")
     # fine_tune("MLPVAE_Incremental")
 
@@ -329,8 +341,10 @@ if __name__ == '__main__':
     #full_hypertrain("RNNAutoEncoder")
     #full_hypertrain("RNN_VAE_Incremental")
 
-    resume_train("RNNAutoEncoder")
-    train_best_params("RNN_VAE_Incremental")
+    #train_best_params("RNNAutoEncoder")
+    #train_best_params("RNN_VAE_Incremental")
 
+    full_hypertrain("Conv2D_AE")
+    full_hypertrain("Conv2D_VAE_Incremental")
 
     
