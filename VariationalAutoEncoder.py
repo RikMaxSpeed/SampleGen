@@ -10,28 +10,40 @@ from ModelUtils import *
 def base_reconstruction_loss(inputs, outputs):
     return F.mse_loss(inputs, outputs, reduction='sum') / inputs.size(0) # normalise
 
-# Weight the first few windows of the STFT
-def weighted_stft_reconstruction_loss(inputs, outputs, weight, firstN):
-    mse_loss = F.mse_loss(inputs, outputs, reduction='sum')
-    firstN_loss = F.mse_loss(inputs[:, 0:firstN, :], outputs[:, 0:firstN, :], reduction='sum')
-    total_loss = mse_loss + (weight-1) * firstN_loss
-    total_loss *= inputs.size(1) / (inputs.size(1) + (weight - 1) * firstN) # adjust commensurately
-    return total_loss / inputs.size(0)
+# Weight the STFT over time: it's critical to get the first windows right.
+def weighted_stft_reconstruction_loss(inputs, outputs, weight, slope=0.5, verbose=False):
+    batch_size, sequence_length, _ = inputs.shape
+    time_steps = torch.arange(sequence_length, dtype=torch.float32, device=inputs.device)
+
+    weights = 1 + (weight - 1) * torch.exp(-slope * time_steps)
+    if verbose:
+        print(f"weights={weights}")
+
+    scale = torch.sum(weights)
+    loss = F.mse_loss(inputs, outputs, reduction='none')
+    loss = torch.sum(loss, dim=2)
+    loss = torch.sum(loss, dim=0)
+    loss *= weights
+
+    return loss.sum() * sequence_length / (scale * batch_size)
 
 
 def reconstruction_loss(inputs, outputs):
-    return weighted_stft_reconstruction_loss(inputs, outputs, weight=10, firstN=5)
+    if inputs.dim() == 3:
+        return weighted_stft_reconstruction_loss(inputs, outputs, weight=10)
+    else:
+        return base_reconstruction_loss(inputs, outputs)
 
 # Test the basic loss & weighted loss:
 if __name__ == '__main__':
-    inputs = torch.randn(7, 30, 50)
+    inputs = torch.randn(7, 10, 20)
     outputs = inputs + torch.randn(inputs.shape)*0.1
     loss1 = base_reconstruction_loss(inputs, outputs).item()
-    loss2 = weighted_stft_reconstruction_loss(inputs, outputs, 1, 5).item()
-    loss3 = weighted_stft_reconstruction_loss(inputs, outputs, 10, 5).item()
+    loss2 = weighted_stft_reconstruction_loss(inputs, outputs, 1).item()
+    loss3 = weighted_stft_reconstruction_loss(inputs, outputs, 10, verbose=True).item()
     loss4 = reconstruction_loss(inputs, outputs)
-    print(f"base: {loss1:.2f}, 1-weigth: {loss2:.2f}, 10-weight: {loss3:.2f}, check: {loss4:.2f}")
-    assert(abs(loss1 - loss2) < 1e-4)
+    print(f"base: {loss1:.2f}, 1-weight: {loss2:.2f}, 10-weight: {loss3:.2f}, check: {loss4:.2f}")
+    assert(abs(loss1 - loss2) < 1e-5)
     assert(abs(loss1 - loss3) < 0.7) # we expect these two to be commensurate
     assert(loss3 == loss4)
 
