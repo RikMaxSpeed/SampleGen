@@ -44,9 +44,9 @@ def evaluate_model(params):
         
     max_epochs = 80 # This is sufficient to figure out which model will converge best if we let it run for longer.
     if is_incremental_vae(hyper_model):
-        max_epochs = 500
+        max_epochs = 1000 # training the VAE is extremely fast
 
-    max_time = int(hour/3)  # we don't like slow models...
+    max_time = 300 #int(hour/3)  # we don't like slow models...
     verbose = False # avoid printing lots of detail for each run
     preload = False
 
@@ -319,7 +319,7 @@ if __name__ == '__main__':
     # fine_tune("MLPVAE_Incremental")
 
     # RNN VAE model
-    full_hypertrain("RNNAutoEncoder")
+    #full_hypertrain("RNNAutoEncoder")
     full_hypertrain("RNN_VAE_Incremental")
 
     

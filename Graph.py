@@ -377,13 +377,13 @@ def plot_bar_charts(encodings, names, title):
     if len(encodings) > 1:
         means = np.mean(encodings, axis=0)
         stds  = np.std(encodings, axis=0)
-        Ys  = np.max(encodings, axis=0)
+        statsY = 0.9 * np.max(encodings) # we'll use the same Y for all labels
 
         font_size = 8
         for j in range(dimensions):
             mean = means[j]
             std = stds[j]
-            plt.text(x[j] + bar_width * count *.4, Ys[j], f"μ={mean:.2f}\nσ={std:.2f}", ha='center', va='bottom',
+            plt.text(x[j] + bar_width * count *.4, statsY, f"μ={mean:.2f}\nσ={std:.2f}", ha='center', va='bottom',
                      fontsize=font_size)
 
     plt.xticks(x + bar_width * (count - 1) / 2, [f'#{j + 1}' for j in range(dimensions)])

@@ -209,8 +209,20 @@ class Sample_Generator():
                 mus[0, var] = value
                 z = vae_reparameterize(mus, vars)
                 self.decode_and_save(z, f"{self.model_name} var[{var+1}]={value}", play_sound)
-            
-            
+
+    def encode_file(self, file_name):
+        sr, stft = compute_stft_for_file("Samples/" + file_name, stft_buckets, stft_hop)
+        assert (sr == sample_rate)
+        stft = torch.tensor(stft)
+        input = convert_stft_to_input(stft).unsqueeze(0).to(device)
+
+        for i in range(5):
+            with torch.no_grad():
+                loss, output = self.model.forward_loss(input)
+            result = convert_stft_to_output(output.squeeze(0))
+            plot_stft(f"Resynth #{i+1} {file_name}", result, sample_rate, stft_hop)
+            save_and_play_audio_from_stft(result, sample_rate, stft_hop, f"Results/resynth #{i + 1} " + file_name, True)
+
     def test_all(self):
         names=[]
         losses=[]
@@ -330,7 +342,7 @@ class Sample_Generator():
             hide_sub_plot(i)
         
         plt.show()
-        
+
 
 examples = [
     "EPiano Mrk II C3",
@@ -371,8 +383,13 @@ def generate_variations():
 
 def plot_categories(categories = None):
     if categories is None:
-        g.plot_categories(["Vocal", "Synth", "Guitar"], "Set1")
-        g.plot_categories(["Bass", "Plucked", "Bell"], "Set2")
+        g.plot_categories(["Strings", "Piano"], "Dark2")
+        g.plot_categories(["Pad", "Plucked"], "Dark2")
+        g.plot_categories(["Vocal", "Guitar"], "Set1")
+        g.plot_categories(["Vocal", "Piano", "Guitar"], "Set1")
+        g.plot_categories(["Bell", "Piano", "Guitar"], "Set2")
+        # g.plot_categories(["Vocal", "Synth", "Guitar"], "Set1")
+        # g.plot_categories(["Bass", "Plucked", "Bell"], "Set2")
         g.plot_categories(["No Category", "Synth Makes", "Piano", "Bell"], "Dark2")
     else:
         g.plot_categories(categories)
@@ -387,11 +404,13 @@ def test_all():
 
 
 def demo_encodings():
-   plot_encodings()
-   plot_categories()
+    plot_categories()
+    plot_encodings()
 
 def demo_sounds():
-   generate_variations()
-   g.generate_main_encodings([-2, -1, 0, +1, +2])
-   generate_morphs()
+    #g.encode_file("RandomVoiceTest.wav")
+    g.encode_file("Baaaah.wav")
+    # generate_variations()
+    # g.generate_main_encodings([-2, -1, 0, +1, +2])
+    # generate_morphs()
 
