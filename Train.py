@@ -251,7 +251,7 @@ def train_model(model_type, hyper_params, max_epochs, max_time, max_params, max_
             print(f"{model_text}\n{optimiser_text}\nhyper-parameters: {hyper_params}")
             torch.save(model.state_dict(), file_name + ".wab")
 
-            speak_macos(f"Best is {last_saved_loss:.2f}".replace(".", " spot "))
+            say_out_loud(f"Best is {last_saved_loss:.2f}".replace(".", " spot "))
 
             # Write the parameters to file:
             with open(file_name+".txt", 'w') as file:
@@ -318,7 +318,7 @@ def train_model(model_type, hyper_params, max_epochs, max_time, max_params, max_
     .format(epochs, elapsed, elapsed/epochs, sample_duration, testL, trainL, testL/trainL))
 
     if elapsed > 300: # don't blab about failed attempts
-        speak_macos(f"Training stopped at epoch {len(train_losses)}, after {elapsed:.1f} seconds, loss {np.min(train_losses):.2f}")
+        say_out_loud(f"Training stopped at epoch {len(train_losses)}, after {elapsed:.1f} seconds, loss {np.min(train_losses):.2f}")
 
     train_rate = compute_final_learning_rate("Train", train_losses, window)
     test_rate = compute_final_learning_rate("Test", test_losses, window)

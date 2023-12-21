@@ -236,10 +236,17 @@ def optimise_hyper_parameters(model_name):
     print(f"Best parameters={result.x}")
 
 
-# Load an existing model and see whether we can further train
+# Load an existing model and see whether we can further train to the extreme
 def fine_tune(model_name):
     model_type, params, file_name = get_best_configuration_for_model(model_name)
     train_best_params(model_name, params, finest=True)
+
+# Load an existing model and train it normally
+def resume_train(model_name):
+    model_type, params, file_name = get_best_configuration_for_model(model_name)
+    params[0] = 5 # reset the batch size as it may be 0 due to the fine tuning
+    train_best_params(model_name, params, finest=False)
+
 
 def train_best_params(model_name, params = None, finest = False):
     if finest:
@@ -320,6 +327,10 @@ if __name__ == '__main__':
 
     # RNN VAE model
     #full_hypertrain("RNNAutoEncoder")
-    full_hypertrain("RNN_VAE_Incremental")
+    #full_hypertrain("RNN_VAE_Incremental")
+
+    resume_train("RNNAutoEncoder")
+    train_best_params("RNN_VAE_Incremental")
+
 
     

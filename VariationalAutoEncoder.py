@@ -7,17 +7,33 @@ from ModelUtils import *
 
 
 # Loss functions
-def reconstruction_loss(inputs, outputs):
+def base_reconstruction_loss(inputs, outputs):
     return F.mse_loss(inputs, outputs, reduction='sum') / inputs.size(0) # normalise
 
-# Not currently used:
-def weighted_stft_reconstruction_loss(inputs, outputs):
-    debug("loss", inputs)
-    first_window_weight = 10
+# Weight the first few windows of the STFT
+def weighted_stft_reconstruction_loss(inputs, outputs, weight, firstN):
     mse_loss = F.mse_loss(inputs, outputs, reduction='sum')
-    first_window_loss = F.mse_loss(inputs[:, 0, :], outputs[:, 0, :], reduction='sum')
-    total_loss = mse_loss - first_window_loss + first_window_weight * first_window_loss
-    return total_loss
+    firstN_loss = F.mse_loss(inputs[:, 0:firstN, :], outputs[:, 0:firstN, :], reduction='sum')
+    total_loss = mse_loss + (weight-1) * firstN_loss
+    total_loss *= inputs.size(1) / (inputs.size(1) + (weight - 1) * firstN) # adjust commensurately
+    return total_loss / inputs.size(0)
+
+
+def reconstruction_loss(inputs, outputs):
+    return weighted_stft_reconstruction_loss(inputs, outputs, weight=10, firstN=5)
+
+# Test the basic loss & weighted loss:
+if __name__ == '__main__':
+    inputs = torch.randn(7, 30, 50)
+    outputs = inputs + torch.randn(inputs.shape)*0.1
+    loss1 = base_reconstruction_loss(inputs, outputs).item()
+    loss2 = weighted_stft_reconstruction_loss(inputs, outputs, 1, 5).item()
+    loss3 = weighted_stft_reconstruction_loss(inputs, outputs, 10, 5).item()
+    loss4 = reconstruction_loss(inputs, outputs)
+    print(f"base: {loss1:.2f}, 1-weigth: {loss2:.2f}, 10-weight: {loss3:.2f}, check: {loss4:.2f}")
+    assert(abs(loss1 - loss2) < 1e-4)
+    assert(abs(loss1 - loss3) < 0.7) # we expect these two to be commensurate
+    assert(loss3 == loss4)
 
 
 def kl_divergence(mu, logvar):

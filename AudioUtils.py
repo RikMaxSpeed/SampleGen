@@ -374,12 +374,16 @@ def recover_audio_from_magnitude(magnitude_spectrogram, stft_size, stft_hop, sam
 
 
 import subprocess
+import platform
 
-def speak_macos(text, voice="Reed", rate=130):
-    try:
-        subprocess.run(['say', '-v', voice, '-r', str(rate), text], check=True)
-    except subprocess.CalledProcessError as e:
-        print(f"An error occurred: {e}")
+def is_running_on_mac():
+    return platform.system() == 'Darwin'
+
+def say_out_loud(text):
+    if is_running_on_mac():
+        subprocess.run(['say', '-v', 'Reed', '-r', '150', text], check=True)
+    else:
+        print(f"TTS is not implemented for {platform.system()}: '{text}'")
 
 if __name__ == '__main__':
-    speak_macos("Testing 1, 2, 3.")
+    say_out_loud("Testing 1, 2, 3.")
