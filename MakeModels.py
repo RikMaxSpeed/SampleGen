@@ -56,9 +56,11 @@ def make_Conv2D_VAE(model_type, model_params, max_params):
     model_text = f"{model_type} conv layers={layer_count}, kernels={kernel_count}, size={kernel_size}, latent={latent_size}, VAE depth={vae_depth}, VAE ratio={vae_ratio:.2f}"
     print(model_text)
 
+    conv2d = Conv2DAutoEncoder(freq_buckets, sequence_length, layer_count, kernel_count, kernel_size)
+
     # we'd need to know the output size of the CNN...
-    conv2_size = (freq_buckets * sequence_length) / min_conv2_compression # worst-case
-    vae_sizes = interpolate_layer_sizes(conv2_size, latent_size, vae_depth, vae_ratio)
+    conv2_hidden = conv2d.encoded_size
+    vae_sizes = interpolate_layer_sizes(conv2_hidden, latent_size, vae_depth, vae_ratio)
     print(f"VAE layers={vae_sizes}")
 
     conv2d_size = Conv2DAutoEncoder.approx_trainable_parameters(layer_count, kernel_count, kernel_size)
@@ -69,7 +71,6 @@ def make_Conv2D_VAE(model_type, model_params, max_params):
     if is_too_large(approx_size, max_params):
         return None, model_text, approx_size, vae_size
 
-    conv2d = Conv2DAutoEncoder(freq_buckets, sequence_length, layer_count, kernel_count, kernel_size)
 
     model = CombinedVAE(conv2d, vae_sizes)
 

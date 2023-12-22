@@ -27,12 +27,17 @@ def weighted_stft_reconstruction_loss(inputs, outputs, weight, slope=0.5, verbos
     loss *= weights
     loss = loss.sum() * sequence_length / (scale * batch_size)
 
+    # We have a bug :(
     assert loss >= 0, f"Negative loss={loss:.2f} in weighted_stft_reconstruction_loss, weight={weight:.2f}"
 
     return loss
 
 
 def reconstruction_loss(inputs, outputs):
+    assert inputs.shape == outputs.shape, f"reconstruction_loss: shapes don't match, inputs={inputs.shape}, outputs={outputs.shape}"
+    return basic_reconstruction_loss(inputs, outputs)
+
+    # TODO: fix the bug!
     if inputs.dim() == 3:
         return weighted_stft_reconstruction_loss(inputs, outputs, weight=10)
     else:

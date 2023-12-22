@@ -187,7 +187,7 @@ def train_model(model_type, hyper_params, max_epochs, max_time, max_params, max_
     window     = 5 # check average progress between two windows
     min_change = 0.005 # stop if lossNew/lossOld - 1 < min_change
 
-    if max_overfit >= 1.5:
+    if max_overfit >= 1.9:
         window = 15 # allow the model longer to recover from any exploratory excursions.
         
     # Plot a graph of the loss vs epoch at regular intervals
@@ -303,7 +303,9 @@ def train_model(model_type, hyper_params, max_epochs, max_time, max_params, max_
                 return description, model_size, min(best_train_losses) * ratio, compute_final_learning_rate("Train", train_losses, window) # approximation in order not to mess up the GPR too much.
 
     # Done!
-    
+    if epoch == max_epochs-1:
+        print(f"Reached max epochs={max_epochs}")
+
     # Store the best train loss curve, this will be used for early termination when hyper-tuning
     if len(best_train_losses) == 0 or np.min(train_losses) < np.min(best_train_losses):
         best_train_losses = train_losses

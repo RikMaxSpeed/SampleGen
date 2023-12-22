@@ -381,7 +381,8 @@ def is_running_on_mac():
 
 def say_out_loud(text):
     if is_running_on_mac():
-        subprocess.run(['say', '-v', 'Reed', '-r', '150', text], check=True)
+        #subprocess.run(['say', '-v', 'Reed', '-r', '150', text], check=True)
+        subprocess.Popen(['say', '-v', 'Reed', '-r', '150', text]) # runs in background
     else:
         print(f"TTS is not implemented for {platform.system()}: '{text}'")
 
