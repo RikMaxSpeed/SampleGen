@@ -114,6 +114,7 @@ best_train_losses = []
 
 use_exact_train_loss = False # Setting to True is more accurate but very expensive in CPU time
 
+fail_loss = 1_000
 
 def reset_train_losses():
     global all_test_losses, all_test_names, best_train_losses, last_saved_loss
@@ -121,7 +122,6 @@ def reset_train_losses():
     all_test_losses = []
     best_train_losses = []
     last_saved_loss = 200
-
 
 # Main entry point for training the model
 def train_model(model_type, hyper_params, max_epochs, max_time, max_params, max_overfit, max_loss, verbose, load_existing):
@@ -138,11 +138,6 @@ def train_model(model_type, hyper_params, max_epochs, max_time, max_params, max_
     if learning_rate < 0: # new: convert to 10^lr, but old LRs are still supported
         learning_rate = 10.0 ** learning_rate
     
-    learning_rate *= batch_size # see https://www.baeldung.com/cs/learning-rate-batch-size
-    weight_decay = 0
-    optimiser_text = f"Adam batch={batch_size}, learning_rate={learning_rate:.2g}, weight_decay={weight_decay:.2g}"
-    print(f"optimiser: {optimiser_text}")
-    
     # Create the model
     if load_existing:
         model, model_text, model_params, model_size = load_saved_model(model_type)
@@ -150,8 +145,13 @@ def train_model(model_type, hyper_params, max_epochs, max_time, max_params, max_
         model, model_text, model_size = make_model(model_type, model_params, max_params, verbose)
     
     if model is None:
-        return model_text, model_size, max_loss, 1.0
-        
+        return model_text, model_size, fail_loss*2, 1.0
+
+    learning_rate *= batch_size  # see https://www.baeldung.com/cs/learning-rate-batch-size
+    weight_decay = 0
+    optimiser_text = f"Adam batch={batch_size}, learning_rate={learning_rate:.2g}, weight_decay={weight_decay:.2g}"
+    print(f"optimiser: {optimiser_text}")
+
     trainable = count_trainable_parameters(model)
     model_text += f" (params={model_size:,}, compression={model.compression:.1f}x)"
     description = model_text + " | " + optimiser_text
@@ -207,8 +207,8 @@ def train_model(model_type, hyper_params, max_epochs, max_time, max_params, max_
             numeric_loss = loss.item() # loss is a tensor
             
             if np.isnan(numeric_loss) or numeric_loss > max_loss:
-                print(f"*** Aborting: model exploded! loss={loss:.2f} vs max={max_loss}")
-                loss = np.min(train_losses) if len(train_losses) else max_loss
+                print(f"*** Aborting: model exploded! loss={int(loss):,} vs max={max_loss:,}")
+                loss = np.min(train_losses) if len(train_losses) else fail_loss
                 return description, model_size, loss, 9.99
 
             sum_train_loss += numeric_loss * len(inputs)
@@ -316,7 +316,7 @@ def train_model(model_type, hyper_params, max_epochs, max_time, max_params, max_
     elapsed = time.time() - start
     epochs  = len(train_losses)
     
-    print("\n\nFinished Training after {} epochs in {:.1f} sec ({:.2f} sec/epoch), sample duration={:.1f} sec, test loss={:.2f}, train loss={:.2f}, overfit={:.2f}"\
+    print("Finished Training after {} epochs in {:.1f} sec ({:.2f} sec/epoch), sample duration={:.1f} sec, test loss={:.2f}, train loss={:.2f}, overfit={:.2f}"\
     .format(epochs, elapsed, elapsed/epochs, sample_duration, testL, trainL, testL/trainL))
 
     if elapsed > 300: # don't blab about failed attempts

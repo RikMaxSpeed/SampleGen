@@ -34,7 +34,7 @@ def get_output_for_layer(name, layer, input):
         print(f"{name}: layer={layer}, input={input.shape} --> output={output.shape}")
         return output
             
-    except Exception as e:
+    except BaseException as e:
         print(f"{name}: layer={layer}, input={input.shape} --> error:{e}")
         raise e
 
@@ -278,6 +278,6 @@ def model_output_shape_and_size(model, input_shape):
     output = model(input.unsqueeze(0)).squeeze(0)
     size = output.numel()
     shape = tuple(output.shape)
-    print(f"Model output: shape={shape}, size: {size:,}")
+    #print(f"Model output: shape={shape}, size: {size:,}")
     return shape, size
 

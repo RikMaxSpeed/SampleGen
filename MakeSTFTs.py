@@ -150,7 +150,7 @@ def gather_stfts_from_directory(directory, notes, requiredSR, verbose):
                             print("Assertion failed in file {}: {}".format(filepath, e))
                             sys.exit()
                             
-                        except Exception as e:
+                        except BaseException as e:
                             print("Error reading file {}: {}".format(filepath, e))
     
     print("\nDone!!")

@@ -50,7 +50,9 @@ def make_RNN_VAE(model_type, model_params, max_params):
     
     return model, model_text, approx_size, vae_size
 
-min_conv2_compression = 4
+min_conv2_compression = 8 # or the VAE won't work
+max_conv2_compression = 128 # or the auto-encode won't work
+
 def make_Conv2D_VAE(model_type, model_params, max_params):
     layer_count, kernel_count, kernel_size, latent_size, vae_depth, vae_ratio = model_params
     model_text = f"{model_type} conv layers={layer_count}, kernels={kernel_count}, size={kernel_size}, latent={latent_size}, VAE depth={vae_depth}, VAE ratio={vae_ratio:.2f}"
@@ -234,17 +236,8 @@ def make_model(model_type, model_params, max_params, verbose):
             model.float()
             model.to(device)
 
-            if model.compression < min_conv2_compression:
-                print(f"Compression={model.compression:.1f} is too low, min={min_conv2_compression}")
-                return invalid_model(approx_size)
-
-            # This model can fail if the parameters don't work out:
-            try:
-                inputs = torch.randn((7, freq_buckets, sequence_length)).to(device)
-                _ = model(inputs) # crude: see whether we can run the model
-                print(f"Model is valid: {model_text}")
-            except Exception as e:
-                print(f"Model failed: {e}, {model_text}")
+            if model.compression < min_conv2_compression or model.compression > max_conv2_compression:
+                print(f"Compression={model.compression:.1f} out of range [{min_conv2_compression}, {max_conv2_compression}]")
                 return invalid_model(approx_size)
 
         case "Conv2D_VAE_Incremental":

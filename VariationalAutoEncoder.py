@@ -67,7 +67,10 @@ def vae_loss_function(inputs, outputs, mu, logvar):
     kl_div = kl_divergence(mu, logvar) / inputs.size(0)
     loss = error + kl_div
 
-    assert loss >= 0, f"Negative loss!! loss={loss:.2f} (reconstruction={error:.2f}, kl_divergence={kl_div:.2f}) in vae_loss_function"
+    if loss < 0:
+        print(f"Negative loss!! loss={loss} (reconstruction={error}, kl_divergence={kl_div}) in vae_loss_function")
+        assert loss > -1e-3, "doesn't appear to be a floating point precision problem :("
+        loss = 0.0 # assume floating point discrepancy
 
     return loss
     

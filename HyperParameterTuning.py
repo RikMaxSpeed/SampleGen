@@ -8,12 +8,13 @@ max_params = 0
 tuning_count = 0
 break_on_exceptions = True # True=Debugging, False allows the GPR to continue even if the model blows up (useful for long tuning runs!)
 max_loss = 10_000 # default
+fail_loss = 1_000
 
 hyper_model = "None"
 hyper_losses = []
 hyper_names  = []
 hyper_params = []
-max_hyper_runs = 80  # it usually gets stuck at some local minimum well before this.
+max_hyper_runs = 100  # it usually gets stuck at some local minimum well before this.
 
 
 def reset_hyper_training():
@@ -40,13 +41,9 @@ def evaluate_model(params):
     #max_time = 5 * 60 # seconds
     max_overfit = 1.4 # Ensure we retain the models that generalise reasonably well.
     
-    if is_incremental(hyper_model):
-        max_overfit = 3.0 # the internal layer may have been deliberately over-fit.
-        print(f"Overriding max_overfit={max_overfit:.1f}")
-        
     max_epochs = 80 # This is sufficient to figure out which model will converge best if we let it run for longer.
     if is_incremental_vae(hyper_model):
-        max_epochs = 1000 # training the VAE is extremely fast
+        max_epochs = 500 # training the VAE is extremely fast
 
     max_time = 300 #int(hour/3)  # we don't like slow models...
     verbose = False # avoid printing lots of detail for each run
@@ -59,18 +56,18 @@ def evaluate_model(params):
         try:
             model_text, model_size, loss, rate = train_model(hyper_model, params, max_epochs, max_time, max_params, max_overfit, max_loss, verbose, preload)
 
-        except Exception as e:
+        except BaseException as e:
             print(f"*** Exception: {e}")
             return max_loss
         except:
             print(f"*** Breaking Bad :(")
             return max_loss
 
-    if loss < max_loss: # skip the models that failed in some way.
+    final_loss = loss
+    if loss < fail_loss: # skip the models that failed in some way.
         # Bake the learning_rate into the loss:
-        final_loss = loss
         if -0.05 < rate < 0: # only do this if the rate appears plausible
-            final_loss *= (1 + rate) ** 20 # favourise models that have more scope to improve
+            final_loss *= (1 + rate) ** 30 # favourise models that have more scope to improve
         print(f"adjusted final loss={final_loss:.2f}, from loss={loss:.2f} and rate={rate*100:.3f}%")
 
         hyper_losses.append(final_loss)
@@ -100,7 +97,7 @@ def evaluate_model(params):
         if is_interactive:
             plot_hypertrain_loss(hyper_losses, hyper_names, hyper_model)
 
-    return loss
+    return final_loss
 
 
 def generate_parameters(search_space, amount):
@@ -221,14 +218,14 @@ def optimise_hyper_parameters(model_name):
             search_space.append(Integer(1,        3,   'log-uniform',       name='time_depth'))
 
         case "Conv2D_AE":
-            max_loss = 20_000
-            search_space.append(Integer(2,        7,   'log-uniform',       name='layer_count'))
-            search_space.append(Integer(1,       20,   'log-uniform',       name='kernel_count'))
-            search_space.append(Integer(2,       10,   'log-uniform',       name='kernel_size'))
+            max_loss = 30_000
+            search_space.append(Integer(3,        6,   'uniform',       name='layer_count'))
+            search_space.append(Integer(1,       30,   'uniform',       name='kernel_count'))
+            search_space.append(Integer(2,       10,   'uniform',       name='kernel_size'))
 
         case "Conv2D_VAE_Incremental":
             max_loss = 50_000
-            search_space.append(Integer(5,        12,   'uniform',      name='latent_size'))
+            search_space.append(Integer(5,        20,   'uniform',      name='latent_size'))
             search_space.append(Integer(2,         5,   'uniform',      name='vae_depth'))
             search_space.append(Real   (0.1,      10,   'uniform',      name='vae_ratio'))
 
@@ -302,8 +299,9 @@ def full_hypertrain(model_name):
     train_best_params(model_name)
     fine_tune(model_name)
 
-def grid_search():
+def grid_search_MLPVAEI():
     global hyper_model, max_params
+    reset_hyper_training()
     hyper_model = "MLPVAE_Incremental"
     max_params = 20_000_000
     samples, _ = generate_training_stfts(None)  # full data-set, this may be more representative
@@ -314,6 +312,22 @@ def grid_search():
             params[3] = vae_depth
             print(f"\n\n\nGrid Hyper-train: latent={latent}, vae_depth={vae_depth}")
             evaluate_model(params)
+
+
+def grid_search_Conv2DAE():
+    global hyper_model, max_params
+    reset_hyper_training()
+    hyper_model = "Conv2D_AE"
+    max_params = 20_000_000
+    samples, _ = generate_training_stfts(None)  # full data-set, this may be more representative
+    params = [4, -5, 4, 2, 0.1] # this is where gp_minimize got stuck...
+    for layers in range(3, 7):
+        for kernels in range(5, 31, 5):
+            for size in range(3, 10):
+                params = [5, -6, layers, kernels, size]
+                print(f"\n\n\nGrid Hyper-train: layers={layers}, kernels={kernels}, size={size}")
+                evaluate_model(params)
+
 
 if __name__ == '__main__':
     # Edit this to perform whatever operation is required.
@@ -344,8 +358,13 @@ if __name__ == '__main__':
     #train_best_params("RNNAutoEncoder")
     #train_best_params("RNN_VAE_Incremental")
 
-    full_hypertrain("Conv2D_AE")
-    #train_best_params("Conv2D_AE", [3, -6, 5, 20, 3])
-    full_hypertrain("Conv2D_VAE_Incremental")
+    #optimise_hyper_parameters("Conv2D_AE")
+    #full_hypertrain("Conv2D_AE")
+    #train_best_params("Conv2D_AE", [5, -6, 6, 15, 6])
+    grid_search_Conv2DAE()
+    # fine_tune("Conv2D_AE")
+    # full_hypertrain("Conv2D_VAE_Incremental")
 
-    
+    # train_best_params("Conv2D_VAE_Incremental", [4, -5, 7, 2, 5.9])
+    # fine_tune("Conv2D_VAE_Incremental")
+
