@@ -17,13 +17,13 @@ hyper_params = []
 max_hyper_runs = 100  # it usually gets stuck at some local minimum well before this.
 
 
-def reset_hyper_training():
+def reset_hyper_training(model_name):
     global hyper_model, hyper_losses, hyper_names, hyper_params
-    hyper_model = "None"
+    hyper_model = model_name
     hyper_losses = []
     hyper_names = []
     hyper_params = []
-    reset_train_losses()
+    reset_train_losses(model_name)
 
 
 from Train import *
@@ -130,7 +130,7 @@ def generate_parameters(search_space, amount):
 
 def optimise_hyper_parameters(model_name):
     print(f"\n\n\nOptimising Hyper Parameters for {model_name}\n")
-    reset_hyper_training()
+    reset_hyper_training(model_name)
 
     # Use a smaller data-set here to speed things up? Could favour small models that can't handle the entire data-set.
     samples, _ = generate_training_stfts(None) # full data-set, this may be more representative
@@ -264,7 +264,7 @@ def train_best_params(model_name, params = None, finest = False):
     else:
         print(f"\n\n\nTraining model {model_name}\n")
 
-    reset_train_losses()
+    reset_train_losses(model_name)
 
     #generate_training_stfts(200) # Small dataset of the most diverse samples
     generate_training_stfts(None) # Full dataset with no augmentation
@@ -301,32 +301,63 @@ def full_hypertrain(model_name):
 
 def grid_search_MLPVAEI():
     global hyper_model, max_params
-    reset_hyper_training()
     hyper_model = "MLPVAE_Incremental"
+    reset_hyper_training(hyper_model)
     max_params = 20_000_000
     samples, _ = generate_training_stfts(None)  # full data-set, this may be more representative
-    params = [4, -5, 4, 2, 0.1] # this is where gp_minimize got stuck...
     for vae_depth in range(2, 5):
-        for latent in range(4, 8):
-            params[2] = latent
-            params[3] = vae_depth
-            print(f"\n\n\nGrid Hyper-train: latent={latent}, vae_depth={vae_depth}")
-            evaluate_model(params)
+        for latent in range(12, 4, -1):
+            for ratio in [0.1, 0.5, 1.0, 2.0, 10.0]:
+                params = [4, -5, latent, vae_depth, ratio]
+                print(f"\n\n\nGrid Hyper-train: latent={latent}, vae_depth={vae_depth}")
+                evaluate_model(params)
 
 
 def grid_search_Conv2DAE():
     global hyper_model, max_params
-    reset_hyper_training()
     hyper_model = "Conv2D_AE"
+    reset_hyper_training(hyper_model)
     max_params = 20_000_000
     samples, _ = generate_training_stfts(None)  # full data-set, this may be more representative
-    params = [4, -5, 4, 2, 0.1] # this is where gp_minimize got stuck...
-    for layers in range(3, 7):
-        for kernels in range(5, 31, 5):
-            for size in range(3, 10):
-                params = [5, -6, layers, kernels, size]
+    for kernels in range(20, 9, -1):
+        for layers in [7, 6, 5]:
+            for size in range(10, 3, -1):
+                params = [3, -6, layers, kernels, size]
                 print(f"\n\n\nGrid Hyper-train: layers={layers}, kernels={kernels}, size={size}")
                 evaluate_model(params)
+
+    # Train the top N but with longer time spans
+    order = np.argsort(hyper_losses)
+    for i in range(10):
+        n = order[i]
+        print(f"\n\n\n\nTraining optimised parameters rank #{i+1}: {hyper_names[n]}")
+        params = hyper_params[n]
+        params[0] = 2  # batch-size = 2^2
+        params[1] = -6 # learning rate = 10^-7
+        train_best_params(hyper_model, params)
+
+def grid_search_Conv2DVAE():
+    global hyper_model, max_params
+    hyper_model = "Conv2D_VAE_Incremental"
+    reset_hyper_training(hyper_model)
+    max_params = 30_000_000
+    samples, _ = generate_training_stfts(None)  # full data-set, this may be more representative
+    for layers in [2, 3, 4]:
+        for ratio in [0.1, 0.5, 1.0, 2.0, 10.0]:
+            for latent in [5, 6, 7, 8, 10, 12, 15]:
+                params = [4, -6, latent, layers, ratio]
+                print(f"\n\n\nGrid Hyper-train: latent={latent}, layers={layers}, ratio={ratio}")
+                evaluate_model(params)
+
+    # Train the top N but with longer time spans
+    order = np.argsort(hyper_losses)
+    for i in range(10):
+        n = order[i]
+        print(f"\n\n\n\nTraining optimised parameters rank #{i+1}: {hyper_names[n]}")
+        params = hyper_params[n]
+        params[0] = 2  # batch-size = 2^2
+        params[1] = -6 # learning rate = 10^-7
+        train_best_params(hyper_model, params)
 
 
 if __name__ == '__main__':
@@ -360,11 +391,18 @@ if __name__ == '__main__':
 
     #optimise_hyper_parameters("Conv2D_AE")
     #full_hypertrain("Conv2D_AE")
-    #train_best_params("Conv2D_AE", [5, -6, 6, 15, 6])
-    grid_search_Conv2DAE()
-    # fine_tune("Conv2D_AE")
-    # full_hypertrain("Conv2D_VAE_Incremental")
 
-    # train_best_params("Conv2D_VAE_Incremental", [4, -5, 7, 2, 5.9])
+    #grid_search_Conv2DAE()
+    #train_best_params("Conv2D_AE", [2, -6, 5, 20, 4]) # Best! test=train=7.3
+
+    #train_best_params("Conv2D_AE", [4, -6, 6, 15, 6]) # total=567 sec, epoch=497 (1.1 sec/epoch), train=17.18 (-0.03%), test=19.34 (-0.04%), overfit=1.13
+    #train_best_params("Conv2D_AE", [4, -7, 5, 10, 9]) #
+    #train_best_params("Conv2D_AE", [4, -7, 6, 25, 8]) #
+
+    # fine_tune("Conv2D_AE")
+    grid_search_Conv2DVAE()
+    #full_hypertrain("Conv2D_VAE_Incremental")
+
+    #train_best_params("Conv2D_VAE_Incremental", [4, -5, 7, 2, 5.9])
     # fine_tune("Conv2D_VAE_Incremental")
 

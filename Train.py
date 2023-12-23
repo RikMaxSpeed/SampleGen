@@ -106,6 +106,7 @@ def encode_stfts(model, name, stfts):
 last_saved_loss = 200 # don't bother saving models above this threshold
 
 # Keep track of all the test-losses over multiple runs, so we can learn how to terminate early on poor hyper-parameters.
+all_test_model = None
 all_test_losses = []
 all_test_names = []
 
@@ -116,12 +117,15 @@ use_exact_train_loss = False # Setting to True is more accurate but very expensi
 
 fail_loss = 1_000
 
-def reset_train_losses():
-    global all_test_losses, all_test_names, best_train_losses, last_saved_loss
-    all_test_names = []
-    all_test_losses = []
-    best_train_losses = []
-    last_saved_loss = 200
+def reset_train_losses(model_name):
+    global all_test_model, all_test_losses, all_test_names, best_train_losses, last_saved_loss
+
+    if model_name != all_test_model:
+        all_test_model = model_name
+        all_test_names = []
+        all_test_losses = []
+        best_train_losses = []
+        last_saved_loss = 200
 
 # Main entry point for training the model
 def train_model(model_type, hyper_params, max_epochs, max_time, max_params, max_overfit, max_loss, verbose, load_existing):

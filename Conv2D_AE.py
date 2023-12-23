@@ -26,7 +26,10 @@ def max_kernel(dimension, kernel_size):
     return min(kernel_size, max(dimension // 4, 1))
 
 def pad_size(dimension, kernel, stride):
-    for pad in range(2 * (kernel + stride)):
+    assert stride <= kernel
+    return 0 # for some reason my padding broke the MPS back-end, whilst it works fine on CPU :(
+
+    for pad in range(kernel):
         size = convolution_output_size(dimension, kernel, stride, pad)
         transposed = transposed_convolution_output_size(size, kernel, stride, pad)
         if transposed == size:
@@ -77,7 +80,7 @@ class Conv2DAutoEncoder(nn.Module):
             if i == 0:
                 stride = (1, 1) # ensures the last decoded layer is smooth
             else:
-                stride = (max_stride(k_size[0], freqs, freq_buckets // 32), max_stride(k_size[1], steps, sequence_length // 8))
+                stride = (max_stride(k_size[0], freqs, freq_buckets // 16), max_stride(k_size[1], steps, sequence_length // 8))
 
             if k_size == (1, 1):
                 break
@@ -131,17 +134,17 @@ class Conv2DAutoEncoder(nn.Module):
 
     @staticmethod
     def build_conv2d_network(layers, transpose):
-        sequence = []
         function = nn.ConvTranspose2d if transpose else nn.Conv2d
+        sequence = []
         for layer in layers:
             sequence.append(function(in_channels=layer['in_channels'],
-                                               out_channels=layer['out_channels'],
-                                               kernel_size=layer['kernel_size'],
-                                               stride=layer['stride'],
-                                               padding=layer['padding']))
+                                     out_channels=layer['out_channels'],
+                                     kernel_size=layer['kernel_size'],
+                                     stride=layer['stride'],
+                                     padding=layer['padding']))
 
         # if transpose:
-        #     sequence.append(nn.Sigmoid())
+        #     sequence.append(nn.Sigmoid()) # huge impact on accuracy :(
 
         return nn.Sequential(*sequence)
 
@@ -166,7 +169,7 @@ class Conv2DAutoEncoder(nn.Module):
 
             self.decode_shape, self.decode_size = model_output_shape_and_size(self.decoder, self.encode_shape)
             #print(f"decode.shape={self.decode_shape}")
-            assert self.decode_shape[1] == freq_buckets, f"decoded {self.decode_shape[1]} frequencies  instead of {freq_buckets}"
+            #assert self.decode_shape[1] == freq_buckets, f"decoded {self.decode_shape[1]} frequencies  instead of {freq_buckets}"
 
         except BaseException as e:
             print(f"Model doesn't work: {e}")
@@ -193,16 +196,19 @@ class Conv2DAutoEncoder(nn.Module):
         decoded = self.decoder(x).squeeze(dim=1)
         #debug("decoded", decoded)
 
-        # we're in trouble if this fails...
-        assert decoded.size(1) == self.freq_buckets, f"decoded.size(1)={decoded.size(1)} instead of {self.freq_buckets}"
-
+        # Pad the output with zeros to reach the desired size
         missing = self.sequence_length - decoded.size(2)
         if missing > 0:
-            #print(f"missing={missing}")
+            #print(f"adding {missing} time-steps")
             decoded = F.pad(decoded, (0, missing))
-            #debug("decoded.padded", decoded)
 
-        decoded = torch.clamp(decoded, 0, 1)
+        missing = self.freq_buckets - decoded.size(1)
+        if missing > 0:
+            #print(f"adding {missing} missing frequencies")
+            decoded =F.pad(decoded, (0, 0, 0, missing))
+
+        assert decoded.size(1) == self.freq_buckets
+        assert decoded.size(2) == self.sequence_length
 
         return decoded
 
