@@ -407,9 +407,9 @@ def demo_encodings():
     plot_encodings()
 
 def demo_sounds():
-    #g.encode_file("RandomVoiceTest.wav")
+    g.encode_file("RandomVoiceTest.wav")
     g.encode_file("Baaaah.wav")
-    # generate_variations()
-    # g.generate_main_encodings([-2, -1, 0, +1, +2])
-    # generate_morphs()
+    g.generate_main_encodings([-2, -1, 0, +1, +2])
+    generate_variations()
+    generate_morphs()
 

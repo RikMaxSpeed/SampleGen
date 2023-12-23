@@ -166,6 +166,7 @@ class Conv2DAutoEncoder(nn.Module):
                 self.encode_shape = (1,) + self.encode_shape
 
             assert len(self.encode_shape) == 3
+            print("encode_shape=", self.encode_shape)
 
             self.decode_shape, self.decode_size = model_output_shape_and_size(self.decoder, self.encode_shape)
             #print(f"decode.shape={self.decode_shape}")

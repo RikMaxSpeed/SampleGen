@@ -10,12 +10,11 @@ from Device import *
 from Debug import *
 
 
-#mu_law = MuLawCodec(8) # Yet another hyper-parameter but we can't tune this one as it's outside the model's loss function.
-mu_law = None
+mu_law = MuLawCodec(8) # Yet another hyper-parameter but we can't tune this one as it's outside the model's loss function.
+#mu_law = None
 
 amps = AmplitudeCodec()
 #amps = None
-min_amp = 1e-3
 
 # Configure the Audio -> STFT conversion
 sample_rate = 44100
@@ -244,6 +243,12 @@ def display_min_max(name, stft):
     print(f"{name}: min={min:.3f}, max={max:.3f}")
 
 
+def remove_low_magnitudes(stft, db):
+    assert db < 0
+    threshold = dB_to_amplitude(db)
+    stft[stft < threshold] = 0
+    return stft
+
 def convert_stft_to_input(stft):
     assert(stft.dtype == torch.complex64)
     assert(len(stft.shape) == 2)
@@ -260,6 +265,7 @@ def convert_stft_to_input(stft):
         stft = convert_to_reals(stft)
     else:
         stft = amps.encode(stft)
+        stft = remove_low_magnitudes(stft, -70)
         
     assert(stft.size(0) == freq_buckets)
     assert(stft.size(1) == sequence_length)
@@ -279,6 +285,9 @@ def convert_stfts_to_inputs(stfts):
 def convert_stft_to_output(stft):
     assert(stft.dtype == torch.float32)
 
+    if amps is None:
+        stft = torch.clamp(stft, min=0, max=1)
+
     if mu_law is not None:
         stft = mu_law.decode(stft)
     
@@ -295,7 +304,7 @@ def convert_stft_to_output(stft):
 
     else:
         stft = stft.cpu().detach() * maxAmp # re-amplify
-        stft = stft.clamp(min_amp)
+        stft = remove_low_magnitudes(stft, -50) # more aggressive
         iterations = 50
         stft = torch.tensor(recover_audio_from_magnitude(stft, stft_buckets, stft_hop, sample_rate, iterations))
         assert(stft.size(0) == stft_size + 1)

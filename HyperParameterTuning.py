@@ -38,14 +38,13 @@ def evaluate_model(params):
     tuning_count += 1
     print(f"\n\nHyper-Parameter tuning#{tuning_count}/{max_hyper_runs}: {hyper_model} {params}")
     
-    #max_time = 5 * 60 # seconds
     max_overfit = 1.4 # Ensure we retain the models that generalise reasonably well.
     
     max_epochs = 80 # This is sufficient to figure out which model will converge best if we let it run for longer.
     if is_incremental_vae(hyper_model):
-        max_epochs = 500 # training the VAE is extremely fast
+        max_epochs = 500 # training the VAE is very fast
 
-    max_time = 300 #int(hour/3)  # we don't like slow models...
+    max_time = 5*60 # we don't like slow models...
     verbose = False # avoid printing lots of detail for each run
     preload = False
 
@@ -277,7 +276,7 @@ def train_best_params(model_name, params = None, finest = False):
     start_new_stft_video(f"STFT - train {model_name}", True)
 
     max_time = 12 * hour # hopefully the model converges way before this!
-    max_overfit = 5.0 # ignore: we're aiming for the highest precision possible on the training set
+    max_overfit = 100.0 # ignore: we're aiming for the highest precision possible on the training set
     max_params = 1e9  # not relevant, we have a valid model
     max_epochs = 9999 # ignore
     max_loss = 1e6
@@ -299,7 +298,7 @@ def full_hypertrain(model_name):
     train_best_params(model_name)
     fine_tune(model_name)
 
-def grid_search_MLPVAEI():
+def grid_search_MLP_VAE():
     global hyper_model, max_params
     hyper_model = "MLPVAE_Incremental"
     reset_hyper_training(hyper_model)
@@ -313,7 +312,7 @@ def grid_search_MLPVAEI():
                 evaluate_model(params)
 
 
-def grid_search_Conv2DAE():
+def grid_search_Conv2D_AE():
     global hyper_model, max_params
     hyper_model = "Conv2D_AE"
     reset_hyper_training(hyper_model)
@@ -336,18 +335,20 @@ def grid_search_Conv2DAE():
         params[1] = -6 # learning rate = 10^-7
         train_best_params(hyper_model, params)
 
-def grid_search_Conv2DVAE():
-    global hyper_model, max_params
+def grid_search_Conv2D_VAE():
+    global hyper_model, max_params, max_hyper_runs
     hyper_model = "Conv2D_VAE_Incremental"
     reset_hyper_training(hyper_model)
     max_params = 30_000_000
     samples, _ = generate_training_stfts(None)  # full data-set, this may be more representative
-    for layers in [2, 3, 4]:
-        for ratio in [0.1, 0.5, 1.0, 2.0, 10.0]:
-            for latent in [5, 6, 7, 8, 10, 12, 15]:
-                params = [4, -6, latent, layers, ratio]
-                print(f"\n\n\nGrid Hyper-train: latent={latent}, layers={layers}, ratio={ratio}")
-                evaluate_model(params)
+    max_hyper_runs = 5 * 5 * 2
+    for latent in [6, 7, 8, 9, 10]:
+        for ratio in exponential_interpolation(0.1, 0.5, 5):
+            for layers in [3, 4]:
+                    latent = int(latent)
+                    params = [4, -6, latent, layers, ratio]
+                    print(f"\n\n\nGrid Hyper-train: latent={latent}, layers={layers}, ratio={ratio}")
+                    evaluate_model(params)
 
     # Train the top N but with longer time spans
     order = np.argsort(hyper_losses)
@@ -362,26 +363,23 @@ def grid_search_Conv2DVAE():
 
 if __name__ == '__main__':
     # Edit this to perform whatever operation is required.
-    
+
+    ###############################################################################################
     # MLP VAE model
     #full_hypertrain("StepWiseMLP")
-    #full_hypertrain("MLPVAE_Incremental") # Gets stuck in at a local minimum...
+    #full_hypertrain("MLPVAE_Incremental")
 
     #train_best_params("StepWiseMLP", [3, -5, 35, 3, 1.0]) # small batches converge faster!!
     #fine_tune("StepWiseMLP")
     #train_best_params("MLPVAE_Incremental", [5, -7, 6, 3, 10])
     #fine_tune("MLPVAE_Incremental")
 
-    #optimise_hyper_parameters("MLPVAE_Incremental") # finds the optimal config and keeps looping over that...
-
-    #full_hypertrain("MLP_VAE") # Just to see whether this stands a chance of working
-    #train_best_params("MLP_VAE", [4, -5, 32, 2, 0.2, 7, 4, 0.1])
-
-    #grid_search()
+    #grid_search_MLP_VAE()
     # train_best_params("StepWiseMLP")
     # train_best_params("MLPVAE_Incremental")
     # fine_tune("MLPVAE_Incremental")
 
+    ###############################################################################################
     # RNN VAE model
     #full_hypertrain("RNNAutoEncoder")
     #full_hypertrain("RNN_VAE_Incremental")
@@ -389,20 +387,21 @@ if __name__ == '__main__':
     #train_best_params("RNNAutoEncoder")
     #train_best_params("RNN_VAE_Incremental")
 
-    #optimise_hyper_parameters("Conv2D_AE")
+
+    ###############################################################################################
+    # 2D Convolution
+
     #full_hypertrain("Conv2D_AE")
+    grid_search_Conv2D_AE()
+    #train_best_params("Conv2D_AE")
+    #fine_tune("Conv2D_AE") # didn't achieve anything!
 
-    #grid_search_Conv2DAE()
     #train_best_params("Conv2D_AE", [2, -6, 5, 20, 4]) # Best! test=train=7.3
-
     #train_best_params("Conv2D_AE", [4, -6, 6, 15, 6]) # total=567 sec, epoch=497 (1.1 sec/epoch), train=17.18 (-0.03%), test=19.34 (-0.04%), overfit=1.13
     #train_best_params("Conv2D_AE", [4, -7, 5, 10, 9]) #
     #train_best_params("Conv2D_AE", [4, -7, 6, 25, 8]) #
 
-    # fine_tune("Conv2D_AE")
-    grid_search_Conv2DVAE()
     #full_hypertrain("Conv2D_VAE_Incremental")
-
-    #train_best_params("Conv2D_VAE_Incremental", [4, -5, 7, 2, 5.9])
-    # fine_tune("Conv2D_VAE_Incremental")
-
+    grid_search_Conv2D_VAE()
+    #train_best_params("Conv2D_VAE_Incremental", [4, -5,  7, 4, 0.25])
+    #fine_tune("Conv2D_VAE_Incremental")
