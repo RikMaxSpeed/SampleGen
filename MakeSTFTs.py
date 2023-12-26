@@ -303,13 +303,14 @@ def convert_stft_to_output(stft):
         stft = stft.cpu().detach() * maxAmp
 
     else:
-        stft = stft.cpu().detach() * maxAmp # re-amplify
+        stft = stft.cpu().detach()
+        stft = stft.clamp(min=0, max=1)
+        stft = stft * maxAmp # re-amplify
         stft = remove_low_magnitudes(stft, -50) # more aggressive
         iterations = 50
         stft = torch.tensor(recover_audio_from_magnitude(stft, stft_buckets, stft_hop, sample_rate, iterations))
         assert(stft.size(0) == stft_size + 1)
         assert(stft.size(1) == sequence_length)
-
     
     assert(stft.dtype == torch.complex64)
     return stft.numpy()
