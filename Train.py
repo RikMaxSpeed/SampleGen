@@ -72,11 +72,13 @@ def generate_training_data(how_many, use_stfts):
 
     # Find key samples to encode
     if how_many <= count/3:
-        assert use_stfts, "select_diverse_tensors is not supported for raw audio, only STFTs"
-        samples = select_diverse_tensors(samples, file_names, how_many).to(device)
+        if use_stfts:
+            samples = select_diverse_tensors(samples, file_names, how_many).to(device)
+        else:
+            samples = samples[:how_many] # crude!
 
     if samples.size(0) > how_many: # truncate if too many
-        samples = samples[:how_many, : , :]
+        samples = samples[:how_many]
 
     # Convert into train & test datasets
     ratio = 0.8

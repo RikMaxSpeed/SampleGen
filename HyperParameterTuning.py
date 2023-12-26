@@ -37,6 +37,30 @@ from Train import *
 one_sample = freq_buckets * sequence_length
 print(f"1 sample = {freq_buckets:,} x {sequence_length:,} = {one_sample:,}")
 
+def display_best_hyper_parameters():
+
+    print("\nBest hyper parameters:")
+    order = np.argsort(hyper_losses)
+    topN = min(15, len(hyper_losses))
+    for i in range(topN):
+        o = order[i]
+        print(f"#{i + 1} {hyper_losses[o]:.2f}, {hyper_names[o]}")
+    print("\n")
+
+    file_name = "Models/" + hyper_model + " hyper parameters.txt"
+    with open(file_name, 'w') as file:
+        for i in range(topN):
+            o = order[i]
+            file.write(str(hyper_params[o]) + "\n")
+
+        file.write("\n\n")
+        for i in range(topN):
+            o = order[i]
+            file.write(f"#{i + 1} {hyper_losses[o]:.2f}, {hyper_names[o]}\n")
+
+    if is_interactive:
+        plot_hypertrain_loss(hyper_losses, hyper_names, hyper_model)
+
 
 def evaluate_model(params):
     global hyper_model, hyper_losses, hyper_names, hyper_epochs, tuning_count
@@ -47,7 +71,7 @@ def evaluate_model(params):
     max_overfit = 1.4 # Ensure we retain the models that generalise reasonably well.
     
     max_epochs = 80 # This is sufficient to figure out which model will converge best if we let it run for longer.
-    if is_incremental_vae(hyper_model):
+    if is_incremental_vae(hyper_model) or is_audio(hyper_model):
         max_epochs = 500 # training the VAE is very fast
 
     max_time = 5*60 # we don't like slow models...
@@ -79,28 +103,7 @@ def evaluate_model(params):
         hyper_names.append(model_text + f" | real loss={loss:.2f}, rate={rate * 100:.3f}%") # Record the final learning rate
         hyper_params.append(params)
 
-        order = np.argsort(hyper_losses)
-        topN = min(20, len(hyper_losses))
-
-        print("Best hyper parameters:")
-        for i in range(topN):
-            o = order[i]
-            print(f"#{i+1} {hyper_losses[o]:.2f}, {hyper_names[o]}")
-        print("\n")
-
-        file_name = "Models/" + hyper_model + " hyper parameters.txt"
-        with open(file_name, 'w') as file:
-            for i in range(topN):
-                o = order[i]
-                file.write(str(hyper_params[o]) + "\n")
-
-            file.write("\n\n")
-            for i in range(topN):
-                o = order[i]
-                file.write(f"#{i+1} {hyper_losses[o]:.2f}, {hyper_names[o]}\n")
-
-        if is_interactive:
-            plot_hypertrain_loss(hyper_losses, hyper_names, hyper_model)
+        display_best_hyper_parameters()
 
     return final_loss
 
@@ -237,9 +240,8 @@ def optimise_hyper_parameters(model_name):
         case "AudioConv_AE":
             # audio_length, depth, kernel_count, outer_kernel_size, inner_kernel_size
             max_loss = audio_length
-            k_size = int(sample_rate / middleCHz)
             search_space.append(Integer( 3,     5,     'uniform',  name='layers'))
-            search_space.append(Integer(35,    50,     'uniform',  name='kernels'))
+            search_space.append(Integer(25,    50,     'uniform',  name='kernels'))
             search_space.append(Integer(30,    90, 'log-uniform',  name='outer_kernel_size'))
             search_space.append(Integer( 8,    35, 'log-uniform',  name='inner_kernel_size'))
 
@@ -313,6 +315,18 @@ def full_hypertrain(model_name):
     train_best_params(model_name)
     fine_tune(model_name)
 
+
+def train_topN_hyper_params(topN = 10):
+    # Train the top N but with longer time spans
+    order = np.argsort(hyper_losses)
+    for i in range(topN):
+        n = order[i]
+        print(f"\n\n\n\nTraining optimised parameters rank #{i+1}: {hyper_names[n]}")
+        params = hyper_params[n]
+        params[0] = 2  # batch-size = 2^N
+        params[1] = -7 # learning rate = 10^N # this doesn't matter much with Adam?
+        train_best_params(hyper_model, params)
+
 def grid_search_MLP_VAE():
     global hyper_model, max_params
     hyper_model = "MLPVAE_Incremental"
@@ -325,6 +339,8 @@ def grid_search_MLP_VAE():
                 params = [4, -5, latent, vae_depth, ratio]
                 print(f"\n\n\nGrid Hyper-train: latent={latent}, vae_depth={vae_depth}")
                 evaluate_model(params)
+
+    train_topN_hyper_params()
 
 
 def grid_search_Conv2D_AE():
@@ -340,40 +356,35 @@ def grid_search_Conv2D_AE():
                 print(f"\n\n\nGrid Hyper-train: layers={layers}, kernels={kernels}, size={size}")
                 evaluate_model(params)
 
-    # Train the top N but with longer time spans
-    order = np.argsort(hyper_losses)
-    for i in range(10):
-        n = order[i]
-        print(f"\n\n\n\nTraining optimised parameters rank #{i+1}: {hyper_names[n]}")
-        params = hyper_params[n]
-        params[0] = 2  # batch-size = 2^2
-        params[1] = -6 # learning rate = 10^-7
-        train_best_params(hyper_model, params)
+    train_topN_hyper_params()
 
-def grid_search_Conv2D_VAE():
-    global hyper_model, max_params, max_hyper_runs
-    hyper_model = "Conv2D_VAE_Incremental"
+def grid_search_AudioConv_AE():
+    global hyper_model, max_params, max_hyper_runs, max_loss
+    k_size = int(sample_rate / middleCHz)
+    hyper_model = "AudioConv_AE"
     reset_hyper_training(hyper_model)
-    max_params = 30_000_000
-    samples, _ = generate_training_data(None, hyper_stfts)  # full data-set, this may be more representative
-    max_hyper_runs = 5 * 5 * 2
-    for latent in [6, 7, 8, 9, 10]:
-        for ratio in exponential_interpolation(0.1, 0.5, 5):
-            for layers in [3, 4]:
-                    latent = int(latent)
-                    params = [4, -6, latent, layers, ratio]
-                    print(f"\n\n\nGrid Hyper-train: latent={latent}, layers={layers}, ratio={ratio}")
+    set_fail_loss(1_000_000)
+    max_params = 1_000_000
+    max_loss = 5 * audio_length
+    samples, _ = generate_training_data(200, hyper_stfts)
+    max_hyper_runs = 5 * 4 * 6 * 5
+    count = 0
+    for depth in [1, 2, 3, 4, 5]:
+        for kernels in [10, 20, 40, 60]:
+            for outer_kernel in exponential_interpolation(10, k_size, 6):
+                outer_kernel = int(outer_kernel)
+                for inner_kernel in exponential_interpolation(3, 20, 5):
+                    inner_kernel = int(inner_kernel)
+
+                    if depth == 1 and inner_kernel > 3:
+                        break
+
+                    params = [4, -6, depth, kernels, outer_kernel, inner_kernel]
+                    count += 1
+                    print(f"\n\n\nGrid Hyper-train #{count}/{max_hyper_runs}: layers={depth}, kernels={kernels}, outer={outer_kernel}, inner={inner_kernel}")
                     evaluate_model(params)
 
-    # Train the top N but with longer time spans
-    order = np.argsort(hyper_losses)
-    for i in range(10):
-        n = order[i]
-        print(f"\n\n\n\nTraining optimised parameters rank #{i+1}: {hyper_names[n]}")
-        params = hyper_params[n]
-        params[0] = 2  # batch-size = 2^2
-        params[1] = -6 # learning rate = 10^-7
-        train_best_params(hyper_model, params)
+    train_topN_hyper_params()
 
 
 if __name__ == '__main__':
@@ -419,7 +430,9 @@ if __name__ == '__main__':
     ###############################################################################################
     # Audio Convolution Auto-Encoder
     reset_hyper_training("AudioConv_AE")
+    grid_search_AudioConv_AE()
 
-    #full_hypertrain("AudioConv_AE")
-    optimise_hyper_parameters("AudioConv_AE")
-    train_best_params("AudioConv_AE")
+    #
+    # #full_hypertrain("AudioConv_AE")
+    # optimise_hyper_parameters("AudioConv_AE")
+    # train_best_params("AudioConv_AE")

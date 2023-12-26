@@ -63,7 +63,7 @@ class AudioConv_AE(nn.Module):  # no VAE
 
         layers = []
         # Outer layer
-        stride = outer_kernel_size // 2
+        stride = max(outer_kernel_size // 8, 1)
         if is_decoder:
             layers.append(torch.nn.ConvTranspose1d(kernel_count, 1, outer_kernel_size, stride=stride))
         else:
@@ -88,6 +88,11 @@ class AudioConv_AE(nn.Module):  # no VAE
             layers.reverse()
             print(f"Expect final sequence length={length}")
             self.expected_length = length
+
+        if is_decoder:
+            layers.append(torch.nn.Tanh())
+        else:
+            layers.append(torch.nn.LeakyReLU())
 
         return nn.Sequential(*layers)
 
