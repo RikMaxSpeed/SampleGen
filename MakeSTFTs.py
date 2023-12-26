@@ -183,20 +183,20 @@ def make_STFTs(verbose):
 
 
 if os.path.exists(stft_file):
-    print("STFT file already created: {stft_file}")
+    print(f"STFT file already created: {stft_file}")
 else:
-    print("STFT not found: {stft_file}")
+    print(f"STFT not found: {stft_file}")
     make_STFTs(False)
 
     
 def load_STFTs():
     stfts, file_names = load_from_file(stft_file)
-    print("Loaded {} STFTs from {}".format(len(stfts), stft_file))
+    print(f"Loaded {len(stfts)} STFTs from {stft_file}")
     return stfts, file_names
 
 def load_audio():
     samples, file_names = load_from_file(audio_file)
-    print("Loaded {} samples from {}".format(len(samples), audio_file))
+    print(f"Loaded {len(samples)} samples from {audio_file}")
     return samples, file_names
 
 
@@ -396,7 +396,7 @@ def test_stft_conversions(file_name):
     output *= amp / maxAmp
     
     plot_stft("Resynth " + file_name, output, sr, stft_hop)
-    save_and_play_audio_from_stft(output, sr, stft_hop, "Results/resynth-" + os.path.basename(file_name), True)
+    save_and_play_resynthesized_audio(output, sr, stft_hop, "Results/resynth-" + os.path.basename(file_name), True)
 
     diff = np.abs(output - stft)
     debug("diff", diff)
@@ -418,7 +418,7 @@ def display_average_stft(stfts, playAudio):
     mean = stfts.mean(dim=0)
     output = convert_output_to_sample(mean, True)
     plot_stft("Average STFT", output, sample_rate, stft_hop)
-    save_and_play_audio_from_stft(output, sample_rate, stft_hop, "Results/MeanSTFT.wav", playAudio)
+    save_and_play_resynthesized_audio(output, sample_rate, stft_hop, "Results/MeanSTFT.wav", playAudio)
 
 
 

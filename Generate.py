@@ -107,7 +107,7 @@ class Sample_Generator():
         stft = convert_output_to_sample(decode[0], self.use_stfts)
     
         plot_stft(save_to_file, stft, sample_rate, stft_hop)
-        save_and_play_audio_from_stft(stft, sample_rate, stft_hop, "Results/" + save_to_file + ".wav", play_sound)
+        save_and_play_resynthesized_audio(stft, sample_rate, stft_hop, "Results/" + save_to_file + ".wav", play_sound)
 
     
     def interpolate_vae(self, pattern1, pattern2, play_sound=True, steps = 5):
@@ -117,7 +117,7 @@ class Sample_Generator():
         plot_bar_charts([numpify(encode1), numpify(encode2)], [name1, name2], self.model_name + " encodings")
         
         plot_stft(name1, stft1, sample_rate, stft_hop)
-        save_and_play_audio_from_stft(stft1, sample_rate, stft_hop, None, play_sound) # broken
+        save_and_play_resynthesized_audio(stft1, sample_rate, stft_hop, None, play_sound) # broken
 
         for i in range(steps):
             t = i / (steps - 1)
@@ -126,7 +126,7 @@ class Sample_Generator():
             self.decode_and_save(encode, save_file, play_sound)
 
         plot_stft(name2, stft2, sample_rate, stft_hop)
-        save_and_play_audio_from_stft(stft2, sample_rate, stft_hop, None, play_sound) # broken
+        save_and_play_resynthesized_audio(stft2, sample_rate, stft_hop, None, play_sound) # broken
 
 
     def interpolate_no_ai(self, pattern1, pattern2, play_sound=True, steps = 5):
@@ -160,7 +160,7 @@ class Sample_Generator():
             save_file = f"interpolate-no-AI {100*t:.1f}% - {name1} & {name2}"
             
             plot_stft(save_file, stft, sample_rate, stft_hop)
-            save_and_play_audio_from_stft(stft, sample_rate, stft_hop, "Results/" + save_file + ".wav", play_sound)
+            save_and_play_resynthesized_audio(stft, sample_rate, stft_hop, "Results/" + save_file + ".wav", play_sound)
 
 
     def randomise_sample(self, pattern, max_noise=0.5, play_sound=True, steps=5):
@@ -220,7 +220,7 @@ class Sample_Generator():
                 loss, output = self.model.forward_loss(input)
             result = convert_output_to_sample(output.squeeze(0), self.use_stfts)
             plot_stft(f"Resynth #{i+1} {file_name}", result, sample_rate, stft_hop)
-            save_and_play_audio_from_stft(result, sample_rate, stft_hop, f"Results/resynth #{i + 1} " + file_name, True)
+            save_and_play_resynthesized_audio(result, sample_rate, stft_hop, f"Results/resynth #{i + 1} " + file_name, True)
 
     def test_all(self):
         names=[]
@@ -239,7 +239,7 @@ class Sample_Generator():
                 plot_stft(name, stft, sample_rate)
             
             if noisy:
-                save_and_play_audio_from_stft(stft.cpu().numpy(), sample_rate, stft_hop, None, True)
+                save_and_play_resynthesized_audio(stft.cpu().numpy(), sample_rate, stft_hop, None, True)
             
             resynth, loss = predict_stft(self.model, stft, self.use_stfts)
             names.append(name)
@@ -248,7 +248,7 @@ class Sample_Generator():
             if graphs:
                 plot_stft("Resynth " + name, resynth, sample_rate)
             
-            save_and_play_audio_from_stft(resynth, sample_rate, stft_hop, "Results/" + name + " - resynth.wav", noisy)
+            save_and_play_resynthesized_audio(resynth, sample_rate, stft_hop, "Results/" + name + " - resynth.wav", noisy)
 
 
         plot_multiple_histograms_vs_gaussian([losses], [f"{self.model_name} resynthesis loss for {len(losses):,} samples"])

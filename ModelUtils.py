@@ -215,6 +215,9 @@ def rnn_size(input_size, hidden_size, num_layers):
 def conv1d_size(input_channels, num_kernels, kernel_size):
     return (kernel_size * input_channels + 1) * num_kernels
 
+def conv1d_output_size(input_size, kernel_size, stride):
+    return (input_size - kernel_size) // stride + 1
+
 
 def load_weights_and_biases(model, file_name):
         print(f"{model.__class__.__name__}: loading weights & biases from file '{file_name}'")

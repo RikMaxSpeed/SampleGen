@@ -290,7 +290,9 @@ def make_model(model_type, model_params, max_params, verbose):
     size_error = approx_size / size  - 1
     if np.abs(size_error) > 0.01:
         print(f"*** Inaccurate approximate size={approx_size:,} vs actual size={size:,}, error={100*size_error:.2f}%")
-    
+    else:
+        print(f"real size={size:,} vs estimated={approx_size:,}, error={100 * size_error:.3f}%")
+
     # Too big?
     if size > max_params:
         print(f"Model is too large: {size:,} parameters vs max={max_params:,}")

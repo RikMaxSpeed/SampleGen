@@ -8,13 +8,12 @@ max_params = 0
 tuning_count = 0
 break_on_exceptions = True # True=Debugging, False allows the GPR to continue even if the model blows up (useful for long tuning runs!)
 max_loss = 10_000 # default
-fail_loss = 1_000
 
 hyper_model = "None"
 hyper_losses = []
 hyper_names  = []
 hyper_params = []
-max_hyper_runs = 100  # it usually gets stuck at some local minimum well before this.
+max_hyper_runs = 200  # it usually gets stuck at some local minimum well before this.
 hyper_stfts = False
 
 
@@ -26,6 +25,11 @@ def reset_hyper_training(model_name):
     hyper_names = []
     hyper_params = []
     reset_train_losses(model_name)
+
+    if is_audio(model_name):
+        set_fail_loss(15000)
+    else:
+        set_fail_loss(1000)
 
 
 from Train import *
@@ -65,7 +69,7 @@ def evaluate_model(params):
             return max_loss
 
     final_loss = loss
-    if loss < fail_loss: # skip the models that failed in some way.
+    if loss < get_fail_loss(): # skip the models that failed in some way.
         # Bake the learning_rate into the loss:
         if -0.05 < rate < 0: # only do this if the rate appears plausible
             final_loss *= (1 + rate) ** 30 # favourise models that have more scope to improve
@@ -232,12 +236,12 @@ def optimise_hyper_parameters(model_name):
 
         case "AudioConv_AE":
             # audio_length, depth, kernel_count, outer_kernel_size, inner_kernel_size
-            max_loss = 10 * audio_length
+            max_loss = audio_length
             k_size = int(sample_rate / middleCHz)
-            search_space.append(Integer(1,           6,     'uniform',  name='layers'))
-            search_space.append(Integer(1,          60,     'uniform',  name='kernels'))
-            search_space.append(Integer(k_size // 16, k_size * 2, 'log-uniform',  name='outer_kernel_size'))
-            search_space.append(Integer(2,          50, 'log-uniform',  name='inner_kernel_size'))
+            search_space.append(Integer( 3,     5,     'uniform',  name='layers'))
+            search_space.append(Integer(35,    50,     'uniform',  name='kernels'))
+            search_space.append(Integer(30,    90, 'log-uniform',  name='outer_kernel_size'))
+            search_space.append(Integer( 8,    35, 'log-uniform',  name='inner_kernel_size'))
 
         case _:
             raise Exception(f"Invalid model type = {model_name}")
@@ -414,5 +418,8 @@ if __name__ == '__main__':
 
     ###############################################################################################
     # Audio Convolution Auto-Encoder
+    reset_hyper_training("AudioConv_AE")
+
     #full_hypertrain("AudioConv_AE")
     optimise_hyper_parameters("AudioConv_AE")
+    train_best_params("AudioConv_AE")

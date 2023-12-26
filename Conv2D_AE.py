@@ -225,6 +225,7 @@ class Conv2DAutoEncoder(nn.Module):
 
 
 
+
 if __name__ == '__main__':
     layer_count = 1
     kernel_count = 5

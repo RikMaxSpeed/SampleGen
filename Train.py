@@ -115,7 +115,16 @@ best_train_losses = []
 
 use_exact_train_loss = False # Setting to True is more accurate but very expensive in CPU time
 
-fail_loss = 1_000
+fail_loss = 1_000 # value used to make a model that failed
+def set_fail_loss(loss):
+    global fail_loss, last_saved_loss
+    if fail_loss != loss:
+        fail_loss = loss
+        last_saved_loss = loss // 4
+        print(f"fail_loss={fail_loss}, last_saved_loss={last_saved_loss}")
+
+def get_fail_loss():
+    return fail_loss
 
 def reset_train_losses(model_name):
     global all_test_model, all_test_losses, all_test_names, best_train_losses, last_saved_loss
@@ -125,7 +134,8 @@ def reset_train_losses(model_name):
         all_test_names = []
         all_test_losses = []
         best_train_losses = []
-        last_saved_loss = 200
+        last_saved_loss = fail_loss // 4
+        print("last_saved_loss=", last_saved_loss)
 
 # Main entry point for training the model
 def train_model(model_name, hyper_params, max_epochs, max_time, max_params, max_overfit, max_loss, verbose, load_existing):
@@ -272,11 +282,15 @@ def train_model(model_name, hyper_params, max_epochs, max_time, max_params, max_
 
             # Generate a test tone:
             resynth, loss = predict_stft(model, sanity_test_sample, use_stfts)
-            print(f"Resynth {sanity_test_name}: loss={loss:.2f}")
-            save_and_play_audio_from_stft(resynth, sample_rate, stft_hop, f"Results/{model_name} {sanity_test_name} - resynth.wav", False)
+            loss_pct = 100 * np.sqrt(loss / resynth.size)
+            print(f"Resynth {sanity_test_name}: loss={loss:.2f} = {loss_pct:.2f}%")
+            file_name = f"Results/{model_name} {sanity_test_name} - resynth.wav"
+            save_and_play_resynthesized_audio(resynth, sample_rate, stft_hop, file_name, False)
             
             # This now saves to video too
-            plot_stft(f"{sanity_test_name}, loss={loss:.2f} @ epoch {epoch}", resynth, sample_rate, stft_hop)
+            if use_stfts:
+                plot_stft(f"{sanity_test_name}, loss={loss:.2f} @ epoch {epoch}", resynth, sample_rate, stft_hop)
+
             print("\n")
 
         if verbose and now - lastGraph > graph_interval and len(train_losses) > 1:

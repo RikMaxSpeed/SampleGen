@@ -130,12 +130,16 @@ def play_audio(data, sr):
     sd.wait()  # Wait for the audio to finish playing
 
 
-def save_and_play_audio_from_stft(stft, sr, hop_length, write_to_file, playAudio):
-    # Compute inverse STFT to reconstruct the audio
-    #debug("stft", stft)
-    audio = istft_to_audio(stft, hop_length)
-    #debug("audio", audio)
-    #print("reconstitued audio={} samples at {} Hz, duration={:.1f} sec".format(len(audio), sr, len(audio)/sr))
+def save_and_play_resynthesized_audio(resynth, sr, hop_length, write_to_file, playAudio):
+
+    if len(resynth.shape) == 2: # STFT
+        # Compute inverse STFT to reconstruct the audio
+        #debug("stft", stft)
+        audio = istft_to_audio(resynth, hop_length)
+        #debug("audio", audio)
+        #print("reconstitued audio={} samples at {} Hz, duration={:.1f} sec".format(len(audio), sr, len(audio)/sr))
+    else:
+        audio = resynth
 
     # Save the reconstructed audio to a new .wav file
     if write_to_file is not None:
@@ -165,7 +169,7 @@ def demo_stft(file_name, n_fft, hop_length):
 
     debug("stft", stft)
     
-    save_and_play_audio_from_stft(stft, sr, hop_length, "Results/resynth-" + os.path.basename(file_name), True)
+    save_and_play_resynthesized_audio(stft, sr, hop_length, "Results/resynth-" + os.path.basename(file_name), True)
     
 
 def print_default_audio_device_info():

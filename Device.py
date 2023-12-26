@@ -1,4 +1,9 @@
 import torch
+import os
+
+# Default to CPU if an MPS function is not implemented. Required for PyTorch.stft
+# export PYTORCH_ENABLE_MPS_FALLBACK=1
+os.environ['PYTORCH_ENABLE_MPS_FALLBACK'] = '1'
 
 device = 'mps' if torch.backends.mps.is_available() else 'cuda' if torch.cuda.is_available() else 'cpu'
 
