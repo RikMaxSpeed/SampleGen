@@ -22,14 +22,13 @@ from torch.utils.data import TensorDataset
 #    return padded_tensor1 + padded_tensor
 
 
-def get_training_stfts(total = None):
-    stfts, file_names = load_STFTs()
-    count = len(stfts)
-    
-    if total is None or count >= total:
-        stfts, file_names
-        
-    return stfts[:total], file_names[:total] # We could shuffle, but I'll keep it static for now.
+def load_training_samples(use_stfts):
+    if use_stfts:
+        samples, file_names = load_STFTs()
+    else:
+        samples, file_names = load_audio()
+
+    return samples, file_names
 
     
 def augment_stfts(stfts, total):

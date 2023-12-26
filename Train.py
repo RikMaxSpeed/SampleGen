@@ -18,12 +18,10 @@ def log_interp(start, end, steps):
     return torch.exp(torch.linspace(math.log(start), math.log(end), steps))
 
 
-def predict_stft(model, input_stft):
-    input_stft = convert_stft_to_input(input_stft)
+def predict_stft(model, input_stft, use_stfts):
+    input_stft = convert_sample_to_input(input_stft)
 
-    # Add an extra dimension for batch (if not already present)
-    if len(input_stft.shape) == 2:
-        input_stft = input_stft.unsqueeze(0)
+    input_stft = input_stft.unsqueeze(0)
     
     input_stft = input_stft.to(device)
     
@@ -31,56 +29,58 @@ def predict_stft(model, input_stft):
         loss, predicted_stft = model.forward_loss(input_stft)
 
     predicted_stft = predicted_stft.squeeze(0)
-    return convert_stft_to_output(predicted_stft), loss.item()
+    return convert_output_to_sample(predicted_stft, use_stfts), loss.item()
 
 
 # Sample data
 train_dataset    = None
 test_dataset     = None
-sanity_test_stft = None
+sanity_test_sample = None
 sanity_test_name = None
 
 def is_incremental_vae(model_name):
     return "VAE_Incremental" in model_name
 
 
-def generate_training_stfts(how_many):
-    global sanity_test_stft, sanity_test_name, train_dataset, test_dataset
+def generate_training_data(how_many, use_stfts):
+    global sanity_test_sample, sanity_test_name, train_dataset, test_dataset
                 
      # Augmentation is used if this exceeds the number of real available samples
-    stfts, file_names = get_training_stfts(None)
-    
-    count = len(stfts)
+    samples, file_names = load_training_samples(use_stfts)
+
+    count = len(samples)
     if how_many is None:
         how_many = count
     
-    if False:
-        lengths = np.array([x.shape[1] for x in stfts])
+    if False and use_stfts:
+        lengths = np.array([x.shape[1] for x in samples])
         plot_multiple_histograms_vs_gaussian([lengths * stft_hop / sample_rate], ["Sample Durations (seconds)"])
 
     # Pick an example file to sanity check that everything is behaving from A-Z
     for i in range(len(file_names)):
         if "grand piano c3" in file_names[i].lower():
-            sanity_test_stft = stfts[i]
+            sanity_test_sample = samples[i]
             sanity_test_name = file_names[i]
             break
 
+    samples = convert_samples_to_inputs(samples)
+    count = samples.size(0)
+    print(f"{count} samples")
 
-    stfts = convert_stfts_to_inputs(stfts)
-    count = stfts.size(0)
-    print(f"{count} STFTs")
-    #display_average_stft(stfts, True)
+    # if use_stfts:
+    #     display_average_stft(samples, True)
 
     # Find key samples to encode
     if how_many <= count/3:
-        stfts = select_diverse_tensors(stfts, file_names, how_many).to(device)
+        assert use_stfts, "select_diverse_tensors is not supported for raw audio, only STFTs"
+        samples = select_diverse_tensors(samples, file_names, how_many).to(device)
 
-    if stfts.size(0) > how_many: # truncate if too many
-        stfts = stfts[:how_many, : , :]
+    if samples.size(0) > how_many: # truncate if too many
+        samples = samples[:how_many, : , :]
 
     # Convert into train & test datasets
     ratio = 0.8
-    train_stfts, test_stfts = split_dataset(stfts, ratio)
+    train_stfts, test_stfts = split_dataset(samples, ratio)
     
     # Training set is kept completely separate from Test when augmenting.
     train_size = int(how_many * ratio)
@@ -128,7 +128,7 @@ def reset_train_losses(model_name):
         last_saved_loss = 200
 
 # Main entry point for training the model
-def train_model(model_type, hyper_params, max_epochs, max_time, max_params, max_overfit, max_loss, verbose, load_existing):
+def train_model(model_name, hyper_params, max_epochs, max_time, max_params, max_overfit, max_loss, verbose, load_existing):
     global train_dataset, test_dataset
 
     # We split the hyper-params into optimiser parameters & model parameters:
@@ -144,12 +144,14 @@ def train_model(model_type, hyper_params, max_epochs, max_time, max_params, max_
     
     # Create the model
     if load_existing:
-        model, model_text, model_params, model_size = load_saved_model(model_type)
+        model, model_text, model_params, model_size = load_saved_model(model_name)
     else:
-        model, model_text, model_size = make_model(model_type, model_params, max_params, verbose)
+        model, model_text, model_size = make_model(model_name, model_params, max_params, verbose)
     
     if model is None:
         return model_text, model_size, fail_loss*2, 1.0
+
+    use_stfts = model_uses_STFTs(model_name)
 
     learning_rate *= batch_size  # see https://www.baeldung.com/cs/learning-rate-batch-size
     weight_decay = 0
@@ -162,13 +164,13 @@ def train_model(model_type, hyper_params, max_epochs, max_time, max_params, max_
     print(f"model: {model_text}")
 
     # Optimisation for Incremental VAE: encode the STFTs using the auto_encoder layers only.
-    is_vae = is_incremental_vae(model_type)
+    is_vae = is_incremental_vae(model_name)
 
     if is_vae:
         # We will only be training the inner VAE, so we first encode the STFTs
         active_model = model.vae
         train_dataset = encode_stfts(model.auto_encoder, "Train", train_dataset)
-        test_dataset = encode_stfts(model.auto_encoder, "Test", test_dataset)
+        test_dataset  = encode_stfts(model.auto_encoder, "Test", test_dataset)
     else:
         active_model = model
 
@@ -250,7 +252,7 @@ def train_model(model_type, hyper_params, max_epochs, max_time, max_params, max_
             last_saved_loss = train_losses[-1]
             
             # Save the model:
-            file_name = "Models/" + model_type # keep over-writing the same file as the loss improves
+            file_name = "Models/" + model_name # keep over-writing the same file as the loss improves
             print(f"\n*** Best! loss={last_saved_loss:.2f}")
             print(f"{model_text}\n{optimiser_text}\nhyper-parameters: {hyper_params}")
             torch.save(model.state_dict(), file_name + ".wab")
@@ -269,9 +271,9 @@ def train_model(model_type, hyper_params, max_epochs, max_time, max_params, max_
                 file.write(f"\n{active_model}\n")
 
             # Generate a test tone:
-            resynth, loss = predict_stft(model, sanity_test_stft)
+            resynth, loss = predict_stft(model, sanity_test_sample, use_stfts)
             print(f"Resynth {sanity_test_name}: loss={loss:.2f}")
-            save_and_play_audio_from_stft(resynth, sample_rate, stft_hop, f"Results/{model_type} {sanity_test_name} - resynth.wav", False)
+            save_and_play_audio_from_stft(resynth, sample_rate, stft_hop, f"Results/{model_name} {sanity_test_name} - resynth.wav", False)
             
             # This now saves to video too
             plot_stft(f"{sanity_test_name}, loss={loss:.2f} @ epoch {epoch}", resynth, sample_rate, stft_hop)
@@ -279,7 +281,7 @@ def train_model(model_type, hyper_params, max_epochs, max_time, max_params, max_
 
         if verbose and now - lastGraph > graph_interval and len(train_losses) > 1:
             if is_interactive:
-                plot_train_test_losses(train_losses, test_losses, model_type)
+                plot_train_test_losses(train_losses, test_losses, model_name)
             lastGraph = now
             graph_interval = int(min(hour, 1.5 * graph_interval)) # less & less frequently!
 
@@ -288,7 +290,7 @@ def train_model(model_type, hyper_params, max_epochs, max_time, max_params, max_
             break
     
         if epoch < 5: # Test a random sample to show that the code is working from A-Z
-            resynth, loss = predict_stft(model, sanity_test_stft)
+            resynth, loss = predict_stft(model, sanity_test_sample, use_stfts)
 
         if total_time > max_time:
             print("Total time={:.1f} sec exceeds max={:.0f} sec".format(total_time, max_time))
@@ -332,10 +334,10 @@ def train_model(model_type, hyper_params, max_epochs, max_time, max_params, max_
     all_test_losses.append(test_losses)
     all_test_names.append("loss={:.2f}, {}, {}".format(np.min(test_losses), model_text, optimiser_text))
     
-    plot_multiple_losses(all_test_losses, all_test_names, 5, model_type) # can have 100+ curves.
+    plot_multiple_losses(all_test_losses, all_test_names, 5, model_name) # can have 100+ curves.
     
     if verbose and is_interactive:
-        plot_train_test_losses(train_losses, test_losses, model_type)
+        plot_train_test_losses(train_losses, test_losses, model_name)
 
 
 

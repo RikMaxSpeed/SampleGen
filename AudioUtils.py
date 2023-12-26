@@ -147,19 +147,19 @@ def save_and_play_audio_from_stft(stft, sr, hop_length, write_to_file, playAudio
 
 
 def compute_stft_for_file(file_name, n_fft, hop_length):
-    sr, data = read_wav_file(file_name)
-    #print("sr={} Hz, duration={:.1f} sec, hop={} -> {:.1f} windows".format(sr, len(data)/sr, hop_length, len(data)/hop_length))
+    sr, audio = read_wav_file(file_name)
+    #print("sr={} Hz, duration={:.1f} sec, hop={} -> {:.1f} windows".format(sr, len(audio)/sr, hop_length, len(audio)/hop_length))
     
-    data = normalise_sample_to_mono_floats(data)
-    #debug("normalised", data)
+    audio = normalise_sample_to_mono_floats(audio)
+    #debug("normalised", audio)
     
-    stft = compute_stft(data, sr, n_fft, hop_length)
+    stft = compute_stft(audio, sr, n_fft, hop_length)
     #debug("compute_stft", stft)
-    return sr, stft
+    return sr, stft, audio
 
 
 def demo_stft(file_name, n_fft, hop_length):
-    sr, stft = compute_stft_for_file(file_name, n_fft, hop_length)
+    sr, stft, audio = compute_stft_for_file(file_name, n_fft, hop_length)
     
     plot_stft(file_name, stft, sr, hop_length)
 

@@ -15,11 +15,13 @@ hyper_losses = []
 hyper_names  = []
 hyper_params = []
 max_hyper_runs = 100  # it usually gets stuck at some local minimum well before this.
+hyper_stfts = False
 
 
 def reset_hyper_training(model_name):
-    global hyper_model, hyper_losses, hyper_names, hyper_params
+    global hyper_model, hyper_stfts, hyper_losses, hyper_names, hyper_params
     hyper_model = model_name
+    hyper_stfts = model_uses_STFTs(model_name)
     hyper_losses = []
     hyper_names = []
     hyper_params = []
@@ -82,7 +84,7 @@ def evaluate_model(params):
             print(f"#{i+1} {hyper_losses[o]:.2f}, {hyper_names[o]}")
         print("\n")
 
-        file_name = hyper_model + " hyper parameters.txt"
+        file_name = "Models/" + hyper_model + " hyper parameters.txt"
         with open(file_name, 'w') as file:
             for i in range(topN):
                 o = order[i]
@@ -132,8 +134,8 @@ def optimise_hyper_parameters(model_name):
     reset_hyper_training(model_name)
 
     # Use a smaller data-set here to speed things up? Could favour small models that can't handle the entire data-set.
-    samples, _ = generate_training_stfts(None) # full data-set, this may be more representative
-    #samples, _ = generate_training_stfts(200) # 80% = 10 x batch=16
+    samples, _ = generate_training_data(None, hyper_stfts) # full data-set, this may be more representative
+    #samples, _ = generate_training_stfts(200, hyper_stfts) # 80% = 10 x batch=16
     print(f"Training data set has {samples} samples.")
 
     global max_params, max_loss
@@ -228,6 +230,15 @@ def optimise_hyper_parameters(model_name):
             search_space.append(Integer(2,         5,   'uniform',      name='vae_depth'))
             search_space.append(Real   (0.1,      10,   'uniform',      name='vae_ratio'))
 
+        case "AudioConv_AE":
+            # audio_length, depth, kernel_count, outer_kernel_size, inner_kernel_size
+            max_loss = 10 * audio_length
+            k_size = int(sample_rate / middleCHz)
+            search_space.append(Integer(1,           6,     'uniform',  name='layers'))
+            search_space.append(Integer(1,          60,     'uniform',  name='kernels'))
+            search_space.append(Integer(k_size // 16, k_size * 2, 'log-uniform',  name='outer_kernel_size'))
+            search_space.append(Integer(2,          50, 'log-uniform',  name='inner_kernel_size'))
+
         case _:
             raise Exception(f"Invalid model type = {model_name}")
 
@@ -266,7 +277,7 @@ def train_best_params(model_name, params = None, finest = False):
     reset_train_losses(model_name)
 
     #generate_training_stfts(200) # Small dataset of the most diverse samples
-    generate_training_stfts(None) # Full dataset with no augmentation
+    generate_training_data(None, hyper_stfts) # Full dataset with no augmentation
     #generate_training_stfts(3000) # use a large number of samples with augmentation
 
     if params is None:
@@ -303,7 +314,7 @@ def grid_search_MLP_VAE():
     hyper_model = "MLPVAE_Incremental"
     reset_hyper_training(hyper_model)
     max_params = 20_000_000
-    samples, _ = generate_training_stfts(None)  # full data-set, this may be more representative
+    samples, _ = generate_training_data(None, hyper_stfts)  # full data-set, this may be more representative
     for vae_depth in range(2, 5):
         for latent in range(12, 4, -1):
             for ratio in [0.1, 0.5, 1.0, 2.0, 10.0]:
@@ -317,7 +328,7 @@ def grid_search_Conv2D_AE():
     hyper_model = "Conv2D_AE"
     reset_hyper_training(hyper_model)
     max_params = 20_000_000
-    samples, _ = generate_training_stfts(None)  # full data-set, this may be more representative
+    samples, _ = generate_training_data(None, hyper_stfts)  # full data-set, this may be more representative
     for kernels in range(20, 9, -1):
         for layers in [7, 6, 5]:
             for size in range(10, 3, -1):
@@ -340,7 +351,7 @@ def grid_search_Conv2D_VAE():
     hyper_model = "Conv2D_VAE_Incremental"
     reset_hyper_training(hyper_model)
     max_params = 30_000_000
-    samples, _ = generate_training_stfts(None)  # full data-set, this may be more representative
+    samples, _ = generate_training_data(None, hyper_stfts)  # full data-set, this may be more representative
     max_hyper_runs = 5 * 5 * 2
     for latent in [6, 7, 8, 9, 10]:
         for ratio in exponential_interpolation(0.1, 0.5, 5):
@@ -392,16 +403,16 @@ if __name__ == '__main__':
     # 2D Convolution
 
     #full_hypertrain("Conv2D_AE")
-    grid_search_Conv2D_AE()
+    #grid_search_Conv2D_AE()
     #train_best_params("Conv2D_AE")
     #fine_tune("Conv2D_AE") # didn't achieve anything!
 
-    #train_best_params("Conv2D_AE", [2, -6, 5, 20, 4]) # Best! test=train=7.3
-    #train_best_params("Conv2D_AE", [4, -6, 6, 15, 6]) # total=567 sec, epoch=497 (1.1 sec/epoch), train=17.18 (-0.03%), test=19.34 (-0.04%), overfit=1.13
-    #train_best_params("Conv2D_AE", [4, -7, 5, 10, 9]) #
-    #train_best_params("Conv2D_AE", [4, -7, 6, 25, 8]) #
-
     #full_hypertrain("Conv2D_VAE_Incremental")
-    grid_search_Conv2D_VAE()
+    #grid_search_Conv2D_VAE()
     #train_best_params("Conv2D_VAE_Incremental", [4, -5,  7, 4, 0.25])
     #fine_tune("Conv2D_VAE_Incremental")
+
+    ###############################################################################################
+    # Audio Convolution Auto-Encoder
+    #full_hypertrain("AudioConv_AE")
+    optimise_hyper_parameters("AudioConv_AE")

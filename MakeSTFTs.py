@@ -32,8 +32,9 @@ else:
     freq_buckets = stft_size + 1
 
 
-sample_duration = 1.95 # seconds (many of the samples in the library are approx 2 seconds and we get an off-by-one error on the length
+sample_duration = 1.99 # seconds (many of the samples in the library are approx 2 seconds and we get an off-by-one error on the length)
 sequence_length = int(sample_duration * sample_rate / stft_hop)
+audio_length    = int(sample_duration * sample_rate)
 
 print(f"Using sample rate={sample_rate} Hz, FFT={stft_buckets} buckets, hop={stft_hop} samples, duration={sample_duration:.1f} sec = {sequence_length:,} time steps")
 print(f"Max frequency={max_freq} Hz --> freq_buckets={freq_buckets}")
@@ -96,12 +97,12 @@ def lowest_frequency(stft, sample_rate, name, verbose):
 
 
 def compute_stft_from_file(file_name, verbose):
-    sr, stft = compute_stft_for_file(file_name, stft_buckets, stft_hop)
+    sr, stft, audio = compute_stft_for_file(file_name, stft_buckets, stft_hop)
     assert(stft.shape[0] == stft_size + 1)
     
     low_hz = lowest_frequency(stft, sr, file_name, verbose)
 
-    return sr, torch.tensor(stft), low_hz
+    return sr, torch.tensor(stft), low_hz, audio
 
 
 def display_time(start, count, unit):
@@ -120,6 +121,7 @@ def gather_stfts_from_directory(directory, notes, requiredSR, verbose):
 
     start = time.time()
     stft_tensors = []
+    audio_tensors = []
     file_names = []
     
     for root, dirs, files in os.walk(directory):
@@ -134,7 +136,7 @@ def gather_stfts_from_directory(directory, notes, requiredSR, verbose):
                         
                         try:
                             #print("\n\nReading: ", filepath)
-                            sr, stft_tensor, low_hz = compute_stft_from_file(filepath, verbose)
+                            sr, stft_tensor, low_hz, audio = compute_stft_from_file(filepath, verbose)
                             
                             if sr != requiredSR:
                                 print("Skipping {}: sample rate={} Hz".format(filepath, sr))
@@ -142,6 +144,7 @@ def gather_stfts_from_directory(directory, notes, requiredSR, verbose):
                                 print("Skipping {}: lowest frequency={:.1f} Hz".format(filepath, low_hz))
                             else:
                                 stft_tensors.append(stft_tensor)
+                                audio_tensors.append(torch.tensor(audio))
                                 file_names.append(file)
                                 print("#{}: {}".format(len(stft_tensors)+1, file))
                                         
@@ -155,7 +158,7 @@ def gather_stfts_from_directory(directory, notes, requiredSR, verbose):
     print("\nDone!!")
     display_time(start, len(stft_tensors), "file")
 
-    return stft_tensors, file_names
+    return stft_tensors, file_names, audio_tensors
 
 
 def save_to_file(obj, file_name):
@@ -169,13 +172,14 @@ def load_from_file(file_name):
 
 
 stft_file = f"STFT {sample_rate} Hz, size={stft_size}, hop={stft_hop}.pkl"
-    
+audio_file = f"Audio {sample_rate}.pkl"
+
 def make_STFTs(verbose):
     #notes = ["C5", "C4", "C3", "C2"]
     notes = ["C3", "C4"] # There's confusion over what C4 means, so we have a frequency check instead
-    stft_list, file_names = gather_stfts_from_directory("../WaveFiles", notes, 44100, verbose)
+    stft_list, file_names, audio_list = gather_stfts_from_directory("../WaveFiles", notes, 44100, verbose)
     save_to_file((stft_list, file_names), stft_file)
-
+    save_to_file((audio_list, file_names), audio_file)
 
 
 if os.path.exists(stft_file):
@@ -190,6 +194,17 @@ def load_STFTs():
     print("Loaded {} STFTs from {}".format(len(stfts), stft_file))
     return stfts, file_names
 
+def load_audio():
+    samples, file_names = load_from_file(audio_file)
+    print("Loaded {} samples from {}".format(len(samples), audio_file))
+    return samples, file_names
+
+
+def load_all_samples(use_stfts):
+    if use_stfts:
+        return load_STFTs()
+    else:
+        return load_audio()
 
 def adjust_stft_length(stft_tensor, target_length):
     
@@ -209,6 +224,22 @@ def adjust_stft_length(stft_tensor, target_length):
     padding = torch.zeros((stft_tensor.shape[0], padding_length))
     
     return torch.cat((stft_tensor, padding), dim=1)
+
+
+def adjust_audio_length(audio_tensor, target_length):
+    current_length = audio_tensor.shape[0]
+
+    # If the current length is equal to the target, return the tensor as is
+    if current_length == target_length:
+        return audio_tensor
+
+    if current_length > target_length:
+        return audio_tensor[:target_length]
+
+    padding_length = target_length - current_length
+    padding = torch.zeros(padding_length)
+
+    return torch.cat((audio_tensor, padding), dim=0)
 
 
 def transpose(tensor):
@@ -249,76 +280,93 @@ def remove_low_magnitudes(stft, db):
     stft[stft < threshold] = 0
     return stft
 
-def convert_stft_to_input(stft):
-    assert(stft.dtype == torch.complex64)
-    assert(len(stft.shape) == 2)
-    assert(stft.shape[0] == stft_size + 1)
-    
-    stft = adjust_stft_length(stft, sequence_length)
-    
+def sample_is_stft(sample):
+    return len(sample.shape) == 2
+
+def convert_sample_to_input(sample):
+
+    is_stft = sample_is_stft(sample)
+
+    if is_stft:
+        assert(sample.dtype == torch.complex64)
+        assert(sample.shape[0] == stft_size + 1)
+        sample = adjust_stft_length(sample, sequence_length)
+    else:
+        assert(sample.dtype == torch.float32)
+        sample = adjust_audio_length(sample, audio_length)
+
     # Normalise to [-1, 1]
-    stft /= torch.max(stft.abs())
+    sample /= torch.max(sample.abs())
 
     if amps is None:
         # Truncate the frequency range
-        stft = stft[:freq_buckets//2,:] # complex, so divide by 2.
-        stft = convert_to_reals(stft)
+        sample = sample[:freq_buckets // 2, :] # complex, so divide by 2.
+        sample = convert_to_reals(sample)
     else:
-        stft = amps.encode(stft)
-        stft = remove_low_magnitudes(stft, -70)
-        
-    assert(stft.size(0) == freq_buckets)
-    assert(stft.size(1) == sequence_length)
-    
+        sample = amps.encode(sample)
+        sample = remove_low_magnitudes(sample, -70)
+
+    if is_stft:
+        assert(sample.size(0) == freq_buckets)
+        assert(sample.size(1) == sequence_length)
+    else:
+        assert(sample.size(0) == audio_length)
+
     # Mu-Law
     if mu_law is not None:
-        stft = mu_law.encode(stft)
+        sample = mu_law.encode(sample)
 
-    assert(stft.dtype == torch.float32)
-    return stft.to(device)
-
-
-def convert_stfts_to_inputs(stfts):
-    return torch.stack([convert_stft_to_input(stft) for stft in stfts]).to(device)
+    assert(sample.dtype == torch.float32)
+    return sample.to(device)
 
 
-def convert_stft_to_output(stft):
-    assert(stft.dtype == torch.float32)
+def convert_samples_to_inputs(samples):
+    return torch.stack([convert_sample_to_input(stft) for stft in samples]).to(device)
+
+
+def convert_output_to_sample(output, use_stfts):
+    assert(output.dtype == torch.float32)
 
     if amps is None:
-        stft = torch.clamp(stft, min=0, max=1)
+        output = torch.clamp(output, min=0, max=1)
 
     if mu_law is not None:
-        stft = mu_law.decode(stft)
+        output = mu_law.decode(output)
     
     if amps is None:
         # Re-append truncated frequencies
-        assert(stft.size(0) == freq_buckets)
+        assert(output.size(0) == freq_buckets)
         missing_buckets = torch.full((stft_buckets - freq_buckets +2, sequence_length), 0.0, device=device)
-        stft = torch.cat((stft, missing_buckets), dim = 0)
-        assert(stft.size(0) == stft_buckets + 2)
+        output = torch.cat((output, missing_buckets), dim = 0)
+        assert(output.size(0) == stft_buckets + 2)
         
-        stft = convert_to_complex(stft)
+        output = convert_to_complex(output)
         global maxAmp
-        stft = stft.cpu().detach() * maxAmp
+        output = output.cpu().detach() * maxAmp
 
     else:
-        stft = stft.cpu().detach()
-        stft = stft.clamp(min=0, max=1)
-        stft = stft * maxAmp # re-amplify
-        stft = remove_low_magnitudes(stft, -50) # more aggressive
-        iterations = 50
-        stft = torch.tensor(recover_audio_from_magnitude(stft, stft_buckets, stft_hop, sample_rate, iterations))
-        assert(stft.size(0) == stft_size + 1)
-        assert(stft.size(1) == sequence_length)
-    
-    assert(stft.dtype == torch.complex64)
-    return stft.numpy()
+        output = output.cpu().detach()
+        output = output.clamp(min=0, max=1)
+        output = output * maxAmp # re-amplify
+
+        if use_stfts:
+            output = remove_low_magnitudes(output, -50) # more aggressive
+            iterations = 50
+            output = torch.tensor(recover_audio_from_magnitude(output, stft_buckets, stft_hop, sample_rate, iterations))
+            assert(output.size(0) == stft_size + 1)
+            assert(output.size(1) == sequence_length)
+
+    if use_stfts:
+        assert(output.dtype == torch.complex64)
+    else:
+        assert (output.dtype == torch.float32)
+
+    return output.numpy()
 
 
 
 def test_stft_conversions(file_name):
-    sr, stft = compute_stft_for_file(file_name, stft_buckets, stft_hop)
+    sr, stft, audio = compute_stft_for_file(file_name, stft_buckets, stft_hop)
     debug("stft.raw", stft)
     assert(stft.shape[0] == stft_size + 1)
     
@@ -337,10 +385,10 @@ def test_stft_conversions(file_name):
     
     tensor = torch.tensor(stft)
     debug("original", tensor)
-    input = convert_stft_to_input(tensor)
+    input = convert_sample_to_input(tensor)
     debug("input", input)
     
-    output = convert_stft_to_output(input)
+    output = convert_output_to_sample(input, True)
     debug("output", output)
     
     
@@ -368,7 +416,7 @@ if __name__ == '__main__':
 
 def display_average_stft(stfts, playAudio):
     mean = stfts.mean(dim=0)
-    output = convert_stft_to_output(mean)
+    output = convert_output_to_sample(mean, True)
     plot_stft("Average STFT", output, sample_rate, stft_hop)
     save_and_play_audio_from_stft(output, sample_rate, stft_hop, "Results/MeanSTFT.wav", playAudio)
 
@@ -412,13 +460,12 @@ def select_diverse_tensors(tensor_array, names, N):
     return torch.stack(diverse_subset)
 
 
-
 from SampleCategory import *
 
 # Utility to help categorise samples:
 def display_sample_categories():
     print("\n\n\nTesting sample category labbling\n")
-    stfts, file_names = load_STFTs()
+    _, file_names = load_STFTs()
     others = []
     
     for name in file_names:
@@ -435,6 +482,6 @@ def display_sample_categories():
     infer_sample_categories(file_names)
     
 
-#if __name__ == '__main__':
-#    display_sample_categories()
+if __name__ == '__main__':
+   display_sample_categories()
 

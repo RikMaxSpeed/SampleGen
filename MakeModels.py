@@ -7,6 +7,8 @@ from MLP_AE import *
 from RNN_AE import *
 from RNN_FaT import *
 from Conv2D_AE import *
+from AudioConv_AE import *
+
 import ast
 
 
@@ -50,8 +52,8 @@ def make_RNN_VAE(model_type, model_params, max_params):
     
     return model, model_text, approx_size, vae_size
 
-min_conv2_compression =  13 # or the VAE won't work
-max_conv2_compression = 100 # or the auto-encoder won't work
+min_compression =  13 # or the VAE won't work
+max_compression = 100 # or the auto-encoder won't work
 
 def make_Conv2D_VAE(model_type, model_params, max_params):
     layer_count, kernel_count, kernel_size, latent_size, vae_depth, vae_ratio = model_params
@@ -83,6 +85,11 @@ def make_Conv2D_VAE(model_type, model_params, max_params):
 def is_incremental(model_name):
     return "Incremental" in model_name
 
+def is_audio(model_name):
+    return "audio" in model_name.lower()
+
+def model_uses_STFTs(model_name):
+    return not is_audio(model_name)
 
 ##########################################################################################
 # Top-Level to create models and read hyper-parameters
@@ -236,8 +243,8 @@ def make_model(model_type, model_params, max_params, verbose):
             model.float()
             model.to(device)
 
-            if model.compression < min_conv2_compression or model.compression > max_conv2_compression:
-                print(f"Compression={model.compression:.1f} out of range [{min_conv2_compression}, {max_conv2_compression}]")
+            if model.compression < min_compression or model.compression > max_compression:
+                print(f"Compression={model.compression:.1f} out of range [{min_compression}, {max_compression}]")
                 return invalid_model(approx_size)
 
         case "Conv2D_VAE_Incremental":
@@ -255,6 +262,20 @@ def make_model(model_type, model_params, max_params, verbose):
             load_weights_and_biases(model.auto_encoder, file_name)
             freeze_model(model.auto_encoder)
             approx_size = vae_size  # we're not re-training the Conv2D parameters
+
+        case "AudioConv_AE":
+            depth, kernel_count, outer_kernel_size, inner_kernel_size = model_params
+            model_text = f"{model_type} layers={depth}, kernel_count={kernel_count}, outer_kernel={outer_kernel_size}, inner_kernel={inner_kernel_size}"
+            print(model_text)
+            approx_size = AudioConv_AE.approx_trainable_parameters(depth, kernel_count, outer_kernel_size, inner_kernel_size)
+            if is_too_large(approx_size, max_params):
+                return invalid_model(approx_size)
+
+            model = AudioConv_AE(audio_length, depth, kernel_count, outer_kernel_size, inner_kernel_size)
+
+            if model.compression < min_compression or model.compression > max_compression:
+                print(f"Compression={model.compression:.1f} out of range [{min_compression}, {max_compression}]")
+                return invalid_model(approx_size)
 
         case _:
             raise Exception(f"Unknown model: {model_type}")

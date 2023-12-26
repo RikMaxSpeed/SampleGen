@@ -1,5 +1,5 @@
 from MakeSTFTs import *
-from MakeModels import load_saved_model
+from MakeModels import load_saved_model, model_uses_STFTs
 from SampleCategory import *
 from Train import predict_stft
 from Graph import *
@@ -17,8 +17,6 @@ def display_custom_link(file_path, display_text=None):
 
     link_str = f'<a href="{file_path}" target="_blank">{display_text}</a>'
     display(HTML(link_str))    
-
-
 
 
 def numpify(tensor):
@@ -42,8 +40,9 @@ class Sample_Generator():
     def load_data(self, model_name):
         self.model_name = model_name
         self.model, model_text, params, model_size = load_saved_model(model_name)
+        self.use_stfts = model_uses_STFTs(model_name)
         print("Generate samples using {model_text}")
-        self.stfts, self.file_names = load_STFTs()
+        self.stfts, self.file_names = load_all_samples(self.use_stfts)
         self.categories = infer_sample_categories(self.file_names)
 
     def plot_amplitudes():
@@ -95,7 +94,7 @@ class Sample_Generator():
 
     def encode_sample_matching(self, pattern, noise_range):
         name, stft = self.find_samples_matching(pattern)
-        input_stft = convert_stft_to_input(stft).unsqueeze(0).to(device)
+        input_stft = convert_sample_to_input(stft).unsqueeze(0).to(device)
         encode = self.encode_input(input_stft, noise_range)
         print(f"Encoded {name} to {encode.shape}")
         return name, stft.numpy(), encode
@@ -105,7 +104,7 @@ class Sample_Generator():
         with torch.no_grad():
             decode = self.model.decode(encode_z)
             
-        stft = convert_stft_to_output(decode[0])
+        stft = convert_output_to_sample(decode[0], self.use_stfts)
     
         plot_stft(save_to_file, stft, sample_rate, stft_hop)
         save_and_play_audio_from_stft(stft, sample_rate, stft_hop, "Results/" + save_to_file + ".wav", play_sound)
@@ -179,7 +178,7 @@ class Sample_Generator():
         names, stfts = self.find_samples_matching(pattern, count)
         encodes=[]
         for stft in stfts:
-            input_stft = convert_stft_to_input(stft).unsqueeze(0).to(device)
+            input_stft = convert_sample_to_input(stft).unsqueeze(0).to(device)
             encodes.append(numpify(self.model.encode(input_stft)[0]))
         plot_bar_charts(encodes, names, f"{self.model_name}: {len(names)} {pattern} encodings")
     
@@ -188,7 +187,7 @@ class Sample_Generator():
         start_new_stft_video(f"{self.model_name} - main encodings", False)
         # Determine the latent size:
         stft = self.stfts[0]
-        input_stft = convert_stft_to_input(stft).unsqueeze(0).to(device)
+        input_stft = convert_sample_to_input(stft).unsqueeze(0).to(device)
         
         with torch.no_grad():
             mu, logvar = self.model.encode(input_stft)
@@ -211,15 +210,15 @@ class Sample_Generator():
                 self.decode_and_save(z, f"{self.model_name} var[{var+1}]={value}", play_sound)
 
     def encode_file(self, file_name):
-        sr, stft = compute_stft_for_file("Samples/" + file_name, stft_buckets, stft_hop)
+        sr, stft, audio = compute_stft_for_file("Samples/" + file_name, stft_buckets, stft_hop)
         assert (sr == sample_rate)
         stft = torch.tensor(stft)
-        input = convert_stft_to_input(stft).unsqueeze(0).to(device)
+        input = convert_sample_to_input(stft).unsqueeze(0).to(device)
 
         for i in range(5):
             with torch.no_grad():
                 loss, output = self.model.forward_loss(input)
-            result = convert_stft_to_output(output.squeeze(0))
+            result = convert_output_to_sample(output.squeeze(0), self.use_stfts)
             plot_stft(f"Resynth #{i+1} {file_name}", result, sample_rate, stft_hop)
             save_and_play_audio_from_stft(result, sample_rate, stft_hop, f"Results/resynth #{i + 1} " + file_name, True)
 
@@ -242,7 +241,7 @@ class Sample_Generator():
             if noisy:
                 save_and_play_audio_from_stft(stft.cpu().numpy(), sample_rate, stft_hop, None, True)
             
-            resynth, loss = predict_stft(self.model, stft)
+            resynth, loss = predict_stft(self.model, stft, self.use_stfts)
             names.append(name)
             losses.append(loss)
             
@@ -277,7 +276,7 @@ class Sample_Generator():
         encode_size = None
         for i in range(len(self.stfts)):
             if self.categories[i] in category_filter:
-                input_stft = convert_stft_to_input(self.stfts[i]).unsqueeze(0).to(device)
+                input_stft = convert_sample_to_input(self.stfts[i]).unsqueeze(0).to(device)
                 encode = numpify(self.model.encode(input_stft)[0])
                 if encode_size is None:
                     encode_size = len(encode)

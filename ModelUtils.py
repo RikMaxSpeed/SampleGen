@@ -212,6 +212,8 @@ def rnn_size(input_size, hidden_size, num_layers):
     return total_params
 
 
+def conv1d_size(input_channels, num_kernels, kernel_size):
+    return (kernel_size * input_channels + 1) * num_kernels
 
 
 def load_weights_and_biases(model, file_name):
