@@ -124,6 +124,8 @@ class AudioConv_AE(nn.Module):  # no VAE
         except Exception as e:
             print(f"Model doesn't work: {e}")
             self.compression = 0
+            return
+
         except BaseException as e:
             print(f"Model is broken! {e}")
             self.compression = 0

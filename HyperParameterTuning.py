@@ -398,7 +398,7 @@ def grid_search_Conv2D_AE():
 def grid_search_AudioConv_AE():
     global hyper_model, max_params, max_hyper_runs, max_loss
     max_kernel_size = int(sample_rate / middleCHz)
-    print(f"grid_search_AudioConv_AE: max_kernel_size={max_kernel_size}")
+    print(f"max_kernel_size={max_kernel_size}")
     hyper_model = "AudioConv_AE"
     reset_hyper_training(hyper_model)
     set_fail_loss(1_000_000)
@@ -409,7 +409,7 @@ def grid_search_AudioConv_AE():
     count = 0
     for depth in [3, 4, 5, 6]:
         for kernels in exponential_interpolation(30, 50, 5, True):
-            for kernel_size in exponential_interpolation(80, 168, 5, True):
+            for kernel_size in exponential_interpolation(80, max_kernel_size, 5, True):
                 for ratio in [8, 4, 2, 1, 0.5]:
                     params = [4, -6, depth, kernels, kernel_size, ratio]
                     count += 1
@@ -419,7 +419,7 @@ def grid_search_AudioConv_AE():
     train_topN_hyper_params()
 
 
-def grid_search_AudioConv_VAE():
+def grid_search_AudioConv_VAE_I():
     global hyper_model, max_params, max_hyper_runs
     hyper_model = "AudioConv_VAE_Incremental"
     reset_hyper_training(hyper_model)
@@ -479,18 +479,19 @@ def run_model_training():
     ###############################################################################################
     # Audio Convolution Auto-Encoder
 
-    #set_fail_loss(20_000)
-    #grid_search_AudioConv_AE()
+    set_fail_loss(20_000)
+    grid_search_AudioConv_AE()
     #train_best_params("AudioConv_AE", [4, -6, 3, 30, 139, 1])
     #, [4, -6, 2, 20, 95, 50])
     #train_best_params("AudioConv_AE", [4, -6, 2, 20, 95, 2.0])
     #train_best_params("AudioConv_AE", [4, -6, 2, 25, 107, 70])
 
-    set_fail_loss(audio_length)
-    full_hypertrain("AudioConv_VAE")
+    #set_fail_loss(audio_length)
+    #full_hypertrain("AudioConv_VAE")
 
-    #set_fail_loss(4_000)
-    #grid_search_AudioConv_VAE()
+    set_fail_loss(4_000)
+    grid_search_AudioConv_VAE_I()
+
     # full_hypertrain("AudioConv_VAE_Incremental")
     #train_best_params("AudioConv_VAE_Incremental", [4, -6, 10, 3, 0.25])
     # train_best_params("AudioConv_VAE_Incremental", [4, -6, 20, 3, 1.0])

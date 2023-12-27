@@ -269,7 +269,7 @@ def train_model(model_name, hyper_params, max_epochs, max_time, max_params, max_
             numeric_loss = loss.item() # loss is a tensor
             
             if np.isnan(numeric_loss) or numeric_loss > max_loss:
-                print(f"*** Aborting: model exploded! loss={int(loss):,} vs max={max_loss:,}")
+                print(f"*** Aborting: model exploded! loss={loss:.0f} vs max={max_loss:,}")
                 loss = np.min(train_losses) if len(train_losses) else fail_loss
                 return description, model_size, loss, 9.99
 

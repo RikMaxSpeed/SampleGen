@@ -52,8 +52,8 @@ def make_RNN_VAE(model_type, model_params, max_params):
     
     return model, model_text, approx_size, vae_size
 
-min_compression =  25 # or the VAE won't work
-max_compression = 100 # or the auto-encoder won't work
+min_compression =  36 # or the VAE won't work
+max_compression = 144 # or the auto-encoder won't work
 
 def make_Conv2D_VAE(model_type, model_params, max_params):
     layer_count, kernel_count, kernel_size, latent_size, vae_depth, vae_ratio = model_params
@@ -87,6 +87,9 @@ def make_AudioConv_VAE(model_type, model_params, max_params):
     print(model_text)
 
     audio_conv = AudioConv_AE(audio_length, depth, kernel_count, kernel_size, kernel_ratio)
+    if audio_conv.compression == 0:
+        return None, model_text, 0, 0
+
     audio_hidden_shape = audio_conv.encoded_shape
     audio_hidden_size = audio_conv.encoded_size
     vae_sizes = interpolate_layer_sizes(audio_hidden_size, latent_size, vae_depth, vae_ratio)
@@ -323,6 +326,9 @@ def make_model(model_type, model_params, max_params, verbose):
 
         case _:
             raise Exception(f"Unknown model: {model_type}")
+
+    if model is None:
+        return invalid_model(max_params)
 
     print(model)
 
