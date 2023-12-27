@@ -42,38 +42,45 @@ class Sample_Generator():
         self.model, model_text, params, model_size = load_saved_model(model_name)
         self.use_stfts = model_uses_STFTs(model_name)
         print("Generate samples using {model_text}")
-        self.stfts, self.file_names = load_all_samples(self.use_stfts)
+        self.samples, self.file_names = load_all_samples(self.use_stfts)
         self.categories = infer_sample_categories(self.file_names)
 
     def plot_amplitudes():
         amps =[]
-        for stft in self.stfts:
-            amps.append(max_amp(stft))
+        for sample in self.samples:
+            amps.append(max_amp(sample))
         plot_multiple_histograms_vs_gaussian([amps], ["STFT Max Amplitude"])
-    
-    
+
+
+    def adjust_sample_length(self, sample):
+        if self.use_stfts:
+            return adjust_stft_length(sample, sequence_length)
+        else:
+            return adjust_audio_length(sample, audio_length)
+
+
     def find_samples_matching(self, pattern, count = 1):
         pattern = pattern.lower()
         
         names = []
-        stfts = []
+        samples = []
         
-        for stft, name in zip(self.stfts, self.file_names):
+        for sample, name in zip(self.samples, self.file_names):
             if pattern in name.lower():
                 name = name[:-4]
                 #print(f"File {name} matches {pattern}.")
-                stft = adjust_stft_length(stft, sequence_length)
+                sample = self.adjust_sample_length(sample)
                 
                 if count == 1:
-                    return name, stft
+                    return name, sample
                 else:
                     names.append(name)
-                    stfts.append(stft)
+                    samples.append(sample)
                     if len(names) >= count:
-                        return names, stfts
+                        return names, samples
         
         if len(names) > 0:
-            return names, stfts
+            return names, samples
         
         raise Exception(f"No sample matches '{pattern}' :(")
 
@@ -133,8 +140,8 @@ class Sample_Generator():
         name1, stft1 = self.find_samples_matching(pattern1)
         name2, stft2 = self.find_samples_matching(pattern2)
         
-        stft1 = adjust_stft_length(stft1, sequence_length).numpy()
-        stft2 = adjust_stft_length(stft2, sequence_length).numpy()
+        stft1 = self.adjust_sample_length(stft1).numpy()
+        stft2 = self.adjust_sample_length(stft2).numpy()
         
         amp1 = max_amp(stft1)
         amp2 = max_amp(stft2)
@@ -186,7 +193,7 @@ class Sample_Generator():
     def generate_main_encodings(self, values, play_sound=True):
         start_new_stft_video(f"{self.model_name} - main encodings", False)
         # Determine the latent size:
-        stft = self.stfts[0]
+        stft = self.samples[0]
         input_stft = convert_sample_to_input(stft).unsqueeze(0).to(device)
         
         with torch.no_grad():
@@ -212,14 +219,17 @@ class Sample_Generator():
     def encode_file(self, file_name):
         sr, stft, audio = compute_stft_for_file("Samples/" + file_name, stft_buckets, stft_hop)
         assert (sr == sample_rate)
-        stft = torch.tensor(stft)
-        input = convert_sample_to_input(stft).unsqueeze(0).to(device)
+        sample = torch.tensor(stft if self.use_stfts else audio)
+        input = convert_sample_to_input(sample).unsqueeze(0).to(device)
 
         for i in range(5):
             with torch.no_grad():
                 loss, output = self.model.forward_loss(input)
             result = convert_output_to_sample(output.squeeze(0), self.use_stfts)
-            plot_stft(f"Resynth #{i+1} {file_name}", result, sample_rate, stft_hop)
+
+            if self.use_stfts:
+                plot_stft(f"Resynth #{i+1} {file_name}", result, sample_rate, stft_hop)
+
             save_and_play_resynthesized_audio(result, sample_rate, stft_hop, f"Results/resynth #{i + 1} " + file_name, True)
 
     def test_all(self):
@@ -229,13 +239,13 @@ class Sample_Generator():
         noisy = False
         graphs = False
     
-        for i in range(len(self.stfts)):
-            stft = self.stfts[i]
+        for i in range(len(self.samples)):
+            stft = self.samples[i]
             name = self.file_names[i][:-4]
             
-            stft = adjust_stft_length(stft, sequence_length)
+            stft = self.adjust_sample_length(stft)
             
-            if graphs:
+            if graphs and self.use_stfts:
                 plot_stft(name, stft, sample_rate)
             
             if noisy:
@@ -245,7 +255,7 @@ class Sample_Generator():
             names.append(name)
             losses.append(loss)
             
-            if graphs:
+            if graphs and self.use_stfts:
                 plot_stft("Resynth " + name, resynth, sample_rate)
             
             save_and_play_resynthesized_audio(resynth, sample_rate, stft_hop, "Results/" + name + " - resynth.wav", noisy)
@@ -274,9 +284,9 @@ class Sample_Generator():
             encoded_dict[category] = []
             
         encode_size = None
-        for i in range(len(self.stfts)):
+        for i in range(len(self.samples)):
             if self.categories[i] in category_filter:
-                input_stft = convert_sample_to_input(self.stfts[i]).unsqueeze(0).to(device)
+                input_stft = convert_sample_to_input(self.samples[i]).unsqueeze(0).to(device)
                 encode = numpify(self.model.encode(input_stft)[0])
                 if encode_size is None:
                     encode_size = len(encode)

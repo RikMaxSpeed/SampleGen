@@ -91,9 +91,8 @@ class AudioConv_AE(nn.Module):  # no VAE
             layers.reverse()
             print(f"Expect final sequence length={length}")
             self.expected_length = length
-
-        # if is_decoder:
-        #     layers.append(torch.nn.Tanh())
+        else:
+            layers.append(torch.nn.Tanh())
 
         return nn.Sequential(*layers)
 
@@ -108,12 +107,12 @@ class AudioConv_AE(nn.Module):  # no VAE
 
         try:
             encoded_shape, encoded_size = model_output_shape_and_size(self.encoder, [1, audio_length])
-            print(f"encoded shape={encoded_shape}, size={encoded_size}")
+            #print(f"encoded shape={encoded_shape}, size={encoded_size}")
             assert encoded_shape[1] == self.expected_length
             self.encoded_size = encoded_size # required for the CombinedVAE
 
             decode_shape, decode_size = model_output_shape_and_size(self.decoder, encoded_shape)
-            print(f"decoded shape={decode_shape}, size={decode_size}")
+            #print(f"decoded shape={decode_shape}, size={decode_size}")
         except BaseException as e:
             print(f"Model doesn't work: {e}")
             self.compression = 0
