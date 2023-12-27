@@ -13,37 +13,64 @@ from Augment import *
 
 
 
+from IPython.display import HTML, display
+
+def display_custom_link(file_path, display_text=None):
+
+    if display_text is None:
+        display_text = file_path
+
+    link_str = f'<a href="{file_path}" target="_blank">{display_text}</a>'
+    display(HTML(link_str))
+
+
 
 def log_interp(start, end, steps):
     return torch.exp(torch.linspace(math.log(start), math.log(end), steps))
 
 
-def predict_stft(model, input_stft, use_stfts):
-    input_stft = convert_sample_to_input(input_stft)
+def predict_sample(model, input, use_stfts):
+    input = convert_sample_to_input(input)
 
-    input_stft = input_stft.unsqueeze(0)
+    input = input.unsqueeze(0)
     
-    input_stft = input_stft.to(device)
+    input = input.to(device)
     
     with torch.no_grad():
-        loss, predicted_stft = model.forward_loss(input_stft)
+        loss, resynth = model.forward_loss(input)
 
-    predicted_stft = predicted_stft.squeeze(0)
-    return convert_output_to_sample(predicted_stft, use_stfts), loss.item()
+    resynth = resynth.squeeze(0)
+
+    loss = np.sqrt(loss.item() / resynth.numel())
+
+    return convert_output_to_sample(resynth, use_stfts), loss.item()
 
 
 # Sample data
 train_dataset    = None
 test_dataset     = None
-sanity_test_sample = None
-sanity_test_name = None
+
+# A small number of samples we'll monitor periodically whilst training
+demo_samples = []
+demo_names   = []
+
+def resynth_test_tones(model_name, model, use_stfts):
+
+    for i in range(len(demo_samples)):
+        sample = demo_samples[i]
+        name = demo_names[i]
+        resynth, loss = predict_sample(model, sample, use_stfts)
+        file_name = f"Results/{model_name} {name} - resynth.wav"
+        save_and_play_resynthesized_audio(resynth, sample_rate, stft_hop, file_name, False)
+        display_custom_link(file_name, f"Resynth {name}: loss={100 * loss:.2f}%")
+
 
 def is_incremental_vae(model_name):
     return "VAE_Incremental" in model_name
 
 
 def generate_training_data(how_many, use_stfts):
-    global sanity_test_sample, sanity_test_name, train_dataset, test_dataset
+    global demo_samples, demo_names, train_dataset, test_dataset
                 
      # Augmentation is used if this exceeds the number of real available samples
     samples, file_names = load_training_samples(use_stfts)
@@ -56,12 +83,14 @@ def generate_training_data(how_many, use_stfts):
         lengths = np.array([x.shape[1] for x in samples])
         plot_multiple_histograms_vs_gaussian([lengths * stft_hop / sample_rate], ["Sample Durations (seconds)"])
 
-    # Pick an example file to sanity check that everything is behaving from A-Z
-    for i in range(len(file_names)):
-        if "grand piano c3" in file_names[i].lower():
-            sanity_test_sample = samples[i]
-            sanity_test_name = file_names[i]
-            break
+    # Select some test tones we'll re-synthesise whenever the training improves sufficiently:
+    test_names = ["grand piano c3", "steel acoustic c3", "cherry oh 1 c3", "filter resonance 02 c3"]
+    for name in test_names:
+        for i in range(len(file_names)):
+            if name in file_names[i].lower():
+                demo_samples.append(samples[i])
+                demo_names.append(file_names[i])
+                break
 
     samples = convert_samples_to_inputs(samples)
     count = samples.size(0)
@@ -258,9 +287,9 @@ def train_model(model_name, hyper_params, max_epochs, max_time, max_params, max_
         now = time.time()
         total_time = now - start
 
-        # Save the best models (but not too often)
+        # Save the best models (but not too frequently)
         global last_saved_loss
-        if train_losses[-1] < last_saved_loss * 0.95:
+        if train_losses[-1] < last_saved_loss * 0.95: # 5% progress
             last_saved_loss = train_losses[-1]
             
             # Save the model:
@@ -282,13 +311,8 @@ def train_model(model_name, hyper_params, max_epochs, max_time, max_params, max_
                 file.write(f"time={total_time:.0f} sec, train_size={len(train_dataset)}, batch_size={batch_size}, epoch={epoch} = {total_time/(epoch+1):.1f} sec/epoch\n")
                 file.write(f"\n{active_model}\n")
 
-            # Generate a test tone:
-            resynth, loss = predict_stft(model, sanity_test_sample, use_stfts)
-            loss_pct = 100 * np.sqrt(loss / resynth.size)
-            print(f"Resynth {sanity_test_name}: loss={loss:.2f} = {loss_pct:.2f}%")
-            file_name = f"Results/{model_name} {sanity_test_name} - resynth.wav"
-            save_and_play_resynthesized_audio(resynth, sample_rate, stft_hop, file_name, False)
-            
+            resynth_test_tones(model_name, model, use_stfts)
+
             # This now saves to video too
             if use_stfts:
                 plot_stft(f"{sanity_test_name}, loss={loss:.2f} @ epoch {epoch}", resynth, sample_rate, stft_hop)
@@ -306,7 +330,7 @@ def train_model(model_name, hyper_params, max_epochs, max_time, max_params, max_
             break
     
         if epoch < 5: # Test a random sample to show that the code is working from A-Z
-            resynth, loss = predict_stft(model, sanity_test_sample, use_stfts)
+            resynth, loss = predict_sample(model, demo_samples[0], use_stfts)
 
         if total_time > max_time:
             print("Total time={:.1f} sec exceeds max={:.0f} sec".format(total_time, max_time))

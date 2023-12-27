@@ -15,12 +15,9 @@ def basic_reconstruction_loss(inputs, outputs):
 cached_weights = {}
 
 # Weight the samples over time: it's critical to get start of the sound correct.
-def weighted_time_reconstruction_loss(inputs, outputs, weight, slope=0.5, verbose=True):
-    # We expect the data shape to be [batch, features, sequence]
-    # For example: [batch, 1025 STFT buckets, 200 steps]
-    # or [batch, 25 kernel outputs, 100 steps]
+def weighted_time_reconstruction_loss(inputs, outputs, weight, time_steps=None, verbose=True):
     assert inputs.dim() >= 2, f"Expected inputs to be greater than 2, not {inputs.dim()}"
-    assert weight >= 1, f"Expected weights to be greater than 1, not {weight}"
+    assert weight >= 1, f"Expected weight to be greater than 1, not {weight}"
 
     batch_size = inputs.size(0)
     sequence_length = inputs.size(-1)
@@ -30,42 +27,47 @@ def weighted_time_reconstruction_loss(inputs, outputs, weight, slope=0.5, verbos
     else:
         features = 1
 
-    #print(f"weighted_time_reconstruction_loss: batch_size={batch_size}, sequence_length={sequence_length}, features={features}")
     assert features <= sequence_length, f"Incorrect order? sequence_length={sequence_length}, features={features}"
 
-    time_steps = torch.arange(sequence_length, dtype=torch.float32, device=inputs.device)
-
+    # Linear interpolation of weights from 'weight' to 1 over N steps
     global cached_weights
-    weights = cached_weights.get(sequence_length)
-    if weights is None:
-        weights = 1 + (weight - 1) * torch.exp(-slope * time_steps)
-        weights.to(device)
-        cached_weights[sequence_length] = weights
-        print(f"weight={weights}, length={sequence_length}, weights={weights}")
-        debug("weights", weights)
-        assert weights.min() >= 1, f"Expected min weight >=1, got {weights.min()}"
-        assert weights.max() == weight, f"Expected max weight={weight}, got {weights.max()}"
+    if time_steps is None:
+        time_steps = sequence_length // 10
 
-    scale = torch.sum(weights)
+    cached_key = (sequence_length, time_steps, weight)
+    weights = cached_weights.get(cached_key)
+    if weights is None:
+        if time_steps > 0:
+            weights = torch.linspace(weight, 1, time_steps, device=inputs.device)
+            if sequence_length > time_steps:
+                weights = torch.cat((weights, torch.ones(sequence_length - time_steps, device=inputs.device)))
+        else:
+            weights = torch.ones(sequence_length, device=inputs.device)
+        cached_weights[cached_key] = weights
+        if verbose:
+            print(f"weight={weight}, length={sequence_length}, time_steps={time_steps}, weights={weights}")
+
     loss = F.mse_loss(inputs, outputs, reduction='none')
 
     if inputs.dim() == 3:
         loss = torch.sum(loss, dim=1)
 
-    loss = torch.sum(loss, dim=0)
-    loss *= weights
-    loss = loss.sum() * sequence_length / (scale * batch_size)
+    # Apply weights to the loss
+    weighted_loss = loss * weights
 
-    assert loss > 1e-2, f"Negative loss={loss:.2f} in weighted_stft_reconstruction_loss, weight={weight:.2f}"
-    loss = torch.clamp(loss, 0)
+    # Scale by the sum of weights
+    total_weight = weights.sum()
+    loss = torch.sum(weighted_loss) / (total_weight * batch_size)
 
-    return loss
+    return torch.clamp(loss, 0)
+
 
 
 def reconstruction_loss(inputs, outputs):
     assert inputs.shape == outputs.shape, f"reconstruction_loss: shapes don't match, inputs={inputs.shape}, outputs={outputs.shape}"
-    #return basic_reconstruction_loss(inputs, outputs)
+    return basic_reconstruction_loss(inputs, outputs)
 
+    # I'm not too sure about this...
     return weighted_time_reconstruction_loss(inputs, outputs, weight=10)
 
 # Test the basic loss & weighted loss:

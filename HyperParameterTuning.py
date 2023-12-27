@@ -68,7 +68,7 @@ def evaluate_model(params):
     tuning_count += 1
     print(f"\n\nHyper-Parameter tuning#{tuning_count}/{max_hyper_runs}: {hyper_model} {params}")
     
-    max_overfit = 1.4 # Ensure we retain the models that generalise reasonably well.
+    max_overfit = 1.3 # Ensure we retain the models that generalise reasonably well.
     
     max_epochs = 80 # This is sufficient to figure out which model will converge best if we let it run for longer.
     if is_incremental_vae(hyper_model) or is_audio(hyper_model):
@@ -298,7 +298,7 @@ def train_best_params(model_name, params = None, finest = False):
     start_new_stft_video(f"STFT - train {model_name}", True)
 
     max_time = 12 * hour # hopefully the model converges way before this!
-    max_overfit = 1.5 # if we set this too high, the VAE stdevs become huge and the model doesn't generalise.
+    max_overfit = 1.3 # if we set this too high, the VAE stdevs become huge and the model doesn't generalise.
 
     if not "VAE" in model_name: # Allow the Auto-Encoders to over-fit
         max_overfit = 10.0
@@ -431,7 +431,8 @@ def grid_search_AudioConv_VAE():
 
     train_topN_hyper_params()
 
-if __name__ == '__main__':
+
+def run_model_training():
     # Edit this to perform whatever operation is required.
 
     ###############################################################################################
@@ -476,8 +477,8 @@ if __name__ == '__main__':
     #grid_search_AudioConv_AE()
 
     set_fail_loss(20_000)
-    #train_best_params("AudioConv_AE", [4, -6, 2, 20, 95, 50])
-    train_best_params("AudioConv_AE", [4, -6, 2, 25, 107, 70])
+    train_best_params("AudioConv_AE", [4, -6, 2, 20, 95, 50])
+    #train_best_params("AudioConv_AE", [4, -6, 2, 25, 107, 70])
 
     set_fail_loss(2_000)
     # full_hypertrain("AudioConv_VAE_Incremental")
@@ -487,3 +488,8 @@ if __name__ == '__main__':
     # full_hypertrain("AudioConv_AE")
     # optimise_hyper_parameters("AudioConv_AE")
     # train_best_params("AudioConv_AE")
+
+
+
+if __name__ == '__main__':
+    run_model_training()

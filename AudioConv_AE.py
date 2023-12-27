@@ -84,8 +84,10 @@ class AudioConv_AE(nn.Module):  # no VAE
             layers.reverse()
             print(f"Expect final sequence length={length}")
             self.expected_length = length
-        else:
-            layers.append(torch.nn.Tanh())
+
+        # Add a tanh to the encoder so the VAE only sees numbers between [-1, 1].
+        # And similarly to the decoder so the audio doesn't saturate.
+        layers.append(torch.nn.Tanh())
 
         return nn.Sequential(*layers)
 

@@ -1,22 +1,11 @@
 from MakeSTFTs import *
 from MakeModels import load_saved_model, model_uses_STFTs
 from SampleCategory import *
-from Train import predict_stft
+from Train import predict_sample, display_custom_link
 from Graph import *
 from VariationalAutoEncoder import vae_reparameterize
 
 import matplotlib.patches as patches
-
-from IPython.display import HTML, display
-
-
-def display_custom_link(file_path, display_text=None):
-
-    if display_text is None:
-        display_text = file_path
-
-    link_str = f'<a href="{file_path}" target="_blank">{display_text}</a>'
-    display(HTML(link_str))    
 
 
 def numpify(tensor):
@@ -259,9 +248,9 @@ class Sample_Generator():
             if noisy:
                 save_and_play_resynthesized_audio(stft.cpu().numpy(), sample_rate, stft_hop, None, True)
             
-            resynth, loss = predict_stft(self.model, stft, self.use_stfts)
+            resynth, loss = predict_sample(self.model, stft, self.use_stfts)
             names.append(name)
-            losses.append(loss)
+            losses.append(loss * 100) # percentage
             
             if graphs and self.use_stfts:
                 plot_stft("Resynth " + name, resynth, sample_rate)
@@ -276,8 +265,7 @@ class Sample_Generator():
         for i in indices:
             loss = losses[i]
             name = names[i]
-            display_custom_link("Results/" + name + " - resynth.wav", "{}: loss={:.6f}".format(name, loss))
-            
+            display_custom_link("Results/" + name + " - resynth.wav", f"{name}: loss={loss:.2f}%")
             
     def display_terms_in_file_names():
         all_words = [w for file_name in self.file_names for w in split_text_into_words(file_name) if not ignore_term(w)]

@@ -296,7 +296,7 @@ def periodically_display_2D_output(hiddens):
             hiddens = hiddens.detach().cpu()
             width = hiddens[0].size(0)
             height = hiddens[0].size(1)
-            display_image_grid(hiddens.transpose(2, 1), f"Hidden outputs {width} x {height}", "magma")
+            display_image_grid(hiddens, f"Hidden outputs {width} x {height}", "magma")
 
 
 
