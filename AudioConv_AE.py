@@ -5,44 +5,37 @@ import time
 
 from Debug import debug
 from ModelUtils import conv1d_size, periodically_display_2D_output, model_output_shape_and_size, conv1d_output_size
-from VariationalAutoEncoder import reconstruction_loss, basic_reconstruction_loss
+from VariationalAutoEncoder import reconstruction_loss, basic_reconstruction_loss, CombinedVAE
 from ModelUtils import interpolate_layer_sizes, count_trainable_parameters
 from Device import device
 
 
-def torch_stft(sample, fft_size = 1024): # verified that 256 is the fastest on my Mac. We're compromising on frequency resolution vs time though...
-    return torch.stft(sample.cpu(), n_fft=fft_size, return_complex=True).abs().to(device)
-
-if __name__ == '__main__':
-    count = 1024
-    sample = torch.rand(count, 85000).to(device)
-    fastest_size = None
-    fastest_elapsed = 1e99
-
-    for n in range(4, 16):
-        fft_size = 2**n
-
-        now = time.time()
-
-        torch_stft(sample, fft_size)
-
-        elapsed = time.time() - now
-
-        print(f"fft_size={fft_size}, count={count} FFTs in {elapsed:.4f} sec")
-        if elapsed < fastest_elapsed:
-            fastest_size = fft_size
-            fastest_elapsed = elapsed
-    print(f"\nFastest FFT size={fastest_size}")
-
-# def sample_hash_key(sample):
-#     assert sample.ndimension() == 1, f"Expected a 1D tensor, got {sample.shape}"
-#     key = 0
-#     for i in range(0, sample.shape[0], 100):
-#         key += sample[i]
-#     return str(key)
+# Amazingly, it turns out we're better off using the simple MSE rather than comparing STFTs!!!
+# def torch_stft(sample, fft_size = 1024): # verified that 256 is the fastest on my Mac. We're compromising on frequency resolution vs time though...
+#     return torch.stft(sample.cpu(), n_fft=fft_size, return_complex=True).abs().to(device)
 #
-# def cached_batched_torch_stft():
-#     poo()
+# if __name__ == '__main__':
+#     count = 1024
+#     sample = torch.rand(count, 85000).to(device)
+#     fastest_size = None
+#     fastest_elapsed = 1e99
+#
+#     for n in range(4, 16):
+#         fft_size = 2**n
+#
+#         now = time.time()
+#
+#         torch_stft(sample, fft_size)
+#
+#         elapsed = time.time() - now
+#
+#         print(f"fft_size={fft_size}, count={count} FFTs in {elapsed:.4f} sec")
+#         if elapsed < fastest_elapsed:
+#             fastest_size = fft_size
+#             fastest_elapsed = elapsed
+#     print(f"\nFastest FFT size={fastest_size}")
+
+
 
 class AudioConv_AE(nn.Module):  # no VAE
 
@@ -105,20 +98,25 @@ class AudioConv_AE(nn.Module):  # no VAE
         self.encoder = self.make_layers(False, depth, kernel_count, outer_kernel_size, inner_kernel_size)
         self.decoder = self.make_layers(True,  depth, kernel_count, outer_kernel_size, inner_kernel_size)
 
-        try:
-            encoded_shape, encoded_size = model_output_shape_and_size(self.encoder, [1, audio_length])
-            #print(f"encoded shape={encoded_shape}, size={encoded_size}")
-            assert encoded_shape[1] == self.expected_length
-            self.encoded_size = encoded_size # required for the CombinedVAE
+        #try:
+        if True:
+            self.encoded_shape, self.encoded_size = model_output_shape_and_size(self.encoder, [audio_length])
+            print(f"encoded shape={self.encoded_shape}, size={self.encoded_size}")
+            assert self.encoded_shape[0] == self.kernel_count
+            assert self.encoded_shape[1] == self.expected_length
+            assert self.encoded_size == self.expected_length * self.kernel_count, f"expected encoded_size={self.expected_length * self.kernel_count} but got {encoded_size}"
 
-            decode_shape, decode_size = model_output_shape_and_size(self.decoder, encoded_shape)
+            decode_shape, decode_size = model_output_shape_and_size(self.decoder, self.encoded_shape)
             #print(f"decoded shape={decode_shape}, size={decode_size}")
-        except BaseException as e:
-            print(f"Model doesn't work: {e}")
-            self.compression = 0
-            return
+        # except Exception as e:
+        #     print(f"Model doesn't work: {e}")
+        #     self.compression = 0
+        # except BaseException as e:
+        #     print(f"Model is broken! {e}")
+        #     self.compression = 0
+        #     return
 
-        self.compression = audio_length / encoded_size
+        self.compression = audio_length / self.encoded_size
         print(f"AudioConv_AE {count_trainable_parameters(self):,} parameters, compression={self.compression:.1f}")
 
     def encode(self, x):
@@ -130,18 +128,20 @@ class AudioConv_AE(nn.Module):  # no VAE
         hiddens = self.encoder(x)
         #debug("hiddens", hiddens)
 
+        #hiddens = hiddens.transpose(2, 1) # convert to [batch, time, features]
         periodically_display_2D_output(hiddens)
 
-        encoded = hiddens.flatten(-2)
+        #encoded = hiddens.flatten(-2)
         #debug("encoded", encoded)
-        return encoded
+        return hiddens
 
     def decode(self, x):
         #debug("decode.x", x)
         batch_size = x.size(0)
-        hiddens = x.view(batch_size, self.kernel_count, -1)
+        #hiddens = x.view(batch_size, self.kernel_count, -1)
+        #x = x.transpose(2, 1) # convert to [batch, features, time] for the ConvTranspose1D
         #debug("hiddens", hiddens)
-        decoded = self.decoder(hiddens)
+        decoded = self.decoder(x)
         #debug("decoded", decoded)
         decoded = decoded.view(batch_size, -1)
         #debug("decoded.view", decoded)
@@ -159,13 +159,10 @@ class AudioConv_AE(nn.Module):  # no VAE
 
     def forward_loss(self, inputs):
         outputs = self.forward(inputs)
-        loss = self.stft_loss(inputs, outputs)
+        loss = reconstruction_loss(inputs, outputs)
         return loss, outputs
 
     def stft_loss(self, inputs, outputs):
-        # Naïve version:
-        return basic_reconstruction_loss(inputs, outputs)
-
         # Compare the STFT instead, fortunately PyTorch provides a differentiable STFT
         fft_size = 2048
 
@@ -184,3 +181,40 @@ class AudioConv_AE(nn.Module):  # no VAE
         max_amp = inputs.abs().max()
 
         return basic_reconstruction_loss(inputs, outputs)/(max_amp**2)
+
+
+if __name__ == "__main__":
+    # audio_length, depth, kernel_count, outer_kernel_size, inner_kernel_size
+    model = AudioConv_AE(85_000, 2, 25, 80, 70)
+    model.float()
+    model.to(device)
+    audio_length = 85_000
+    print(f"encoded_shape={model.encoded_shape}")
+    batched_input = torch.randn(7, audio_length).to(device)
+    print(f"batched_input.shape={batched_input.shape}")
+    loss, batched_output = model.forward_loss(batched_input)
+    print(f"loss={loss}, batched_output={batched_output.shape}")
+    assert batched_output.shape == batched_input.shape
+    print("\nAudioConv_AE is OK!\n\n")
+
+    vae_sizes = [list(model.encoded_shape), 300, 200, 8]
+    combined = CombinedVAE(model, vae_sizes)
+    combined.float()
+    combined.to(device)
+
+    loss, batched_output = combined.forward_loss(batched_input)
+    print(f"loss={loss}, batched_output={batched_output.shape}")
+    assert batched_output.shape == batched_input.shape
+    assert abs(loss - audio_length) < 2000, f"loss={loss} is greater than expected"
+
+    hidden_input = combined.auto_encoder.encode(batched_input)
+    debug("hidden_input", hidden_input)
+
+    loss, hidden_output = combined.vae.forward_loss(hidden_input)
+    print(f"loss={loss}")
+    debug("hidden_output", hidden_output)
+    assert hidden_input.shape == hidden_output.shape
+
+
+    print("\nAudioConv_VAE is OK!\n\n")
+

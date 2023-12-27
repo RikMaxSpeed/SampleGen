@@ -127,8 +127,53 @@ def stop_condition(train_losses, test_losses, window, min_change, max_overfit, t
     return False
 
 
+def total_elements(size):
+    if isinstance(size, int):
+        return size
+    elif isinstance(size, torch.Size):
+        return total_elements(list(size))
+    elif isinstance(size, list):
+        product = 1
+        for dim in size:
+            product *= dim
+        return product
+    else:
+        raise ValueError(f"Input must be an integer or a list of integers, not {size}.")
+
+if __name__ == "__main__":
+    assert total_elements(4) == 4
+    assert total_elements([2, 3, 4], 24)
+
+def make_shape_list(*args):
+    if len(args) == 1 and isinstance(args[0], (tuple, list)):
+        # If a single tuple or list is provided, use it as the dimensions
+        return list(args[0])
+    elif len(args) == 1 and isinstance(args[0], int):
+        # If a single integer is provided, return a list with one element
+        return [args[0]]
+    else:
+        # Otherwise, treat all arguments as individual dimensions
+        return list(args)
+
+def test_shape_list(input, expected):
+    result = make_shape_list(input)
+    print(f"test_shape_list: input={input}, expected={expected}")
+    assert result == expected, f"Expected {expected}, got {result}"
+
+if __name__ == "__main__":
+    test_shape_list(1, [1])
+    test_shape_list([2], [2])
+    test_shape_list((2,), [2])
+    test_shape_list([3, 4, 5], [3, 4, 5])
+    test_shape_list((7,8), [7, 8])
 
 
+def make_torch_size(*args):
+    shape = make_shape_list(*args)
+    print(f"make_torch_size: args={args}, shape={shape}")
+    result = torch.Size(shape)
+    print(f"result={result}")
+    return result
 
 
 def random_exponential_decay_list(N):

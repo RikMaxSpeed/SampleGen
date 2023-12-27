@@ -166,7 +166,6 @@ def optimise_hyper_parameters(model_name):
             # Train the naive STFTVariationalAutoEncoder
             max_params = 50_000_000 # this model needs a huge number of parameters
             max_loss = 300_000 # and the loss starts off extremely high
-            max_overfit = 10
             search_space.append(Integer(4,        7,    'uniform',      name='latent_size'))
             search_space.append(Integer(1,        4,    'uniform',      name='vae_depth'))
             search_space.append(Real   (0.1,      10,   'log-uniform',  name='vae_ratio'))
@@ -299,7 +298,12 @@ def train_best_params(model_name, params = None, finest = False):
     start_new_stft_video(f"STFT - train {model_name}", True)
 
     max_time = 12 * hour # hopefully the model converges way before this!
-    max_overfit = 100.0 # ignore: we're aiming for the highest precision possible on the training set
+    max_overfit = 1.5 # if we set this too high, the VAE stdevs become huge and the model doesn't generalise.
+
+    if not "VAE" in model_name: # Allow the Auto-Encoders to over-fit
+        max_overfit = 10.0
+        print("Overriding max_overfit={max_overfit}\n")
+
     max_params = 1e9  # not relevant, we have a valid model
     max_epochs = 9999 # ignore
     max_loss = 1e6
@@ -396,7 +400,7 @@ def grid_search_AudioConv_AE():
         for kernels in [20, 25, 30, 35]:
             for outer_kernel in exponential_interpolation(80, k_size, 6):
                 outer_kernel = int(outer_kernel)
-                for inner_kernel in exponential_interpolation(20, 70, 6):
+                for inner_kernel in exponential_interpolation(50, 100, 6):
                     inner_kernel = int(inner_kernel)
 
                     if depth == 1 and inner_kernel > 3:
@@ -469,32 +473,17 @@ if __name__ == '__main__':
 
     ###############################################################################################
     # Audio Convolution Auto-Encoder
-    # reset_hyper_training("AudioConv_AE")
-    # grid_search_AudioConv_AE()
+    #grid_search_AudioConv_AE()
 
-    # set_fail_loss(20_000)
-    # grid_search_AudioConv_AE()
-    train_best_params("AudioConv_AE", [4, -6, 2, 25, 80, 70])
+    set_fail_loss(20_000)
+    #train_best_params("AudioConv_AE", [4, -6, 2, 20, 95, 50])
+    train_best_params("AudioConv_AE", [4, -6, 2, 25, 107, 70])
 
-    # for params in [
-    #     #[4, -6, 3, 20, 30, 24], # loss = 1195
-    #     #[4, -6, 3, 20, 54, 24], # loss = 1820
-    #     [4, -6, 2, 20, 95, 50], # loss = 812
-    #     #[4, -6, 2, 10, 95, 50], # loss = 1648
-    #     #[4, -6, 4, 40, 95, 12], # loss = 1325
-    #     #[4, -6, 2, 20, 168, 50] # loss = 3428
-    # ]:
-    #     train_best_params("AudioConv_AE", params)
-
-    # set_fail_loss(40_000)
+    set_fail_loss(2_000)
+    # full_hypertrain("AudioConv_VAE_Incremental")
     # grid_search_AudioConv_VAE()
+    train_best_params("AudioConv_VAE_Incremental", [4, -6, 10, 3, 0.25])
 
-    #train_best_params("AudioConv_VAE_Incremental", [4, -5, 7, 3, 0.25]) # with 4 layers it over-fits way too much
-    #train_best_params("AudioConv_VAE_Incremental", [4, -5, 5, 4, 0.5])
-    #train_best_params("AudioConv_VAE_Incremental", [4, -6, 9, 3, 0.25])
-    #full_hypertrain("AudioConv_VAE_Incremental")
-
-#
     # full_hypertrain("AudioConv_AE")
     # optimise_hyper_parameters("AudioConv_AE")
     # train_best_params("AudioConv_AE")

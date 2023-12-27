@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import copy
 
 from ModelUtils import *
 
@@ -10,51 +11,73 @@ from ModelUtils import *
 def basic_reconstruction_loss(inputs, outputs):
     return F.mse_loss(inputs, outputs, reduction='sum') / inputs.size(0) # normalise
 
-# Weight the STFT over time: it's critical to get the first windows right.
-def weighted_stft_reconstruction_loss(inputs, outputs, weight, slope=0.5, verbose=False):
-    assert(weight >= 1)
-    batch_size, sequence_length, _ = inputs.shape
+
+cached_weights = {}
+
+# Weight the samples over time: it's critical to get start of the sound correct.
+def weighted_time_reconstruction_loss(inputs, outputs, weight, slope=0.5, verbose=True):
+    # We expect the data shape to be [batch, features, sequence]
+    # For example: [batch, 1025 STFT buckets, 200 steps]
+    # or [batch, 25 kernel outputs, 100 steps]
+    assert inputs.dim() >= 2, f"Expected inputs to be greater than 2, not {inputs.dim()}"
+    assert weight >= 1, f"Expected weights to be greater than 1, not {weight}"
+
+    batch_size = inputs.size(0)
+    sequence_length = inputs.size(-1)
+
+    if inputs.dim() == 3:
+        features = inputs.size(1)
+    else:
+        features = 1
+
+    #print(f"weighted_time_reconstruction_loss: batch_size={batch_size}, sequence_length={sequence_length}, features={features}")
+    assert features <= sequence_length, f"Incorrect order? sequence_length={sequence_length}, features={features}"
+
     time_steps = torch.arange(sequence_length, dtype=torch.float32, device=inputs.device)
 
-    weights = 1 + (weight - 1) * torch.exp(-slope * time_steps)
-    if verbose:
-        print(f"weights={weights}")
+    global cached_weights
+    weights = cached_weights.get(sequence_length)
+    if weights is None:
+        weights = 1 + (weight - 1) * torch.exp(-slope * time_steps)
+        weights.to(device)
+        cached_weights[sequence_length] = weights
+        print(f"weight={weights}, length={sequence_length}, weights={weights}")
+        debug("weights", weights)
+        assert weights.min() >= 1, f"Expected min weight >=1, got {weights.min()}"
+        assert weights.max() == weight, f"Expected max weight={weight}, got {weights.max()}"
 
     scale = torch.sum(weights)
     loss = F.mse_loss(inputs, outputs, reduction='none')
-    loss = torch.sum(loss, dim=2)
+
+    if inputs.dim() == 3:
+        loss = torch.sum(loss, dim=1)
+
     loss = torch.sum(loss, dim=0)
     loss *= weights
     loss = loss.sum() * sequence_length / (scale * batch_size)
 
-    # We have a bug :(
-    assert loss >= 0, f"Negative loss={loss:.2f} in weighted_stft_reconstruction_loss, weight={weight:.2f}"
+    assert loss > 1e-2, f"Negative loss={loss:.2f} in weighted_stft_reconstruction_loss, weight={weight:.2f}"
+    loss = torch.clamp(loss, 0)
 
     return loss
 
 
 def reconstruction_loss(inputs, outputs):
     assert inputs.shape == outputs.shape, f"reconstruction_loss: shapes don't match, inputs={inputs.shape}, outputs={outputs.shape}"
-    return basic_reconstruction_loss(inputs, outputs)
+    #return basic_reconstruction_loss(inputs, outputs)
 
-    # TODO: fix the bug!
-    if inputs.dim() == 3:
-        return weighted_stft_reconstruction_loss(inputs, outputs, weight=10)
-    else:
-        return basic_reconstruction_loss(inputs, outputs)
+    return weighted_time_reconstruction_loss(inputs, outputs, weight=10)
 
 # Test the basic loss & weighted loss:
 if __name__ == '__main__':
-    inputs = torch.randn(7, 10, 20)
+    inputs = torch.randn(7, 20, 10)
     outputs = inputs + torch.randn(inputs.shape)*0.1
     loss1 = basic_reconstruction_loss(inputs, outputs).item()
-    loss2 = weighted_stft_reconstruction_loss(inputs, outputs, 1).item()
-    loss3 = weighted_stft_reconstruction_loss(inputs, outputs, 10, verbose=True).item()
-    loss4 = reconstruction_loss(inputs, outputs)
-    print(f"base: {loss1:.2f}, 1-weight: {loss2:.2f}, 10-weight: {loss3:.2f}, check: {loss4:.2f}")
+    loss2 = weighted_time_reconstruction_loss(inputs, outputs, 1).item()
+    loss3 = weighted_time_reconstruction_loss(inputs, outputs, 10, verbose=True).item()
+    print(f"base: {loss1:.2f}, 1-weight: {loss2:.2f}, 10-weight: {loss3:.2f}")
     assert(abs(loss1 - loss2) < 1e-5)
     assert(abs(loss1 - loss3) < 0.7) # we expect these two to be commensurate
-    assert(loss3 == loss4)
 
 
 def kl_divergence(mu, logvar):
@@ -96,8 +119,13 @@ class VariationalAutoEncoder(nn.Module):
         return encode + decode
         
     def __init__(self, sizes):
+        sizes = copy.deepcopy(sizes) # we modify the first element
         super(VariationalAutoEncoder, self).__init__()
-        
+        print(f"VAE.init: sizes={sizes}")
+        self.input_shape = make_torch_size(sizes[0]) # can be a single digit or a list
+        sizes[0] = total_elements(sizes[0])
+        print(f"VAE: input shape={self.input_shape}, size={sizes[0]} values")
+
         # Encoder layers
         self.encoder_layers = sequential_fully_connected(sizes[:-1], default_activation_function)
 
@@ -112,6 +140,9 @@ class VariationalAutoEncoder(nn.Module):
         print(f"VariationalAutoEncoder: layers={sizes}, parameters={count_trainable_parameters(self):,}, compression={self.compression:.1f}")
 
     def encode(self, x):
+        assert x[0].shape == self.input_shape, f"VAE.encode expected shape={self.input_shape} but got {x[0].shape}"
+        x = x.view(x.size(0), -1) # flatten
+
         if len(self.encoder_layers):
             x = self.encoder_layers(x)
             
@@ -122,8 +153,14 @@ class VariationalAutoEncoder(nn.Module):
 
 
     def decode(self, z):
-        return self.decoder_layers(z)
-        
+        x = self.decoder_layers(z)
+        assert x.size(1) == total_elements(self.input_shape), f"VAE.decode expected {total_elements(self.input_shape)} outputs, but got {x.size(1)}"
+
+        x = x.view((x.size(0), *self.input_shape)) # re-inflate
+        #debug("decode.x", x)
+
+        return x
+
 
     def forward(self, x):
         mu, logvar = self.encode(x)
@@ -158,7 +195,7 @@ class CombinedVAE(nn.Module):
 
     def encode(self, x):
         hiddens = self.auto_encoder.encode(x)
-        assert(hiddens.size(1) == self.hidden_size)
+        #debug("hiddens", hiddens)
 
         mu, logvar = self.vae.encode(hiddens)
         return mu, logvar
@@ -166,7 +203,6 @@ class CombinedVAE(nn.Module):
 
     def decode(self, z):
         hiddens = self.vae.decode(z)
-        assert (hiddens.size(1) == self.hidden_size)
         sample = self.auto_encoder.decode(hiddens)
         return sample
 
@@ -181,3 +217,17 @@ class CombinedVAE(nn.Module):
         outputs, mus, logvars = self.forward(inputs)
         loss = vae_loss_function(inputs, outputs, mus, logvars)
         return loss, outputs
+
+
+
+if __name__ == "__main__":
+    for sizes in ([10, 5, 2], [[4, 6], 4, 3]):
+        print(f"\n\nVAE: testing sizes={sizes}")
+        vae = VariationalAutoEncoder(sizes)
+        batch = 7
+        input_shape = make_shape_list(sizes[0])
+        print(f"input_shape={input_shape}")
+        inputs = torch.randn([batch] + input_shape)
+        debug("inputs", inputs)
+        loss, outputs = vae.forward_loss(inputs)
+        assert inputs.shape == outputs.shape, f"Inputs.size={inputs.shape} vs outputs.size={outputs.shape}"

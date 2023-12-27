@@ -112,8 +112,10 @@ class Sample_Generator():
             decode = self.model.decode(encode_z)
             
         stft = convert_output_to_sample(decode[0], self.use_stfts)
-    
-        plot_stft(save_to_file, stft, sample_rate, stft_hop)
+
+        if self.use_stfts:
+            plot_stft(save_to_file, stft, sample_rate, stft_hop)
+
         save_and_play_resynthesized_audio(stft, sample_rate, stft_hop, "Results/" + save_to_file + ".wav", play_sound)
 
     
@@ -122,8 +124,10 @@ class Sample_Generator():
         name2, stft2, encode2 = self.encode_sample_matching(pattern2, 0.0)
         
         plot_bar_charts([numpify(encode1), numpify(encode2)], [name1, name2], self.model_name + " encodings")
-        
-        plot_stft(name1, stft1, sample_rate, stft_hop)
+
+        if self.use_stfts:
+            plot_stft(name1, stft1, sample_rate, stft_hop)
+
         save_and_play_resynthesized_audio(stft1, sample_rate, stft_hop, None, play_sound) # broken
 
         for i in range(steps):
@@ -132,7 +136,9 @@ class Sample_Generator():
             save_file = f"{self.model_name} interpolate {100*(1-t):.1f}% x {name1} & {100*t:.1f}% x {name2}"
             self.decode_and_save(encode, save_file, play_sound)
 
-        plot_stft(name2, stft2, sample_rate, stft_hop)
+        if self.use_stfts:
+            plot_stft(name2, stft2, sample_rate, stft_hop)
+
         save_and_play_resynthesized_audio(stft2, sample_rate, stft_hop, None, play_sound) # broken
 
 
@@ -165,8 +171,10 @@ class Sample_Generator():
             stft *= amp / max_amp(stft)
             
             save_file = f"interpolate-no-AI {100*t:.1f}% - {name1} & {name2}"
-            
-            plot_stft(save_file, stft, sample_rate, stft_hop)
+
+            if self.use_stfts:
+                plot_stft(save_file, stft, sample_rate, stft_hop)
+
             save_and_play_resynthesized_audio(stft, sample_rate, stft_hop, "Results/" + save_file + ".wav", play_sound)
 
 

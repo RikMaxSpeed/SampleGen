@@ -205,7 +205,7 @@ def train_model(model_name, hyper_params, max_epochs, max_time, max_params, max_
     window     = 5 # check average progress between two windows
     min_change = 0.005 # stop if lossNew/lossOld - 1 < min_change
 
-    if max_overfit >= 1.9:
+    if max_epochs >= 1000:
         window = 15 # allow the model longer to recover from any exploratory excursions.
         
     # Plot a graph of the loss vs epoch at regular intervals

@@ -87,8 +87,9 @@ def make_AudioConv_VAE(model_type, model_params, max_params):
     print(model_text)
 
     audio_conv = AudioConv_AE(audio_length, depth, kernel_count, outer_kernel_size, inner_kernel_size)
-    audio_hidden = audio_conv.encoded_size
-    vae_sizes = interpolate_layer_sizes(audio_hidden, latent_size, vae_depth, vae_ratio)
+    audio_hidden_shape = audio_conv.encoded_shape
+    audio_hidden_size = audio_conv.encoded_size
+    vae_sizes = interpolate_layer_sizes(audio_hidden_size, latent_size, vae_depth, vae_ratio)
     print(f"VAE layers={vae_sizes}")
 
     conv_size = AudioConv_AE.approx_trainable_parameters(depth, kernel_count, outer_kernel_size, inner_kernel_size)
@@ -99,6 +100,7 @@ def make_AudioConv_VAE(model_type, model_params, max_params):
     if is_too_large(approx_size, max_params):
         return None, model_text, approx_size, vae_size
 
+    vae_sizes[0] = list(audio_hidden_shape) # maintain the 2D grid shape
     model = CombinedVAE(audio_conv, vae_sizes)
 
     return model, model_text, approx_size, vae_size
