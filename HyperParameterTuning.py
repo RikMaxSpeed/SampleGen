@@ -366,14 +366,14 @@ def grid_search_AudioConv_AE():
     set_fail_loss(1_000_000)
     max_params = 1_000_000
     max_loss = 5 * audio_length
-    samples, _ = generate_training_data(200, hyper_stfts)
+    samples, _ = generate_training_data(300, hyper_stfts)
     max_hyper_runs = 5 * 4 * 6 * 5
     count = 0
     for depth in [1, 2, 3, 4, 5]:
         for kernels in [10, 20, 40, 60]:
             for outer_kernel in exponential_interpolation(10, k_size, 6):
                 outer_kernel = int(outer_kernel)
-                for inner_kernel in exponential_interpolation(3, 20, 5):
+                for inner_kernel in exponential_interpolation(3, 50, 5):
                     inner_kernel = int(inner_kernel)
 
                     if depth == 1 and inner_kernel > 3:

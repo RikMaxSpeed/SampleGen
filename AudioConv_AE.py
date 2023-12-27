@@ -75,14 +75,17 @@ class AudioConv_AE(nn.Module):  # no VAE
             #stride = max(2, inner_kernel_size - i)
             stride = max(2, inner_kernel_size // 2 - i)
 
+            length = conv1d_output_size(length, inner_kernel_size, stride)
+            if length <= 4: # over-compressing
+                break
+
             if is_decoder:
                 layers.append(torch.nn.ConvTranspose1d(kernel_count, kernel_count, inner_kernel_size, stride=stride))
             else:
                 layers.append(torch.nn.Conv1d(kernel_count, kernel_count, inner_kernel_size, stride=stride))
 
-            length = conv1d_output_size(length, inner_kernel_size, stride)
-            if length <= 5: # over-compressing
-                break
+            #layers.append(torch.nn.LeakyReLU())
+
 
         if is_decoder:
             layers.reverse()
@@ -91,8 +94,6 @@ class AudioConv_AE(nn.Module):  # no VAE
 
         if is_decoder:
             layers.append(torch.nn.Tanh())
-        else:
-            layers.append(torch.nn.LeakyReLU())
 
         return nn.Sequential(*layers)
 
@@ -121,8 +122,6 @@ class AudioConv_AE(nn.Module):  # no VAE
         #self.compression = audio_length / outer_kernel_size # approx
         self.compression = audio_length / encoded_size
         print(f"AudioConv_AE {count_trainable_parameters(self):,} parameters, compression={self.compression:.1f}")
-
-        print(self)
 
     def encode(self, x):
         #debug("encode.x", x)
@@ -184,5 +183,6 @@ class AudioConv_AE(nn.Module):  # no VAE
 
         inputs  = torch_stft(inputs)
         outputs = torch_stft(outputs)
+        max_amp = inputs.abs().max()
 
-        return basic_reconstruction_loss(inputs, outputs)/1_000
+        return basic_reconstruction_loss(inputs, outputs)/(max_amp**2)

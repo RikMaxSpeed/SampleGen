@@ -136,10 +136,12 @@ def save_and_play_resynthesized_audio(resynth, sr, hop_length, write_to_file, pl
         # Compute inverse STFT to reconstruct the audio
         #debug("stft", stft)
         audio = istft_to_audio(resynth, hop_length)
-        #debug("audio", audio)
-        #print("reconstitued audio={} samples at {} Hz, duration={:.1f} sec".format(len(audio), sr, len(audio)/sr))
     else:
         audio = resynth
+
+    # debug("audio", audio)
+    # print("reconstitued audio={} samples at {} Hz, duration={:.1f} sec".format(len(audio), sr, len(audio)/sr))
+    # print(f"audio: min={np.min(audio):.1f}, max={np.max(audio):.1f}, mean={np.mean(audio):1f}")
 
     # Save the reconstructed audio to a new .wav file
     if write_to_file is not None:

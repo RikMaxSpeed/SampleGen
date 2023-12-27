@@ -32,7 +32,7 @@ else:
     freq_buckets = stft_size + 1
 
 
-sample_duration = 1.99 # seconds (many of the samples in the library are approx 2 seconds and we get an off-by-one error on the length)
+sample_duration = 2.00 # seconds
 sequence_length = int(sample_duration * sample_rate / stft_hop)
 audio_length    = int(sample_duration * sample_rate)
 
@@ -79,13 +79,13 @@ def lowest_frequency(stft, sample_rate, name, verbose):
     if not exclude_frequency(f):
         return f
     
-    maxAmp = np.max(amplitudes[0 : len(amplitudes) // 4])
+    max_amp = np.max(amplitudes[0 : len(amplitudes) // 4])
     
     for i in range(1, len(amplitudes) - 1):
         f = i * sample_rate / stft_buckets
         if 30 < f < 4*middleCHz:
             a = amplitudes[i]
-            if a > maxAmp / 8:
+            if a > max_amp / 8:
                 if amplitudes[i-1] < a > amplitudes[i+1]: # peak
                 
                     if verbose and exclude_frequency(f):
@@ -268,10 +268,22 @@ def convert_to_complex(reals):
     return output_tensor
 
 
-def display_min_max(name, stft):
-    min = stft.min()
-    max = stft.max()
-    print(f"{name}: min={min:.3f}, max={max:.3f}")
+def display_min_max(name, data):
+    debug(name, data)
+
+    if isinstance(data, np.ndarray):
+        data = torch.tensor(data)
+
+    if data.dtype == torch.float32:
+        min   = data.min()
+        max   = data.max()
+    else:
+        min   = data.abs().min()
+        max   = data.abs().max()
+
+    mean  = data.mean()
+    stdev = data.std()
+    print(f"{name}: min={min:.3f}, max={max:.3f}, mean={mean:.3f}, std={stdev:.3f}")
 
 
 def remove_low_magnitudes(stft, db):
@@ -281,7 +293,7 @@ def remove_low_magnitudes(stft, db):
     return stft
 
 def sample_is_stft(sample):
-    return len(sample.shape) == 2
+    return sample.ndim == 2
 
 def convert_sample_to_input(sample):
 
@@ -298,14 +310,17 @@ def convert_sample_to_input(sample):
     # Normalise to [-1, 1]
     sample /= torch.max(sample.abs())
 
-    if amps is None:
-        # Truncate the frequency range
-        sample = sample[:freq_buckets // 2, :] # complex, so divide by 2.
-        sample = convert_to_reals(sample)
-    else:
-        sample = amps.encode(sample)
-        sample = remove_low_magnitudes(sample, -70)
+    # STFTs: convert to magnitudes, or pairs of reals
+    if is_stft:
+        if amps is None:
+            # Truncate the frequency range
+            sample = sample[:freq_buckets // 2, :] # complex, so divide by 2.
+            sample = convert_to_reals(sample)
+        else:
+            sample = amps.encode(sample)
+            sample = remove_low_magnitudes(sample, -70)
 
+    # Check sizes
     if is_stft:
         assert(sample.size(0) == freq_buckets)
         assert(sample.size(1) == sequence_length)
@@ -332,29 +347,32 @@ def convert_output_to_sample(output, use_stfts):
 
     if mu_law is not None:
         output = mu_law.decode(output)
-    
-    if amps is None:
-        # Re-append truncated frequencies
-        assert(output.size(0) == freq_buckets)
-        missing_buckets = torch.full((stft_buckets - freq_buckets +2, sequence_length), 0.0, device=device)
-        output = torch.cat((output, missing_buckets), dim = 0)
-        assert(output.size(0) == stft_buckets + 2)
-        
-        output = convert_to_complex(output)
-        global maxAmp
-        output = output.cpu().detach() * maxAmp
 
+    if use_stfts:
+        if amps is None:
+            # Re-append truncated frequencies
+            assert(output.size(0) == freq_buckets)
+            missing_buckets = torch.full((stft_buckets - freq_buckets +2, sequence_length), 0.0, device=device)
+            output = torch.cat((output, missing_buckets), dim = 0)
+            assert(output.size(0) == stft_buckets + 2)
+
+            output = convert_to_complex(output)
+        else:
+            output = output.cpu().detach()
+            output = output.clamp(min=0, max=1)
+
+        global maxAmp
+        output = output * maxAmp  # re-amplify
     else:
         output = output.cpu().detach()
-        output = output.clamp(min=0, max=1)
-        output = output * maxAmp # re-amplify
 
-        if use_stfts:
-            output = remove_low_magnitudes(output, -50) # more aggressive
-            iterations = 50
-            output = torch.tensor(recover_audio_from_magnitude(output, stft_buckets, stft_hop, sample_rate, iterations))
-            assert(output.size(0) == stft_size + 1)
-            assert(output.size(1) == sequence_length)
+
+    if use_stfts:
+        output = remove_low_magnitudes(output, -50) # more aggressive
+        iterations = 50
+        output = torch.tensor(recover_audio_from_magnitude(output, stft_buckets, stft_hop, sample_rate, iterations))
+        assert(output.size(0) == stft_size + 1)
+        assert(output.size(1) == sequence_length)
 
     if use_stfts:
         assert(output.dtype == torch.complex64)
@@ -365,13 +383,19 @@ def convert_output_to_sample(output, use_stfts):
 
 
 
-def test_stft_conversions(file_name):
+def test_stft_conversions(file_name, use_stfts):
+    print(f"\n\ntest_stft_conversions(file_name={file_name}, use_stfts={use_stfts})")
+
     sr, stft, audio = compute_stft_for_file(file_name, stft_buckets, stft_hop)
-    debug("stft.raw", stft)
+    display_min_max("stft.raw", stft)
+    display_min_max("audio.raw", audio)
     assert(stft.shape[0] == stft_size + 1)
     
     stft = stft[:, :sequence_length]
-    debug("truncated", stft)
+    display_min_max("truncated.stft", stft)
+
+    audio = audio[:audio_length]
+    display_min_max("truncated.audio", audio)
     
     if False: # Generate a synthetic spectrum
         for f in range(stft.shape[0]):
@@ -379,28 +403,40 @@ def test_stft_conversions(file_name):
                 stft[f, i] = 75*np.random.uniform() if np.random.uniform() > 0.9 else 0
     
     amp = np.max(np.abs(stft))
-    print(f"original max={amp:.2f}")
+    print(f"stft.max={amp:.2f}")
+
+    if use_stfts:
+        plot_stft(file_name, stft, sr, stft_hop)
     
-    plot_stft(file_name, stft, sr, stft_hop)
-    
-    tensor = torch.tensor(stft)
-    debug("original", tensor)
-    input = convert_sample_to_input(tensor)
-    debug("input", input)
-    
-    output = convert_output_to_sample(input, True)
-    debug("output", output)
-    
-    
-    global maxAmp
-    output *= amp / maxAmp
-    
-    plot_stft("Resynth " + file_name, output, sr, stft_hop)
+    sample = torch.tensor(stft if use_stfts else audio)
+    display_min_max("original", sample)
+
+    input = convert_sample_to_input(sample)
+    display_min_max("input", input)
+
+    output = convert_output_to_sample(input, use_stfts)
+    display_min_max("output", output)
+
+    # Adjust for the difference when normalising
+    if use_stfts:
+        global maxAmp
+        output *= amp / maxAmp
+        display_min_max("adjusted output", output)
+
+    if use_stfts:
+        plot_stft("Resynth " + file_name, output, sr, stft_hop)
+
     save_and_play_resynthesized_audio(output, sr, stft_hop, "Results/resynth-" + os.path.basename(file_name), True)
 
-    diff = np.abs(output - stft)
-    debug("diff", diff)
-    plot_stft("Diff", diff, sr, stft_hop)
+    diff = np.abs(output - sample.detach().cpu().numpy())
+    display_min_max("difference", diff)
+
+    norm = np.mean(diff)
+    print(f"difference={norm:.2f}")
+
+    if use_stfts:
+        plot_stft("Diff", diff, sr, stft_hop)
+
     if False: # Print the differences
         for f in range(stft.shape[0]):
             for t in range(stft.shape[1]):
@@ -411,7 +447,8 @@ def test_stft_conversions(file_name):
 
 if __name__ == '__main__':
     #test_stft_conversions("Samples/Piano C4 Major 13.wav")
-    test_stft_conversions("/Users/Richard/Coding/WaveFiles/Essential Synths/Multis/Hoover/Hoover C4.wav")
+    for use_stft in [True, False]:
+        test_stft_conversions("../WaveFiles/Alchemy/Bright Clav C4.wav", use_stft)
 
 
 def display_average_stft(stfts, playAudio):
