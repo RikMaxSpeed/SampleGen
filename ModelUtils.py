@@ -15,8 +15,13 @@ default_activation_function = nn.ReLU()
 
 
 # Interpolates N values exponentially in the range [start, end]
-def exponential_interpolation(start, end, N):
-    return [start * (end/start) ** (i/(N-1)) for i in range(N)]
+def exponential_interpolation(start, end, N, is_int = False):
+    numbers = [start * (end/start) ** (i/(N-1)) for i in range(N)]
+
+    if is_int:
+        numbers = [int(n) for n in numbers]
+
+    return numbers
 
 
 def count_trainable_parameters(model):
@@ -308,7 +313,7 @@ def compute_final_learning_rate(name, losses, window):
         
     ratios = [ (losses[i] / losses[i - 1]) - 1 for i in range(count - window + 1, count)]
     average = np.mean(ratios)
-    print(f"{name}: final learning-rate={average*100:.2f}%")
+    print(f"{name}: final learning-rate={average*100:.2f}% (window={window})")
     return average
 
 

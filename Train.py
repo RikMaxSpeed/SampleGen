@@ -20,9 +20,11 @@ def display_custom_link(file_path, display_text=None):
     if display_text is None:
         display_text = file_path
 
-    link_str = f'<a href="{file_path}" target="_blank">{display_text}</a>'
-    display(HTML(link_str))
-
+    if is_interactive: # only the browser can display links
+        link_str = f'<a href="{file_path}" target="_blank">{display_text}</a>'
+        display(HTML(link_str))
+    else:
+        print(display_text)
 
 
 def log_interp(start, end, steps):
@@ -84,13 +86,23 @@ def generate_training_data(how_many, use_stfts):
         plot_multiple_histograms_vs_gaussian([lengths * stft_hop / sample_rate], ["Sample Durations (seconds)"])
 
     # Select some test tones we'll re-synthesise whenever the training improves sufficiently:
-    test_names = ["grand piano c3", "steel acoustic c3", "cherry oh 1 c3", "filter resonance 02 c3"]
-    for name in test_names:
-        for i in range(len(file_names)):
-            if name in file_names[i].lower():
-                demo_samples.append(samples[i])
-                demo_names.append(file_names[i])
+    if len(demo_samples) == 0:
+        test_names = ["grand piano c3", "steel acoustic c3", "cherry oh 1 c3", "filter resonance 02 c3"]
+        for name in test_names:
+            for i in range(len(file_names)):
+                if name in file_names[i].lower():
+                    demo_samples.append(samples[i])
+                    demo_names.append(file_names[i])
                 break
+
+        while len(demo_samples) < len(test_names): # Add random samples in case we're working with a reduced-size data-set
+            i = np.random.randint(len(file_names))
+            if file_names[i] not in demo_names:
+                demo_names.append(file_names[i])
+                demo_samples.append(samples[i])
+
+        assert len(demo_samples) == len(demo_names)
+
 
     samples = convert_samples_to_inputs(samples)
     count = samples.size(0)
@@ -126,7 +138,7 @@ def generate_training_data(how_many, use_stfts):
     
 # If training an incremental VAE, we encode the STFTs just once using the auto-encoder
 def encode_outer_layer(model, name, samples):
-    if samples[0].size(0) == model.encoded_size:
+    if samples[0].shape == model.encoded_shape:
         return samples # already encoded
 
     print(f"Encoding {name} {len(samples)} STFTs")
@@ -151,7 +163,7 @@ def set_fail_loss(loss):
     global fail_loss, last_saved_loss
     if fail_loss != loss:
         fail_loss = loss
-        last_saved_loss = loss // 4
+        last_saved_loss = loss // 2
         print(f"fail_loss={fail_loss}, last_saved_loss={last_saved_loss}")
 
 def get_fail_loss():
@@ -233,6 +245,9 @@ def train_model(model_name, hyper_params, max_epochs, max_time, max_params, max_
     # Stopping condition
     window     = 5 # check average progress between two windows
     min_change = 0.005 # stop if lossNew/lossOld - 1 < min_change
+
+    if is_incremental(model_name): # fast training
+        window = 10
 
     if max_epochs >= 1000:
         window = 15 # allow the model longer to recover from any exploratory excursions.

@@ -11,97 +11,108 @@ from Device import device
 
 
 # Amazingly, it turns out we're better off using the simple MSE rather than comparing STFTs!!!
-# def torch_stft(sample, fft_size = 1024): # verified that 256 is the fastest on my Mac. We're compromising on frequency resolution vs time though...
-#     return torch.stft(sample.cpu(), n_fft=fft_size, return_complex=True).abs().to(device)
-#
-# if __name__ == '__main__':
-#     count = 1024
-#     sample = torch.rand(count, 85000).to(device)
-#     fastest_size = None
-#     fastest_elapsed = 1e99
-#
-#     for n in range(4, 16):
-#         fft_size = 2**n
-#
-#         now = time.time()
-#
-#         torch_stft(sample, fft_size)
-#
-#         elapsed = time.time() - now
-#
-#         print(f"fft_size={fft_size}, count={count} FFTs in {elapsed:.4f} sec")
-#         if elapsed < fastest_elapsed:
-#             fastest_size = fft_size
-#             fastest_elapsed = elapsed
-#     print(f"\nFastest FFT size={fastest_size}")
+def torch_stft(sample, fft_size = 1024): # verified that 256 is the fastest on my Mac. We're compromising on frequency resolution vs time though...
+    return torch.stft(sample.cpu(), n_fft=fft_size, return_complex=True).abs().to(device)
 
+if __name__ == '__main__' and False: # no longer required
+    count = 1024
+    sample = torch.rand(count, 85000).to(device)
+    fastest_size = None
+    fastest_elapsed = 1e99
+
+    for n in range(4, 16):
+        fft_size = 2**n
+
+        now = time.time()
+
+        torch_stft(sample, fft_size)
+
+        elapsed = time.time() - now
+
+        print(f"fft_size={fft_size}, count={count} FFTs in {elapsed:.4f} sec")
+        if elapsed < fastest_elapsed:
+            fastest_size = fft_size
+            fastest_elapsed = elapsed
+    print(f"\nFastest FFT size={fastest_size}")
 
 
 class AudioConv_AE(nn.Module):  # no VAE
+    @staticmethod
+    def compute_kernel_sizes_and_strides(audio_length, depth, kernel_count, kernel_size, kernel_ratio):
+        kernels = []
+        strides=[]
+        length = audio_length
+        for i in range(depth):
+            stride = kernel_size // 8 if i == 0 else kernel_size // 2
+            stride = max(stride, 2)
+
+            next_length = conv1d_output_size(length, kernel_size, stride)
+            if next_length <= 4: # over-compressing
+                break
+
+            kernels.append(kernel_size)
+            strides.append(stride)
+            length = next_length
+
+            kernel_size = int(kernel_size / kernel_ratio)
+
+        return kernels, strides, length
+
 
     @staticmethod
-    def approx_trainable_parameters(depth, kernel_count, outer_kernel_size, inner_kernel_size):
-        encode = conv1d_size(1, kernel_count, outer_kernel_size) \
-                 + (depth - 1) * conv1d_size(kernel_count, kernel_count, inner_kernel_size)
+    def approx_trainable_parameters(audio_length, depth, kernel_count, kernel_size, kernel_ratio):
+        kernels, strides, final_length = AudioConv_AE.compute_kernel_sizes_and_strides(audio_length, depth, kernel_count, kernel_size, kernel_ratio)
 
-        decode = conv1d_size(kernel_count, 1, outer_kernel_size) \
-                 + (depth - 1) * conv1d_size(kernel_count, kernel_count, inner_kernel_size)
+        encode = 0
+        decode = 0
+        for i in range(len(kernels)):
+            if i == 0:
+                encode += conv1d_size(1, kernel_count, kernels[i])
+                decode += conv1d_size(kernel_count, 1, kernels[i])
+            else:
+                size = conv1d_size(kernel_count, kernel_count, kernels[i])
+                encode += size
+                decode += size
 
         return encode + decode
 
-    def make_layers(self, is_decoder, depth, kernel_count, outer_kernel_size, inner_kernel_size):
-        assert(depth >= 1)
-
-        length = self.audio_length
-
+    def make_layers(self, is_decoder, kernel_count, kernels, strides):
         layers = []
-        # Outer layer
-        stride = max(outer_kernel_size // 8, 1)
-        if is_decoder:
-            layers.append(torch.nn.ConvTranspose1d(kernel_count, 1, outer_kernel_size, stride=stride))
-        else:
-            layers.append(torch.nn.Conv1d(1, kernel_count, outer_kernel_size, stride=stride))
-
-        length = conv1d_output_size(length, outer_kernel_size, stride)
-
-        for i in range(1, depth):
-            #stride = max(2, inner_kernel_size - i)
-            stride = max(2, inner_kernel_size // 2 - i)
-
-            length = conv1d_output_size(length, inner_kernel_size, stride)
-            if length <= 4: # over-compressing
-                break
+        for i in range(len(kernels)):
+            size = kernels[i]
+            stride = strides[i]
+            channels = 1 if i == 0 else kernel_count
 
             if is_decoder:
-                layers.append(torch.nn.ConvTranspose1d(kernel_count, kernel_count, inner_kernel_size, stride=stride))
+                layers.append(torch.nn.ConvTranspose1d(kernel_count, channels, size, stride=stride))
             else:
-                layers.append(torch.nn.Conv1d(kernel_count, kernel_count, inner_kernel_size, stride=stride))
-
-            #layers.append(torch.nn.LeakyReLU())
-
+                layers.append(torch.nn.Conv1d(channels, kernel_count, size, stride=stride))
 
         if is_decoder:
             layers.reverse()
-            print(f"Expect final sequence length={length}")
-            self.expected_length = length
 
         # Add a tanh to the encoder so the VAE only sees numbers between [-1, 1].
-        # And similarly to the decoder so the audio doesn't saturate.
+        # And similarly to the decoder so the audio doesn't saturate (although this could behave like a compressor)
         layers.append(torch.nn.Tanh())
 
         return nn.Sequential(*layers)
 
-    def __init__(self, audio_length, depth, kernel_count, outer_kernel_size, inner_kernel_size):
+    def __init__(self, audio_length, depth, kernel_count, kernel_size, kernel_ratio):
         super(AudioConv_AE, self).__init__()
 
         self.audio_length = audio_length
         self.kernel_count = kernel_count
 
-        self.encoder = self.make_layers(False, depth, kernel_count, outer_kernel_size, inner_kernel_size)
-        self.decoder = self.make_layers(True,  depth, kernel_count, outer_kernel_size, inner_kernel_size)
+        kernels, strides, final_length = AudioConv_AE.compute_kernel_sizes_and_strides(audio_length, depth,
+                                                                                       kernel_count, kernel_size,
+                                                                                       kernel_ratio)
 
-        #try:
-        if True:
+        self.expected_length = final_length
+
+        self.encoder = self.make_layers(False, kernel_count, kernels, strides)
+        self.decoder = self.make_layers(True,  kernel_count, kernels, strides)
+
+        try:
             self.encoded_shape, self.encoded_size = model_output_shape_and_size(self.encoder, [audio_length])
             print(f"encoded shape={self.encoded_shape}, size={self.encoded_size}")
             assert self.encoded_shape[0] == self.kernel_count
@@ -109,14 +120,14 @@ class AudioConv_AE(nn.Module):  # no VAE
             assert self.encoded_size == self.expected_length * self.kernel_count, f"expected encoded_size={self.expected_length * self.kernel_count} but got {encoded_size}"
 
             decode_shape, decode_size = model_output_shape_and_size(self.decoder, self.encoded_shape)
-            #print(f"decoded shape={decode_shape}, size={decode_size}")
-        # except Exception as e:
-        #     print(f"Model doesn't work: {e}")
-        #     self.compression = 0
-        # except BaseException as e:
-        #     print(f"Model is broken! {e}")
-        #     self.compression = 0
-        #     return
+            print(f"decoded shape={decode_shape}, size={decode_size}")
+        except Exception as e:
+            print(f"Model doesn't work: {e}")
+            self.compression = 0
+        except BaseException as e:
+            print(f"Model is broken! {e}")
+            self.compression = 0
+            return
 
         self.compression = audio_length / self.encoded_size
         print(f"AudioConv_AE {count_trainable_parameters(self):,} parameters, compression={self.compression:.1f}")
@@ -166,18 +177,9 @@ class AudioConv_AE(nn.Module):  # no VAE
 
     def stft_loss(self, inputs, outputs):
         # Compare the STFT instead, fortunately PyTorch provides a differentiable STFT
-        fft_size = 2048
 
         # torch.stft is not supported on MPS so we have to move things back to the CPU
         #now = time.time()
-
-        # Cache the input STFT for speed
-        # key = sample_hash_key(inputs)
-        # inputs = self.cached_stfts.get(key)
-        # if inputs is None:
-        #     print(f"cache miss for {key}")
-        #     self.cached_stfts[key] = inputs
-
         inputs  = torch_stft(inputs)
         outputs = torch_stft(outputs)
         max_amp = inputs.abs().max()
@@ -186,7 +188,7 @@ class AudioConv_AE(nn.Module):  # no VAE
 
 
 if __name__ == "__main__":
-    # audio_length, depth, kernel_count, outer_kernel_size, inner_kernel_size
+    # audio_length, depth, kernel_count, kernel_size, kernel_ratio
     model = AudioConv_AE(85_000, 2, 25, 80, 70)
     model.float()
     model.to(device)

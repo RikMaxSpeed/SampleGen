@@ -87,15 +87,37 @@ def kl_divergence(mu, logvar):
     return -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
 
 
+def vae_selective_loss(inputs, outputs, mu, logvar):
+    # Selective loss
+    batch = inputs.size(0)
+
+    assert outputs.size(0) == batch, f"batch={batch} but outputs.size(0)={outputs.size(0)}"
+    assert mu.size(0) == batch, f"batch={batch} but mu.size(0)={mu.size(0)}"
+    assert logvar.size(0) == batch, f"batch={batch} but logvar.size(0)={logvar.size(0)}"
+
+    loss = (inputs - outputs) ** 2
+    loss = torch.sum(loss, dim=tuple(range(1, loss.dim())))
+    threshold = torch.quantile(loss, 0.75)
+    mask = loss >= threshold
+    loss = loss[mask].sum() - 0.5 * sum(1 + logvar[mask,:] - mu[mask,:] ** 2 - logvar[mask,:].exp())
+    return loss.sum() / batch
+
+
 def vae_loss_function(inputs, outputs, mu, logvar):
+    #return vae_selective_loss(inputs, outputs, mu, logvar) # Not convinced this yields better results :(
+
     error  = reconstruction_loss(inputs, outputs)
     kl_div = kl_divergence(mu, logvar) / inputs.size(0)
-    loss = error + kl_div
+    loss = error + 100 * kl_div
 
     if loss < 0:
         print(f"Negative loss!! loss={loss} (reconstruction={error}, kl_divergence={kl_div}) in vae_loss_function")
         assert loss > -1e-3, "doesn't appear to be a floating point precision problem :("
         loss = 0.0 # assume floating point discrepancy
+
+    return loss
+
+
 
     return loss
     
