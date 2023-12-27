@@ -158,14 +158,17 @@ class CombinedVAE(nn.Module):
 
     def encode(self, x):
         hiddens = self.auto_encoder.encode(x)
+        assert(hiddens.size(1) == self.hidden_size)
+
         mu, logvar = self.vae.encode(hiddens)
         return mu, logvar
 
 
     def decode(self, z):
         hiddens = self.vae.decode(z)
-        stft = self.auto_encoder.decode(hiddens)
-        return stft
+        assert (hiddens.size(1) == self.hidden_size)
+        sample = self.auto_encoder.decode(hiddens)
+        return sample
 
 
     def forward(self, x):

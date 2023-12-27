@@ -92,8 +92,8 @@ class AudioConv_AE(nn.Module):  # no VAE
             print(f"Expect final sequence length={length}")
             self.expected_length = length
 
-        if is_decoder:
-            layers.append(torch.nn.Tanh())
+        # if is_decoder:
+        #     layers.append(torch.nn.Tanh())
 
         return nn.Sequential(*layers)
 
@@ -110,6 +110,7 @@ class AudioConv_AE(nn.Module):  # no VAE
             encoded_shape, encoded_size = model_output_shape_and_size(self.encoder, [1, audio_length])
             print(f"encoded shape={encoded_shape}, size={encoded_size}")
             assert encoded_shape[1] == self.expected_length
+            self.encoded_size = encoded_size # required for the CombinedVAE
 
             decode_shape, decode_size = model_output_shape_and_size(self.decoder, encoded_shape)
             print(f"decoded shape={decode_shape}, size={decode_size}")
@@ -118,8 +119,6 @@ class AudioConv_AE(nn.Module):  # no VAE
             self.compression = 0
             return
 
-
-        #self.compression = audio_length / outer_kernel_size # approx
         self.compression = audio_length / encoded_size
         print(f"AudioConv_AE {count_trainable_parameters(self):,} parameters, compression={self.compression:.1f}")
 
@@ -165,8 +164,8 @@ class AudioConv_AE(nn.Module):  # no VAE
         return loss, outputs
 
     def stft_loss(self, inputs, outputs):
-        # Naive version:
-        #return basic_reconstruction_loss(inputs, outputs)
+        # Naïve version:
+        return basic_reconstruction_loss(inputs, outputs)
 
         # Compare the STFT instead, fortunately PyTorch provides a differentiable STFT
         fft_size = 2048

@@ -24,7 +24,7 @@ def reset_hyper_training(model_name):
     hyper_losses = []
     hyper_names = []
     hyper_params = []
-    reset_train_losses(model_name)
+    reset_train_losses(model_name, True)
 
     if is_audio(model_name):
         set_fail_loss(15000)
@@ -245,6 +245,12 @@ def optimise_hyper_parameters(model_name):
             search_space.append(Integer(30,    90, 'log-uniform',  name='outer_kernel_size'))
             search_space.append(Integer( 8,    35, 'log-uniform',  name='inner_kernel_size'))
 
+        case "AudioConv_VAE_Incremental":
+            max_loss = 50_000
+            search_space.append(Integer(5, 20, 'uniform', name='latent_size'))
+            search_space.append(Integer(2, 5, 'uniform', name='vae_depth'))
+            search_space.append(Real(0.1, 10, 'uniform', name='vae_ratio'))
+
         case _:
             raise Exception(f"Invalid model type = {model_name}")
 
@@ -280,7 +286,7 @@ def train_best_params(model_name, params = None, finest = False):
     else:
         print(f"\n\n\nTraining model {model_name}\n")
 
-    reset_train_losses(model_name)
+    reset_train_losses(model_name, False)
 
     #generate_training_stfts(200) # Small dataset of the most diverse samples
     generate_training_data(None, hyper_stfts) # Full dataset with no augmentation
@@ -318,6 +324,7 @@ def full_hypertrain(model_name):
 
 def train_topN_hyper_params(topN = 10):
     # Train the top N but with longer time spans
+    reset_train_losses(model_name, True)
     order = np.argsort(hyper_losses)
     for i in range(topN):
         n = order[i]
@@ -429,10 +436,27 @@ if __name__ == '__main__':
 
     ###############################################################################################
     # Audio Convolution Auto-Encoder
-    reset_hyper_training("AudioConv_AE")
-    grid_search_AudioConv_AE()
+    # reset_hyper_training("AudioConv_AE")
+    # grid_search_AudioConv_AE()
 
-    #
-    # #full_hypertrain("AudioConv_AE")
+    if True:
+        set_fail_loss(20_000)
+        for params in [
+            #[4, -6, 3, 20, 30, 24], # loss = 1195
+            #[4, -6, 3, 20, 54, 24], # loss = 1820
+            [4, -6, 2, 20, 95, 50], # loss = 812
+            #[4, -6, 2, 10, 95, 50], # loss = 1648
+            #[4, -6, 4, 40, 95, 12], # loss = 1325
+            #[4, -6, 2, 20, 168, 50] # loss = 3428
+        ]:
+            train_best_params("AudioConv_AE", params)
+    else:
+        set_fail_loss(40_000)
+        #train_best_params("AudioConv_VAE_Incremental", [4, -5, 7, 3, 0.25]) # with 4 layers it over-fits way too much
+        train_best_params("AudioConv_VAE_Incremental", [4, -5, 5, 4, 0.5])
+        #full_hypertrain("Conv2D_VAE_Incremental")
+
+#
+    # full_hypertrain("AudioConv_AE")
     # optimise_hyper_parameters("AudioConv_AE")
     # train_best_params("AudioConv_AE")

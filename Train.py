@@ -96,12 +96,12 @@ def generate_training_data(how_many, use_stfts):
     return len(train_dataset), len(test_dataset)
     
 # If training an incremental VAE, we encode the STFTs just once using the auto-encoder
-def encode_stfts(model, name, stfts):
-    if len(stfts[0].shape) == 1:
-        return stfts # already encoded
+def encode_outer_layer(model, name, samples):
+    if samples[0].size(0) == model.encoded_size:
+        return samples # already encoded
 
-    print(f"Encoding {name} {len(stfts)} STFTs")
-    return [model.encode(stft.unsqueeze(0)).squeeze(0) for stft in stfts] # add/remove batch dimension
+    print(f"Encoding {name} {len(samples)} STFTs")
+    return [model.encode(sample.unsqueeze(0)).squeeze(0) for sample in samples] # add/remove batch dimension
 
 
 # Hyper-parameter optimisation
@@ -128,10 +128,10 @@ def set_fail_loss(loss):
 def get_fail_loss():
     return fail_loss
 
-def reset_train_losses(model_name):
+def reset_train_losses(model_name, force):
     global all_test_model, all_test_losses, all_test_names, best_train_losses, last_saved_loss
 
-    if model_name != all_test_model:
+    if force or model_name != all_test_model:
         all_test_model = model_name
         all_test_names = []
         all_test_losses = []
@@ -181,8 +181,8 @@ def train_model(model_name, hyper_params, max_epochs, max_time, max_params, max_
     if is_vae:
         # We will only be training the inner VAE, so we first encode the STFTs
         active_model = model.vae
-        train_dataset = encode_stfts(model.auto_encoder, "Train", train_dataset)
-        test_dataset  = encode_stfts(model.auto_encoder, "Test", test_dataset)
+        train_dataset = encode_outer_layer(model.auto_encoder, "Train", train_dataset)
+        test_dataset  = encode_outer_layer(model.auto_encoder, "Test", test_dataset)
     else:
         active_model = model
 

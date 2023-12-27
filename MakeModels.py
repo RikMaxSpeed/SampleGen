@@ -81,6 +81,27 @@ def make_Conv2D_VAE(model_type, model_params, max_params):
     return model, model_text, approx_size, vae_size
 
 
+def make_AudioConv_VAE(model_type, model_params, max_params):
+    depth, kernel_count, outer_kernel_size, inner_kernel_size, latent_size, vae_depth, vae_ratio = model_params
+    model_text = f"{model_type} layers={depth}, kernel_count={kernel_count}, outer_kernel={outer_kernel_size}, inner_kernel={inner_kernel_size}, latent={latent_size}, VAE depth={vae_depth}, VAE ratio={vae_ratio:.2f}"
+    print(model_text)
+
+    audio_conv = AudioConv_AE(audio_length, depth, kernel_count, outer_kernel_size, inner_kernel_size)
+    audio_hidden = audio_conv.encoded_size
+    vae_sizes = interpolate_layer_sizes(audio_hidden, latent_size, vae_depth, vae_ratio)
+    print(f"VAE layers={vae_sizes}")
+
+    conv_size = AudioConv_AE.approx_trainable_parameters(depth, kernel_count, outer_kernel_size, inner_kernel_size)
+    vae_size  = VariationalAutoEncoder.approx_trainable_parameters(vae_sizes)
+    approx_size = conv_size + vae_size
+    print(f"AudioConvAE={conv_size:,}, VAE={vae_size:,}, approx total={approx_size:,}")
+
+    if is_too_large(approx_size, max_params):
+        return None, model_text, approx_size, vae_size
+
+    model = CombinedVAE(audio_conv, vae_sizes)
+
+    return model, model_text, approx_size, vae_size
 
 def is_incremental(model_name):
     return "Incremental" in model_name
@@ -276,6 +297,22 @@ def make_model(model_type, model_params, max_params, verbose):
             if model.compression < min_compression or model.compression > max_compression:
                 print(f"Compression={model.compression:.1f} out of range [{min_compression}, {max_compression}]")
                 return invalid_model(approx_size)
+
+        case "AudioConv_VAE_Incremental":
+            conv_name, conv_params, file_name = get_best_configuration_for_model("AudioConv_AE")
+            conv_params = conv_params[2:]  # remove the optimiser params
+            print(f"conv_params={conv_params}")
+            print(f"model_params={model_params}")
+            combined_params = conv_params + model_params  # add the VAE params.
+            print(f"combined={combined_params}")
+            model, model_text, approx_size, vae_size = make_AudioConv_VAE(model_type, combined_params, max_params)
+            if is_too_large(approx_size, max_params):
+                return invalid_model(approx_size)
+
+            # Incremental training: load the previous saved state, and freeze the layers we won't re-train
+            load_weights_and_biases(model.auto_encoder, file_name)
+            freeze_model(model.auto_encoder)
+            approx_size = vae_size  # we're not re-training the Conv2D parameters
 
         case _:
             raise Exception(f"Unknown model: {model_type}")
