@@ -85,24 +85,12 @@ def generate_training_data(how_many, use_stfts):
         lengths = np.array([x.shape[1] for x in samples])
         plot_multiple_histograms_vs_gaussian([lengths * stft_hop / sample_rate], ["Sample Durations (seconds)"])
 
-    # Select some test tones we'll re-synthesise whenever the training improves sufficiently:
-    if len(demo_samples) == 0:
-        test_names = ["grand piano c3", "steel acoustic c3", "cherry oh 1 c3", "filter resonance 02 c3"]
-        for name in test_names:
-            for i in range(len(file_names)):
-                if name in file_names[i].lower():
-                    demo_samples.append(samples[i])
-                    demo_names.append(file_names[i])
-                break
-
-        while len(demo_samples) < len(test_names): # Add random samples in case we're working with a reduced-size data-set
-            i = np.random.randint(len(file_names))
-            if file_names[i] not in demo_names:
-                demo_names.append(file_names[i])
-                demo_samples.append(samples[i])
-
-        assert len(demo_samples) == len(demo_names)
-
+    # Select some random test tones we'll re-synthesise whenever the training improves sufficiently:
+    while len(demo_samples) < 5:
+        i = np.random.randint(len(file_names))
+        if file_names[i] not in demo_names:
+            demo_names.append(file_names[i])
+            demo_samples.append(samples[i])
 
     samples = convert_samples_to_inputs(samples)
     count = samples.size(0)
@@ -113,10 +101,7 @@ def generate_training_data(how_many, use_stfts):
 
     # Find key samples to encode
     if how_many <= count/3:
-        if use_stfts:
-            samples = select_diverse_tensors(samples, file_names, how_many).to(device)
-        else:
-            samples = samples[:how_many] # crude!
+        samples = select_diverse_samples(samples, file_names, how_many).to(device)
 
     if samples.size(0) > how_many: # truncate if too many
         samples = samples[:how_many]
@@ -361,7 +346,7 @@ def train_model(model_name, hyper_params, max_epochs, max_time, max_params, max_
             ratio = train_losses[epoch] / best_train_losses[epoch]
             if ratio > 3:
                 print(f"Early stopping at epoch={epoch}, train loss={train_losses[epoch-1]:.2f} vs best={best_train_losses[epoch]:.2f}, ratio={ratio:.1f}")
-                return description, model_size, min(best_train_losses) * ratio, compute_final_learning_rate("Train", train_losses, window) # approximation in order not to mess up the GPR too much.
+                return description, model_size, min(train_losses), compute_final_learning_rate("Train", train_losses, window)
 
     # Done!
     if epoch == max_epochs-1:

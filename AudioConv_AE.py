@@ -38,30 +38,28 @@ if __name__ == '__main__' and False: # no longer required
 
 class AudioConv_AE(nn.Module):  # no VAE
     @staticmethod
-    def compute_kernel_sizes_and_strides(audio_length, depth, kernel_count, kernel_size, kernel_ratio):
+    def compute_kernel_sizes_and_strides(audio_length, depth, kernel_count, kernel_size, stride):
+        assert stride >= 2, f"stride must be >= 2, got {stride}"
         kernels = []
         strides=[]
         length = audio_length
+        min_length = 4
         for i in range(depth):
-            stride = kernel_size // 8 if i == 0 else kernel_size // 2
-            stride = max(stride, 2)
-
             next_length = conv1d_output_size(length, kernel_size, stride)
-            if next_length <= 4: # over-compressing
+
+            if next_length < min_length: # over-compressing
                 break
 
             kernels.append(kernel_size)
             strides.append(stride)
             length = next_length
 
-            kernel_size = int(kernel_size / kernel_ratio)
-
         return kernels, strides, length
 
 
     @staticmethod
-    def approx_trainable_parameters(audio_length, depth, kernel_count, kernel_size, kernel_ratio):
-        kernels, strides, final_length = AudioConv_AE.compute_kernel_sizes_and_strides(audio_length, depth, kernel_count, kernel_size, kernel_ratio)
+    def approx_trainable_parameters(audio_length, depth, kernel_count, kernel_size, stride):
+        kernels, strides, final_length = AudioConv_AE.compute_kernel_sizes_and_strides(audio_length, depth, kernel_count, kernel_size, stride)
 
         encode = 0
         decode = 0
@@ -88,16 +86,20 @@ class AudioConv_AE(nn.Module):  # no VAE
             else:
                 layers.append(torch.nn.Conv1d(channels, kernel_count, size, stride=stride))
 
+            #layers.append(torch.nn.LeakyReLU()) # training is markedly worse.
+
         if is_decoder:
             layers.reverse()
 
         # Add a tanh to the encoder so the VAE only sees numbers between [-1, 1].
         # And similarly to the decoder so the audio doesn't saturate (although this could behave like a compressor)
-        layers.append(torch.nn.Tanh())
+        #layers.append(torch.nn.Tanh())
+        layers.append(torch.nn.Hardtanh()) # same as clamp(-1, 1)
+
 
         return nn.Sequential(*layers)
 
-    def __init__(self, audio_length, depth, kernel_count, kernel_size, kernel_ratio):
+    def __init__(self, audio_length, depth, kernel_count, kernel_size, stride):
         super(AudioConv_AE, self).__init__()
 
         self.audio_length = audio_length
@@ -105,7 +107,12 @@ class AudioConv_AE(nn.Module):  # no VAE
 
         kernels, strides, final_length = AudioConv_AE.compute_kernel_sizes_and_strides(audio_length, depth,
                                                                                        kernel_count, kernel_size,
-                                                                                       kernel_ratio)
+                                                                                       stride)
+
+        if len(kernels) != depth:
+            print(f"AudioConv_AE: only has depth={len(kernels)} instead of {depth}")
+            self.compression = 0
+            return
 
         self.expected_length = final_length
 
@@ -190,7 +197,7 @@ class AudioConv_AE(nn.Module):  # no VAE
 
 
 if __name__ == "__main__":
-    # audio_length, depth, kernel_count, kernel_size, kernel_ratio
+    # audio_length, depth, kernel_count, kernel_size, stride
     model = AudioConv_AE(85_000, 2, 25, 80, 70)
     model.float()
     model.to(device)

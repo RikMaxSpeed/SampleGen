@@ -71,8 +71,8 @@ def evaluate_model(params):
     max_overfit = 1.3 # Ensure we retain the models that generalise reasonably well.
     
     max_epochs = 80 # This is sufficient to figure out which model will converge best if we let it run for longer.
-    if is_incremental_vae(hyper_model) or is_audio(hyper_model):
-        max_epochs = 500 # training the VAE is very fast
+    if is_incremental_vae(hyper_model) or is_audio(hyper_model): # fast models
+        max_epochs = 1000
 
     max_time = 5*60 # we don't like slow models...
     verbose = False # avoid printing lots of detail for each run
@@ -141,8 +141,13 @@ def optimise_hyper_parameters(model_name):
     reset_hyper_training(model_name)
 
     # Use a smaller data-set here to speed things up? Could favour small models that can't handle the entire data-set.
-    samples, _ = generate_training_data(None, hyper_stfts) # full data-set, this may be more representative
-    #samples, _ = generate_training_stfts(200, hyper_stfts) # 80% = 10 x batch=16
+    how_many = None # full data-set, this may be more representative
+    if model_name == "AudioConv_AE":
+        how_many = 200 # 80% = 10 x batch=16
+        # In practice, this is very difficult data set to converge on!
+
+    samples, _ = generate_training_data(how_many, hyper_stfts)
+
     print(f"Training data set has {samples} samples.")
 
     global max_params, max_loss
@@ -237,12 +242,13 @@ def optimise_hyper_parameters(model_name):
             search_space.append(Real   (0.1,      10,   'uniform',      name='vae_ratio'))
 
         case "AudioConv_AE":
-            # audio_length, depth, kernel_count, kernel_size, kernel_ratio
+            # audio_length, depth, kernel_count, kernel_size, stride
+            max_kernel_size = int(sample_rate / middleCHz)
             max_loss = audio_length
-            search_space.append(Integer( 3,     5,     'uniform',  name='layers'))
-            search_space.append(Integer(25,    50,     'uniform',  name='kernels'))
-            search_space.append(Integer(30,    90, 'log-uniform',  name='kernel_size'))
-            search_space.append(Integer( 8,    35, 'log-uniform',  name='kernel_ratio'))
+            search_space.append(Integer( 2,     6,     'uniform',  name='layers'))
+            search_space.append(Integer(20,    60,     'log-uniform',  name='kernels'))
+            search_space.append(Integer(20,    max_kernel_size, 'log-uniform',  name='kernel_size'))
+            search_space.append(Integer( 2,    60, 'log-uniform',  name='stride'))
 
         case "AudioConv_VAE_Incremental":
             max_loss = audio_length
@@ -285,8 +291,8 @@ def fine_tune(model_name):
 # Load an existing model and train it normally
 def resume_train(model_name):
     model_type, params, file_name = get_best_configuration_for_model(model_name)
-    params[0] = 5 # reset the batch size as it may be 0 due to the fine tuning
-    train_best_params(model_name, params, finest=False)
+    params[0] = 4 # reset the batch size as it may be 0 due to the fine tuning
+    train_best_params(model_name, params, finest=True)
 
 
 def train_best_params(model_name, params = None, finest = False):
@@ -297,7 +303,7 @@ def train_best_params(model_name, params = None, finest = False):
 
     reset_train_losses(model_name, False)
 
-    #generate_training_stfts(200) # Small dataset of the most diverse samples
+    #generate_training_data(200, hyper_stfts) # Small dataset of the most diverse samples
     generate_training_data(None, hyper_stfts) # Full dataset with no augmentation
     #generate_training_stfts(3000) # use a large number of samples with augmentation
 
@@ -338,6 +344,7 @@ def full_hypertrain(model_name):
 
 def train_topN_hyper_params(topN = 10):
     # Train the top N but with longer time spans
+    say_out_loud("Training topN_hyper_params!")
     reset_train_losses(hyper_model, True)
     order = np.argsort(hyper_losses)
     for i in range(topN):
@@ -401,19 +408,19 @@ def grid_search_AudioConv_AE():
     print(f"max_kernel_size={max_kernel_size}")
     hyper_model = "AudioConv_AE"
     reset_hyper_training(hyper_model)
-    set_fail_loss(1_000_000)
-    max_params = 1_000_000
+    set_fail_loss(50_000)
+    max_params = 5_000_000
     max_loss = 5 * audio_length
-    samples, _ = generate_training_data(300, hyper_stfts)
-    max_hyper_runs = 4 * 5 * 5 * 5
+    samples, _ = generate_training_data(200, hyper_stfts)
+    max_hyper_runs = 5 * 4 * 4 * 6
     count = 0
-    for depth in [3, 4, 5, 6]:
-        for kernels in exponential_interpolation(30, 50, 5, True):
-            for kernel_size in exponential_interpolation(80, max_kernel_size, 5, True):
-                for ratio in [8, 4, 2, 1, 0.5]:
-                    params = [4, -6, depth, kernels, kernel_size, ratio]
+    for kernel_size in exponential_interpolation(40, max_kernel_size, 5, True):
+        for kernels in exponential_interpolation(20, 60, 4, True):
+            for depth in [2, 3, 4, 5]:
+                for stride in exponential_interpolation(2, kernel_size, 6, True):
+                    params = [4, -6, depth, kernels, kernel_size, stride]
                     count += 1
-                    print(f"\n\n\nGrid Hyper-train #{count}/{max_hyper_runs}: layers={depth}, kernels={kernels}, size={kernel_size}, ratio={ratio:.2f}")
+                    print(f"\n\n\nGrid Hyper-train #{count}/{max_hyper_runs}: layers={depth}, kernels={kernels}, size={kernel_size}, stride={stride}")
                     evaluate_model(params)
 
     train_topN_hyper_params()
@@ -480,7 +487,14 @@ def run_model_training():
     # Audio Convolution Auto-Encoder
 
     set_fail_loss(20_000)
+    #full_hypertrain("AudioConv_AE")
+    #train_best_params("AudioConv_AE", [4, -6, 2, 20, 66, 40]) # caused MPS to abort??!
+
     grid_search_AudioConv_AE()
+
+    # for layers in [3, 4, 5, 6, 7]:
+    #     train_best_params("AudioConv_AE", [6, -6, layers, 40, 168, 2])
+
     #train_best_params("AudioConv_AE", [4, -6, 3, 30, 139, 1])
     #, [4, -6, 2, 20, 95, 50])
     #train_best_params("AudioConv_AE", [4, -6, 2, 20, 95, 2.0])
@@ -489,8 +503,8 @@ def run_model_training():
     #set_fail_loss(audio_length)
     #full_hypertrain("AudioConv_VAE")
 
-    set_fail_loss(4_000)
-    grid_search_AudioConv_VAE_I()
+    # set_fail_loss(4_000)
+    # grid_search_AudioConv_VAE_I()
 
     # full_hypertrain("AudioConv_VAE_Incremental")
     #train_best_params("AudioConv_VAE_Incremental", [4, -6, 10, 3, 0.25])

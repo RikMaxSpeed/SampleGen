@@ -458,37 +458,37 @@ def display_average_stft(stfts, playAudio):
     save_and_play_resynthesized_audio(output, sample_rate, stft_hop, "Results/MeanSTFT.wav", playAudio)
 
 
+def distances_from_point(tensors, point):
+    squared_diff = (tensors - point) ** 2
+    mse_values = squared_diff.sum(dim=tuple(range(1, squared_diff.dim())))
+    return mse_values
 
-def select_diverse_tensors(tensor_array, names, N):
-    """Select 'N' most diverse tensors from a tensor of tensors using PyTorch."""
-    if N <= 0 or tensor_array.nelement() == 0:
-        return torch.tensor([])
+def select_diverse_samples(samples, names, count):
 
     # Compute the average tensor of the entire dataset
-    average_tensor = torch.mean(tensor_array, dim=0)
+    average_tensor = torch.mean(samples, dim=0)
 
     # Find the tensor closest to the average
-    closest_tensor_index = torch.argmin(torch.norm(tensor_array - average_tensor, dim=(1, 2)))
-    diverse_subset = [tensor_array[closest_tensor_index]]
+    closest_tensor_index = torch.argmin(distances_from_point(samples, average_tensor))
+    diverse_subset = [samples[closest_tensor_index]]
     diverse_names = [names[closest_tensor_index]]
     
     # Mask to keep track of selected tensors
-    selected_mask = torch.zeros(len(tensor_array), dtype=torch.bool)
+    selected_mask = torch.zeros(len(samples), dtype=torch.bool)
     selected_mask[closest_tensor_index] = True
-    #print(f"Most average: {names[closest_tensor_index]}")
 
     # Iteratively add tensors
-    for _ in range(1, N):
+    for _ in range(1, count):
         # Calculate the average tensor of the current subset
         subset_average = torch.mean(torch.stack(diverse_subset), dim=0)
 
         # Find the tensor that is furthest from the current subset average
-        distances = torch.norm(tensor_array - subset_average, dim=(1, 2))
+        distances = distances_from_point(samples, subset_average)
         distances[selected_mask] = float('-inf')  # Ignore already selected tensors
         furthest_tensor_index = torch.argmax(distances)
         
         # Add the furthest tensor to the subset and update the mask
-        diverse_subset.append(tensor_array[furthest_tensor_index])
+        diverse_subset.append(samples[furthest_tensor_index])
         selected_mask[furthest_tensor_index] = True
         diverse_names.append(names[furthest_tensor_index])
     

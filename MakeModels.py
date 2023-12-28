@@ -52,8 +52,8 @@ def make_RNN_VAE(model_type, model_params, max_params):
     
     return model, model_text, approx_size, vae_size
 
-min_compression =  36 # or the VAE won't work
-max_compression = 144 # or the auto-encoder won't work
+min_compression =  49 # Larger values help the VAE?
+max_compression = 10000 # or the auto-encoder won't work
 
 def make_Conv2D_VAE(model_type, model_params, max_params):
     layer_count, kernel_count, kernel_size, latent_size, vae_depth, vae_ratio = model_params
@@ -82,11 +82,11 @@ def make_Conv2D_VAE(model_type, model_params, max_params):
 
 
 def make_AudioConv_VAE(model_type, model_params, max_params):
-    depth, kernel_count, kernel_size, kernel_ratio, latent_size, vae_depth, vae_ratio = model_params
-    model_text = f"{model_type} layers={depth}, kernels={kernel_count}, size={kernel_size}, ratio={kernel_ratio:.2f}, VAE latent={latent_size}, depth={vae_depth}, ratio={vae_ratio:.2f}"
+    depth, kernel_count, kernel_size, stride, latent_size, vae_depth, vae_ratio = model_params
+    model_text = f"{model_type} layers={depth}, kernels={kernel_count}, size={kernel_size}, stride={stride}, VAE latent={latent_size}, depth={vae_depth}, ratio={vae_ratio:.2f}"
     print(model_text)
 
-    audio_conv = AudioConv_AE(audio_length, depth, kernel_count, kernel_size, kernel_ratio)
+    audio_conv = AudioConv_AE(audio_length, depth, kernel_count, kernel_size, stride)
     if audio_conv.compression == 0:
         return None, model_text, 0, 0
 
@@ -95,7 +95,7 @@ def make_AudioConv_VAE(model_type, model_params, max_params):
     vae_sizes = interpolate_layer_sizes(audio_hidden_size, latent_size, vae_depth, vae_ratio)
     print(f"VAE layers={vae_sizes}")
 
-    conv_size = AudioConv_AE.approx_trainable_parameters(audio_length, depth, kernel_count, kernel_size, kernel_ratio)
+    conv_size = AudioConv_AE.approx_trainable_parameters(audio_length, depth, kernel_count, kernel_size, stride)
     vae_size  = VariationalAutoEncoder.approx_trainable_parameters(vae_sizes)
     approx_size = conv_size + vae_size
     print(f"AudioConvAE={conv_size:,}, VAE={vae_size:,}, approx total={approx_size:,}")
@@ -290,14 +290,14 @@ def make_model(model_type, model_params, max_params, verbose):
             approx_size = vae_size  # we're not re-training the Conv2D parameters
 
         case "AudioConv_AE":
-            depth, kernel_count, kernel_size, kernel_ratio = model_params
-            model_text = f"{model_type} layers={depth}, kernels={kernel_count}, size={kernel_size}, ratio={kernel_ratio:.2f}"
+            depth, kernel_count, kernel_size, stride = model_params
+            model_text = f"{model_type} layers={depth}, kernels={kernel_count}, size={kernel_size}, stride={stride}"
             print(model_text)
-            approx_size = AudioConv_AE.approx_trainable_parameters(audio_length, depth, kernel_count, kernel_size, kernel_ratio)
+            approx_size = AudioConv_AE.approx_trainable_parameters(audio_length, depth, kernel_count, kernel_size, stride)
             if is_too_large(approx_size, max_params):
                 return invalid_model(approx_size)
 
-            model = AudioConv_AE(audio_length, depth, kernel_count, kernel_size, kernel_ratio)
+            model = AudioConv_AE(audio_length, depth, kernel_count, kernel_size, stride)
 
             if model.compression < min_compression or model.compression > max_compression:
                 print(f"Compression={model.compression:.1f} out of range [{min_compression}, {max_compression}]")
