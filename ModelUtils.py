@@ -266,6 +266,9 @@ def conv1d_size(input_channels, num_kernels, kernel_size):
     return (kernel_size * input_channels + 1) * num_kernels
 
 def conv1d_output_size(input_size, kernel_size, stride):
+    if kernel_size > input_size:
+        return -999 # this isn't going to end well
+
     return (input_size - kernel_size) // stride + 1
 
 
