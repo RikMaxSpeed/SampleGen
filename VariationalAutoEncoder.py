@@ -15,15 +15,15 @@ def basic_reconstruction_loss(inputs, outputs):
 cached_weights = {}
 
 # Weight the samples over time: it's critical to get start of the sound correct.
-def weighted_time_reconstruction_loss(inputs, outputs, weight, time_steps=None, verbose=True):
+def weighted_time_reconstruction_loss(inputs, outputs, weight, time_ratio=0.15, verbose=True):
     assert inputs.dim() >= 2, f"Expected inputs to be greater than 2, not {inputs.dim()}"
     assert weight >= 1, f"Expected weight to be greater than 1, not {weight}"
+    assert time_ratio >= 0 and time_ratio <= 1, f"Expected time_ratio to be between 0 and 1, not {time_ratio}"
 
     batch_size = inputs.size(0)
     sequence_length = inputs.size(-1)
 
-    if time_steps is None:
-        time_steps = sequence_length // 10
+    time_steps = int(time_ratio * sequence_length)
 
     if inputs.dim() == 3:
         features = inputs.size(1)
@@ -71,9 +71,8 @@ def weighted_time_reconstruction_loss(inputs, outputs, weight, time_steps=None, 
 
 def reconstruction_loss(inputs, outputs):
     assert inputs.shape == outputs.shape, f"reconstruction_loss: shapes don't match, inputs={inputs.shape}, outputs={outputs.shape}"
-    return basic_reconstruction_loss(inputs, outputs)
+    #return basic_reconstruction_loss(inputs, outputs)
 
-    # I'm not too sure about this...
     return weighted_time_reconstruction_loss(inputs, outputs, weight=10)
 
 # Test the basic loss & weighted loss:
@@ -116,12 +115,20 @@ def vae_selective_loss(inputs, outputs, mu, logvar):
 def vae_loss_function(inputs, outputs, mu, logvar):
     #return vae_selective_loss(inputs, outputs, mu, logvar) # Not convinced this yields better results :(
 
-    error  = reconstruction_loss(inputs, outputs)
+    distance  = reconstruction_loss(inputs, outputs)
+    assert distance >= 0, f"negative distance={distance}"
+
     kl_div = kl_divergence(mu, logvar) / inputs.size(0)
-    loss = error + kl_div
+    assert kl_div >= 0, f"negative kl_div={kl_div}"
+
+    loss = distance + kl_div
+
+    # We seem to get into situations where the reconstruction loss and the KL loss are fighting each other :(
+    # Try to focus the optimiser on whichever loss is largest:
+    #loss += distance * kl_div # sames as  (1 + distance) * (1 + kl_div) - 1
 
     if loss < 0:
-        print(f"Negative loss!! loss={loss} (reconstruction={error}, kl_divergence={kl_div}) in vae_loss_function")
+        print(f"Negative loss!! loss={loss} (reconstruction={distance}, kl_divergence={kl_div}) in vae_loss_function")
         assert loss > -1e-3, "doesn't appear to be a floating point precision problem :("
         loss = 0.0 # assume floating point discrepancy
 

@@ -247,25 +247,34 @@ def plot_loss(losses, name=None, colour=None, linewidth = 1):
     i = np.argmin(losses)
     min_loss = losses[i]
     
-    plt.scatter(i+1, min_loss, c=colour, s=8)
+    plt.scatter(i+1, min_loss, c=colour, s=8*linewidth)
     if name is not None:
         plt.text(i+1, min_loss, f"{min_loss:.2f}", color = colour)
 
 
 def plot_train_test_losses(train_losses, test_losses, title):
-    assert(len(train_losses) == len(test_losses))
-    
+    assert (len(train_losses) == len(test_losses))
+
     plt.figure(figsize=(10, 5))
-        
-    plot_loss(train_losses, "Train", "cyan")
-    plot_loss(test_losses,  "Test",  "blue")
+
+    plot_loss(train_losses, "Train", "tab:red", 1)
+    plot_loss(test_losses, "Test", "tab:green", 2)
 
     plt.xlabel('Epoch')
     plt.ylabel('Loss (log)')
     plt.gca().set_yscale('log')
     plt.title(title + ": loss after {} epochs".format(len(train_losses)))
     plt.legend()
+
+    # Create a second y-axis for the overfit ratio
+    ax2 = plt.gca().twinx()
+    overfit = [train / test for train, test in zip(train_losses, test_losses)]
+    ax2.plot(overfit, label='Overfit', color='tab:blue', linestyle='--')
+    ax2.set_ylabel('Overfit Ratio')
+    ax2.legend(loc='upper right')
+    ax2.set_ylim([0.5, max(1.5, max(overfit))])
     plt.show()
+
 
 
 hyperVideo = PlotVideoMaker("Hyper-Training", True, 0.5)

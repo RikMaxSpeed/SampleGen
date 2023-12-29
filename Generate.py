@@ -1,5 +1,7 @@
+import torch
+
 from MakeSTFTs import *
-from MakeModels import load_saved_model, model_uses_STFTs
+from MakeModels import load_saved_model, model_uses_STFTs, is_audio
 from SampleCategory import *
 from Train import predict_sample, display_custom_link
 from Graph import *
@@ -30,6 +32,7 @@ class Sample_Generator():
         self.model_name = model_name
         self.model, model_text, params, model_size = load_saved_model(model_name)
         self.use_stfts = model_uses_STFTs(model_name)
+
         print("Generate samples using {model_text}")
         self.samples, self.file_names = load_all_samples(self.use_stfts)
         self.categories = infer_sample_categories(self.file_names)
@@ -229,6 +232,38 @@ class Sample_Generator():
 
             save_and_play_resynthesized_audio(result, sample_rate, stft_hop, f"Results/resynth #{i + 1} " + file_name, True)
 
+    def speed_test(self, test_duration = 5):
+        if not is_audio(self.model_name):
+            return
+
+        print(f"\n\nPerformance Test for model {self.model_name}, device={device}, {audio_length:,} floats at {sample_rate:,} Hz\n")
+        for batch in [1, 10, 100, 1000]:
+            print(f"\nBatch={batch}")
+            samples = (torch.rand(batch, audio_length)*2 - 1).to(device)
+            count = 0
+            latent = None
+            for decode in [False, True]:
+                start = time.time()
+
+                while time.time() - start < test_duration:
+                    if decode:
+                        _ = self.model.decode(latent)
+                    else:
+                        mu, logvar = self.model.encode(samples)
+                        latent = vae_reparameterize(mu, logvar)
+                        assert latent.size(0) == batch, f"Expected batch size {batch}, got {latent.shape}"
+
+                    count += batch
+
+                elapsed = time.time() - start
+                data_rate = count * audio_length / elapsed
+                real_time = data_rate / sample_rate
+                operation = "Decoded" if decode else "Encoded"
+                print(f"{operation} {count:,} samples in {elapsed:.2f} sec = {int(data_rate):,} floats/sec = {int(real_time):,} x real-time audio")
+
+            print("\n")
+
+
     def test_all(self):
         names=[]
         losses=[]
@@ -362,7 +397,6 @@ examples = [
 ]
 
 
-#model = "StepWiseMLP"
 g = None
 
 def use_model(model):
@@ -400,6 +434,8 @@ def plot_categories(categories = None):
 
 
 def plot_encodings():
+    g.speed_test()
+
     for type in ["organ", "piano", "epiano", "string", "acoustic guitar", "marimba", "pad", "fm", "voice", ""]:
         g.plot_encodings(type, 1000)
 

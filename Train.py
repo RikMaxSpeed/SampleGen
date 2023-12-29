@@ -135,8 +135,8 @@ last_saved_loss = 4000 # don't bother saving models above this threshold
 
 # Keep track of all the test-losses over multiple runs, so we can learn how to terminate early on poor hyper-parameters.
 all_test_model = None
-all_test_losses = []
-all_test_names = []
+all_train_losses = []
+all_train_names = []
 
 # Compare the training loss to the best we've found, and abort if it's too far off.
 best_train_losses = []
@@ -155,12 +155,12 @@ def get_fail_loss():
     return fail_loss
 
 def reset_train_losses(model_name, force):
-    global all_test_model, all_test_losses, all_test_names, best_train_losses, last_saved_loss
+    global all_test_model, all_train_losses, all_train_names, best_train_losses, last_saved_loss
 
     if force or model_name != all_test_model:
         all_test_model = model_name
-        all_test_names = []
-        all_test_losses = []
+        all_train_names = []
+        all_train_losses = []
         best_train_losses = []
         last_saved_loss = fail_loss // 4
         print("last_saved_loss=", last_saved_loss)
@@ -371,10 +371,10 @@ def train_model(model_name, hyper_params, max_epochs, max_time, max_params, max_
     train_rate = compute_final_learning_rate("Train", train_losses, window)
     test_rate = compute_final_learning_rate("Test", test_losses, window)
 
-    all_test_losses.append(test_losses)
-    all_test_names.append("loss={:.2f}, {}, {}".format(np.min(test_losses), model_text, optimiser_text))
+    all_train_losses.append(train_losses)
+    all_train_names.append("loss={:.2f}, {}, {}".format(np.min(train_losses), model_text, optimiser_text))
     
-    plot_multiple_losses(all_test_losses, all_test_names, 5, model_name) # can have 100+ curves.
+    plot_multiple_losses(all_train_losses, all_train_names, 5, model_name) # can have 100+ curves.
     
     if verbose and is_interactive:
         plot_train_test_losses(train_losses, test_losses, model_name)

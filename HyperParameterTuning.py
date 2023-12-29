@@ -7,7 +7,7 @@ from MakeSTFTs import audio_length
 
 max_params = 0
 tuning_count = 0
-break_on_exceptions = True # True=Debugging, False allows the GPR to continue even if the model blows up (useful for long tuning runs!)
+break_on_exceptions = False # True=Debugging, False allows the GPR to continue even if the model blows up (useful for long tuning runs!)
 max_loss = audio_length # default
 
 hyper_model = "None"
@@ -339,7 +339,7 @@ def full_hypertrain(model_name):
     fine_tune(model_name)
 
 
-def train_topN_hyper_params(topN = 10):
+def train_topN_hyper_params(topN = 5):
     # Train the top N but with longer time spans
     say_out_loud("Training top hyper parameters!")
     reset_train_losses(hyper_model, True)
@@ -430,22 +430,23 @@ def grid_search_AudioConv_AE():
     max_kernel_size = int(sample_rate / middleCHz)
 
     grid_search("AudioConv_AE",
-                [[4, 3, 2], # depth
-                 exponential_interpolation(25, 35, 4, True), # kernel count
-                 exponential_interpolation(max_kernel_size/2, max_kernel_size, 2, True), # kernel size
-                 exponential_interpolation(100, 200, 4, True) # compression
-                ],
+                [[4, 3, 2], # [5, 4, 3, 2] # depth
+                 [30], #exponential_interpolation(25, 35, 2, True), # kernel count
+                 exponential_interpolation(max_kernel_size//16, max_kernel_size, 10, True), # kernel size
+                 #exponential_interpolation(max_kernel_size / 2, max_kernel_size, 2, True),  # kernel size
+                 [80] # compression
+                 ],
                 data_size,
                 max_params)
 
 
 def grid_search_AudioConv_VAE_I():
     grid_search("AudioConv_VAE_Incremental",
-                [exponential_interpolation(6, 20, 5, True), # latent
-                 [3, 4], # layers
-                 exponential_interpolation(1.0, 0.1, 6) # ratio
+                [
+                    [10, 9, 8, 7, 6], #[exponential_interpolation(10, 6, 5, True), # latent
+                    [4, 3], # layers
+                    exponential_interpolation(1.0, 0.1, 6) # ratio
                 ])
-
 
 def hypertrain_MLP_VAE():
     ###############################################################################################
@@ -494,40 +495,23 @@ def hypertrain_AudioConv_VAE():
 
     set_fail_loss(20_000)
     #full_hypertrain("AudioConv_AE")
-    #train_best_params("AudioConv_AE", [4, -6, 2, 20, 66, 40]) # caused MPS to abort??!
-
-    #train_best_params("AudioConv_AE", [4, -6, 2, 20, 117, 54])
+    #full_hypertrain("AudioConv_VAE_Incremental")
 
     #grid_search_AudioConv_AE()
-
-
     #grid_search_AudioConv_VAE_I()
 
-    # for layers in [3, 4, 5, 6, 7]:
-    #     train_best_params("AudioConv_AE", [6, -6, layers, 40, 168, 2])
+    #train_best_params("AudioConv_AE", [4, -6, 3, 25, 186, 50])
 
-    #train_best_params("AudioConv_AE", [4, -6, 4, 28, 84, 131])
-    train_best_params("AudioConv_AE", [4, -6, 3, 35, 168, 100])
-    resume_train("AudioConv_AE")
-
-    #set_fail_loss(audio_length)
-    #full_hypertrain("AudioConv_VAE")
-
-    # set_fail_loss(4_000)
-    # grid_search_AudioConv_VAE_I()
-
-    # full_hypertrain("AudioConv_VAE_Incremental")
-    #train_best_params("AudioConv_VAE_Incremental", [4, -6, 10, 3, 0.25])
-
-    train_best_params("AudioConv_VAE_Incremental", [2, -7, 20, 4, 1.0])
+    train_best_params("AudioConv_VAE_Incremental", [4, -6, 20, 3, 0.1])
     # train_best_params("AudioConv_VAE_Incremental", [4, -6, 8, 3, 0.63])
-    # train_best_params("AudioConv_VAE_Incremental", [4, -6, 20, 4, 1.0])
 
-    # full_hypertrain("AudioConv_AE")
-    # optimise_hyper_parameters("AudioConv_AE")
-    # train_best_params("AudioConv_AE")
+    # full_hypertrain("AudioConv_VAE")
 
-
+from Generate import Sample_Generator, g, use_model
 
 if __name__ == '__main__':
     hypertrain_AudioConv_VAE()
+
+    # g = Sample_Generator("AudioConv_VAE_Incremental")
+    # g.speed_test()
+
