@@ -22,17 +22,19 @@ def weighted_time_reconstruction_loss(inputs, outputs, weight, time_steps=None, 
     batch_size = inputs.size(0)
     sequence_length = inputs.size(-1)
 
+    if time_steps is None:
+        time_steps = sequence_length // 10
+
     if inputs.dim() == 3:
         features = inputs.size(1)
     else:
         features = 1
 
-    assert features <= sequence_length, f"Incorrect order? sequence_length={sequence_length}, features={features}"
+    if features > sequence_length:
+        print(f"Warning: features={features} is greater than sequence_length={sequence_length}")
 
     # Linear interpolation of weights from 'weight' to 1 over N steps
     global cached_weights
-    if time_steps is None:
-        time_steps = sequence_length // 10
 
     cached_key = (sequence_length, time_steps, weight)
     weights = cached_weights.get(cached_key)
@@ -57,7 +59,11 @@ def weighted_time_reconstruction_loss(inputs, outputs, weight, time_steps=None, 
 
     # Scale by the sum of weights
     total_weight = weights.sum()
-    loss = torch.sum(weighted_loss) / (total_weight * batch_size)
+    average_weight = total_weight / sequence_length
+
+    loss = torch.sum(weighted_loss)
+
+    loss /= (batch_size * average_weight)
 
     return torch.clamp(loss, 0)
 
@@ -72,14 +78,18 @@ def reconstruction_loss(inputs, outputs):
 
 # Test the basic loss & weighted loss:
 if __name__ == '__main__':
-    inputs = torch.randn(7, 20, 10)
+    inputs = torch.randn(7, 15, 30)
     outputs = inputs + torch.randn(inputs.shape)*0.1
-    loss1 = basic_reconstruction_loss(inputs, outputs).item()
-    loss2 = weighted_time_reconstruction_loss(inputs, outputs, 1).item()
-    loss3 = weighted_time_reconstruction_loss(inputs, outputs, 10, verbose=True).item()
-    print(f"base: {loss1:.2f}, 1-weight: {loss2:.2f}, 10-weight: {loss3:.2f}")
-    assert(abs(loss1 - loss2) < 1e-5)
-    assert(abs(loss1 - loss3) < 0.7) # we expect these two to be commensurate
+    time_steps = 5
+    basic = basic_reconstruction_loss(inputs, outputs).item()
+    loss1 = weighted_time_reconstruction_loss(inputs, outputs, 1, time_steps).item()
+    print(f"basic={basic:.2f}, loss1={loss1:.2f}")
+    assert abs(basic - loss1) < 1e-5
+
+    lossW = weighted_time_reconstruction_loss(inputs, outputs, 10, time_steps, verbose=True).item()
+    delta = basic/lossW - 1
+    print(f"weighted loss={lossW:.2f}, vs basic={basic:.2f}, difference={100*delta:.2f}%")
+    assert abs(delta) < 0.05 # we expect these two to be commensurate
 
 
 def kl_divergence(mu, logvar):

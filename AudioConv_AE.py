@@ -38,24 +38,33 @@ if __name__ == '__main__' and False: # no longer required
 
 class AudioConv_AE(nn.Module):  # no VAE
     @staticmethod
-    def compute_kernel_sizes_and_strides(audio_length, depth, kernel_count, kernel_size, stride):
+    def compute_kernel_sizes_and_strides(audio_length, depth, kernel_count, kernel_size, target_compression):
         failed = [], 0, 0
 
-        assert stride >= 2, f"stride must be >= 2, got {stride}"
-        stride_ratio = stride / kernel_size
-        print(f"stride_ratio={stride_ratio:.2f}")
+        # Here we approximate the stride required at each layer in order to achieve the target comopression ratio
+        target = kernel_count * target_compression
+        ratio = target**(1/depth)
+        deeper_stride = int(ratio) # round down
+        initial_stride = int(target / (deeper_stride ** (depth - 1)) + 0.5) # round up
+        final_compression = initial_stride * (deeper_stride ** (depth - 1))
+        #print(f"kernels={kernel_count}, target compression={target_compression} --> ratio={ratio:.2f}, stride={initial_stride} then {deeper_stride}, final compression={final_compression/kernel_count}")
 
         kernels = []
         strides=[]
         length = audio_length
         min_length = 4
         for i in range(depth):
+            stride = initial_stride if i == 0 else deeper_stride
+            if stride < 2:
+                print(f"stride={stride} must be greater than 2.")
+                return failed
+
             if stride > kernel_size:
-                print(f"stride (={stride}) must be less than kernel size (={kernel_size}).")
+                print(f"stride={stride} must be less than kernel size={kernel_size}.")
                 return failed
 
             if kernel_size >= audio_length:
-                print(f"kernel size (={kernel_size}) must be less than audio length (={audio_length}).")
+                print(f"kernel size={kernel_size} must be less than audio length={audio_length}.")
                 return failed
 
             next_length = conv1d_output_size(length, kernel_size, stride)
@@ -71,9 +80,7 @@ class AudioConv_AE(nn.Module):  # no VAE
 
             # Adjust the kernel_size and stride:
             kernel_size = kernel_size // 2
-            kernel_size = max(2, kernel_size)
-            stride = int(kernel_size * stride_ratio)
-            stride = max(2, stride)
+            kernel_size = max(2, kernel_size) # we shouldn't hit this
 
         assert len(kernels) == depth
         assert len(strides) == depth
@@ -82,8 +89,8 @@ class AudioConv_AE(nn.Module):  # no VAE
 
 
     @staticmethod
-    def approx_trainable_parameters(audio_length, depth, kernel_count, kernel_size, stride):
-        kernels, strides, final_length = AudioConv_AE.compute_kernel_sizes_and_strides(audio_length, depth, kernel_count, kernel_size, stride)
+    def approx_trainable_parameters(audio_length, depth, kernel_count, kernel_size, compression):
+        kernels, strides, final_length = AudioConv_AE.compute_kernel_sizes_and_strides(audio_length, depth, kernel_count, kernel_size, compression)
 
         encode = 0
         decode = 0
@@ -123,7 +130,7 @@ class AudioConv_AE(nn.Module):  # no VAE
 
         return nn.Sequential(*layers)
 
-    def __init__(self, audio_length, depth, kernel_count, kernel_size, stride):
+    def __init__(self, audio_length, depth, kernel_count, kernel_size, compression):
         super(AudioConv_AE, self).__init__()
 
         self.audio_length = audio_length
@@ -131,7 +138,7 @@ class AudioConv_AE(nn.Module):  # no VAE
 
         kernels, strides, final_length = AudioConv_AE.compute_kernel_sizes_and_strides(audio_length, depth,
                                                                                        kernel_count, kernel_size,
-                                                                                       stride)
+                                                                                       compression)
 
         if len(kernels) != depth:
             print(f"AudioConv_AE: only has depth={len(kernels)} instead of {depth}")
@@ -145,13 +152,13 @@ class AudioConv_AE(nn.Module):  # no VAE
 
         try:
             self.encoded_shape, self.encoded_size = model_output_shape_and_size(self.encoder, [audio_length])
-            print(f"encoded shape={self.encoded_shape}, size={self.encoded_size}")
+            print(f"\tencoded shape={self.encoded_shape}, size={self.encoded_size}")
             assert self.encoded_shape[0] == self.kernel_count
             assert self.encoded_shape[1] == self.expected_length
             assert self.encoded_size == self.expected_length * self.kernel_count, f"expected encoded_size={self.expected_length * self.kernel_count} but got {encoded_size}"
 
             decode_shape, decode_size = model_output_shape_and_size(self.decoder, self.encoded_shape)
-            print(f"decoded shape={decode_shape}, size={decode_size}")
+            print(f"\tdecoded shape={decode_shape}, size={decode_size}")
         except Exception as e:
             print(f"Model doesn't work: {e}")
             self.compression = 0
@@ -221,8 +228,8 @@ class AudioConv_AE(nn.Module):  # no VAE
 
 
 if __name__ == "__main__":
-    # audio_length, depth, kernel_count, kernel_size, stride
-    model = AudioConv_AE(85_000, 2, 25, 80, 70)
+    # audio_length, depth, kernel_count, kernel_size, compression
+    model = AudioConv_AE(85_000, 3, 25, 80, 100)
     model.float()
     model.to(device)
     audio_length = 85_000

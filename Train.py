@@ -362,11 +362,11 @@ def train_model(model_name, hyper_params, max_epochs, max_time, max_params, max_
     elapsed = time.time() - start
     epochs  = len(train_losses)
     
-    print("Finished Training after {} epochs in {:.1f} sec ({:.2f} sec/epoch), sample duration={:.1f} sec, test loss={:.2f}, train loss={:.2f}, overfit={:.2f}"\
+    print("*** Finished Training after {} epochs in {:.1f} sec ({:.2f} sec/epoch), sample duration={:.1f} sec, test loss={:.2f}, train loss={:.2f}, overfit={:.2f}"\
     .format(epochs, elapsed, elapsed/epochs, sample_duration, testL, trainL, testL/trainL))
 
-    if elapsed > 300: # don't blab about failed attempts
-        say_out_loud(f"Training stopped at epoch {len(train_losses)}, after {elapsed:.1f} seconds, loss {np.min(train_losses):.2f}")
+    if elapsed > 60: # don't blab about aborted attempts
+        say_out_loud(f"final loss = {trainL:.0f}")
 
     train_rate = compute_final_learning_rate("Train", train_losses, window)
     test_rate = compute_final_learning_rate("Test", test_losses, window)

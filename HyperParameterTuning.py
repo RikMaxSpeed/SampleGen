@@ -247,7 +247,7 @@ def optimise_hyper_parameters(model_name):
             search_space.append(Integer( 2,     6,     'uniform',  name='layers'))
             search_space.append(Integer(20,    60,     'log-uniform',  name='kernels'))
             search_space.append(Integer(20,    max_kernel_size, 'log-uniform',  name='kernel_size'))
-            search_space.append(Integer( 2,    60, 'log-uniform',  name='stride'))
+            search_space.append(Integer( 100,    300, 'log-uniform',  name='compression'))
 
         case "AudioConv_VAE_Incremental":
             search_space.append(Integer(5, 20, 'uniform', name='VAE latent'))
@@ -288,7 +288,6 @@ def fine_tune(model_name):
 # Load an existing model and train it normally
 def resume_train(model_name):
     model_type, params, file_name = get_best_configuration_for_model(model_name)
-    params[0] = 4 # reset the batch size as it may be 0 due to the fine tuning
     train_best_params(model_name, params, finest=True)
 
 
@@ -324,8 +323,8 @@ def train_best_params(model_name, params = None, finest = False):
 
      # This does improve the final accuracy, but it's very slow.
     if finest:
-        params[0] =  0 # override the batch-size
-        params[1] = -6 # override the learning rate
+        params[0] =  2 # override the batch-size
+        params[1] = -7 # override the learning rate
         #max_time = hour
 
     #set_display_hiddens(True) # Displays the internal auto-encoder output
@@ -431,10 +430,10 @@ def grid_search_AudioConv_AE():
     max_kernel_size = int(sample_rate / middleCHz)
 
     grid_search("AudioConv_AE",
-                [[2, 3, 4, 5], # depth
-                 exponential_interpolation(20, 60, 4, True), # kernels
-                 exponential_interpolation(40, max_kernel_size, 5, True), # kernel size
-                 exponential_interpolation(max_kernel_size//16, max_kernel_size, 6, True) # stride
+                [[4, 3, 2], # depth
+                 exponential_interpolation(25, 35, 4, True), # kernel count
+                 exponential_interpolation(max_kernel_size/2, max_kernel_size, 2, True), # kernel size
+                 exponential_interpolation(100, 200, 4, True) # compression
                 ],
                 data_size,
                 max_params)
@@ -499,7 +498,7 @@ def hypertrain_AudioConv_VAE():
 
     #train_best_params("AudioConv_AE", [4, -6, 2, 20, 117, 54])
 
-    grid_search_AudioConv_AE()
+    #grid_search_AudioConv_AE()
 
 
     #grid_search_AudioConv_VAE_I()
@@ -507,7 +506,9 @@ def hypertrain_AudioConv_VAE():
     # for layers in [3, 4, 5, 6, 7]:
     #     train_best_params("AudioConv_AE", [6, -6, layers, 40, 168, 2])
 
-    train_best_params("AudioConv_AE", [2, -7, 3, 20, 117, 10])
+    #train_best_params("AudioConv_AE", [4, -6, 4, 28, 84, 131])
+    train_best_params("AudioConv_AE", [4, -6, 3, 35, 168, 100])
+    resume_train("AudioConv_AE")
 
     #set_fail_loss(audio_length)
     #full_hypertrain("AudioConv_VAE")
@@ -518,7 +519,7 @@ def hypertrain_AudioConv_VAE():
     # full_hypertrain("AudioConv_VAE_Incremental")
     #train_best_params("AudioConv_VAE_Incremental", [4, -6, 10, 3, 0.25])
 
-    train_best_params("AudioConv_VAE_Incremental", [2, -7, 20, 3, 1.0])
+    train_best_params("AudioConv_VAE_Incremental", [2, -7, 20, 4, 1.0])
     # train_best_params("AudioConv_VAE_Incremental", [4, -6, 8, 3, 0.63])
     # train_best_params("AudioConv_VAE_Incremental", [4, -6, 20, 4, 1.0])
 
