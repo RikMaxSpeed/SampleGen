@@ -108,7 +108,7 @@ def vae_loss_function(inputs, outputs, mu, logvar):
 
     error  = reconstruction_loss(inputs, outputs)
     kl_div = kl_divergence(mu, logvar) / inputs.size(0)
-    loss = error + 100 * kl_div
+    loss = error + kl_div
 
     if loss < 0:
         print(f"Negative loss!! loss={loss} (reconstruction={error}, kl_divergence={kl_div}) in vae_loss_function")

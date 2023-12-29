@@ -73,12 +73,15 @@ def split_dataset(dataset, ratio):
 
 last_progress = time.time()
 progress_seconds = 5
+last_index = 0
 
 def stop_condition(train_losses, test_losses, window, min_change, max_overfit, total, verbose = False):
-    global last_progress, progress_seconds
-    
+    global last_progress, progress_seconds, last_index
+
+    last_index = min(last_index, len(train_losses)-1)
+
     def delta(losses):
-        return 100 * (losses[-1]/losses[-2] - 1) if len(losses) > 1 else 0
+        return 100 * (losses[-1]/losses[last_index] - 1)
         
     def loss_and_change(name, losses):
         old = np.mean(losses[-2*window:-window])
@@ -98,6 +101,8 @@ def stop_condition(train_losses, test_losses, window, min_change, max_overfit, t
         last_progress = now
         print("total={:.1f} sec, epoch={} ({:.1f} sec/epoch), train={:.2f} ({:.2f}%), test={:.2f} ({:.2f}%), overfit={:.2f}"\
         .format(total, epochs, total/epochs, train_losses[-1], delta(train_losses), test_losses[-1], delta(test_losses), test_losses[-1]/train_losses[-1]))
+
+        last_index = len(train_losses) - 1
         
     if len(test_losses) < 2*window: # Too few epochs
         return False

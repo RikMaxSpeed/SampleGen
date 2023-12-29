@@ -9,8 +9,8 @@ from VariationalAutoEncoder import reconstruction_loss, basic_reconstruction_los
 from ModelUtils import interpolate_layer_sizes, count_trainable_parameters
 from Device import device
 
-
-# Amazingly, it turns out we're better off using the simple MSE rather than comparing STFTs!!!
+# Loss function using STFTs:
+# However (amazingly) it turns out we're better off using the simple MSE rather than comparing STFTs!!!
 def torch_stft(sample, fft_size = 1024): # verified that 256 is the fastest on my Mac. We're compromising on frequency resolution vs time though...
     return torch.stft(sample.cpu(), n_fft=fft_size, return_complex=True).abs().to(device)
 
@@ -39,20 +39,44 @@ if __name__ == '__main__' and False: # no longer required
 class AudioConv_AE(nn.Module):  # no VAE
     @staticmethod
     def compute_kernel_sizes_and_strides(audio_length, depth, kernel_count, kernel_size, stride):
+        failed = [], 0, 0
+
         assert stride >= 2, f"stride must be >= 2, got {stride}"
+        stride_ratio = stride / kernel_size
+        print(f"stride_ratio={stride_ratio:.2f}")
+
         kernels = []
         strides=[]
         length = audio_length
         min_length = 4
         for i in range(depth):
+            if stride > kernel_size:
+                print(f"stride (={stride}) must be less than kernel size (={kernel_size}).")
+                return failed
+
+            if kernel_size >= audio_length:
+                print(f"kernel size (={kernel_size}) must be less than audio length (={audio_length}).")
+                return failed
+
             next_length = conv1d_output_size(length, kernel_size, stride)
 
             if next_length < min_length: # over-compressing
-                break
+                print(f"length={next_length}, must be at least {min_length}.")
+                return failed
 
             kernels.append(kernel_size)
             strides.append(stride)
+
             length = next_length
+
+            # Adjust the kernel_size and stride:
+            kernel_size = kernel_size // 2
+            kernel_size = max(2, kernel_size)
+            stride = int(kernel_size * stride_ratio)
+            stride = max(2, stride)
+
+        assert len(kernels) == depth
+        assert len(strides) == depth
 
         return kernels, strides, length
 

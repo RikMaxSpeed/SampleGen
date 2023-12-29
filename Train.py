@@ -131,7 +131,7 @@ def encode_outer_layer(model, name, samples):
 
 
 # Hyper-parameter optimisation
-last_saved_loss = 200 # don't bother saving models above this threshold
+last_saved_loss = 4000 # don't bother saving models above this threshold
 
 # Keep track of all the test-losses over multiple runs, so we can learn how to terminate early on poor hyper-parameters.
 all_test_model = None
@@ -294,8 +294,8 @@ def train_model(model_name, hyper_params, max_epochs, max_time, max_params, max_
             
             # Save the model:
             file_name = "Models/" + model_name # keep over-writing the same file as the loss improves
-            print(f"\n*** Best! loss={last_saved_loss:.2f}")
-            print(f"{model_text}\n{optimiser_text}\nhyper-parameters: {hyper_params}")
+            print(f"\n*** Best! loss={last_saved_loss:.2f}, params={hyper_params}")
+            print(f"\t{model_text}\n\t{optimiser_text}")
             torch.save(model.state_dict(), file_name + ".wab")
 
             say_out_loud(f"Best is {last_saved_loss:.2f}".replace(".", " spot "))
