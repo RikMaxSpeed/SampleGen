@@ -1,9 +1,9 @@
 # Use a GPR to adjust the hpyer-parameters.
 # The best models are saved to disk.
-from appscript.terminology import params
 from skopt import gp_minimize
 from skopt.space import Integer, Real, Categorical
 from MakeSTFTs import audio_length
+import time
 
 max_params = 0
 tuning_count = 0
@@ -16,7 +16,7 @@ hyper_names  = []
 hyper_params = []
 max_hyper_runs = 80  # it usually gets stuck at some local minimum well before this.
 hyper_stfts = False
-
+hyper_start = time.time()
 
 def reset_hyper_training(model_name):
     global hyper_model, hyper_stfts, hyper_losses, hyper_names, hyper_params
@@ -26,6 +26,7 @@ def reset_hyper_training(model_name):
     hyper_names = []
     hyper_params = []
     reset_train_losses(model_name, True)
+    hyper_start = time.time()
 
     if is_audio(model_name):
         set_fail_loss(15000)
@@ -106,6 +107,9 @@ def evaluate_model(params):
         hyper_params.append(params)
 
         display_best_hyper_parameters()
+
+    elapsed = time.time() - hyper_start
+    print(f"Hyper-tuning: total {count} iterations in time={int(elapsed):,} sec = {int(elapsed/count):,} sec/iteration")
 
     return final_loss
 
@@ -245,9 +249,9 @@ def optimise_hyper_parameters(model_name):
             # audio_length, depth, kernel_count, kernel_size, stride
             max_kernel_size = int(sample_rate / middleCHz)
             search_space.append(Integer( 2,     7,     'uniform',  name='layers'))
-            search_space.append(Integer(20,    40,     'log-uniform',  name='kernels'))
+            search_space.append(Integer(20,    80,     'log-uniform',  name='kernels'))
             search_space.append(Integer(20,    max_kernel_size, 'log-uniform',  name='kernel_size'))
-            search_space.append(Integer( 30,    100, 'log-uniform',  name='compression'))
+            search_space.append(Integer( 30,    80, 'log-uniform',  name='compression'))
 
         case "AudioConv_VAE_Incremental":
             search_space.append(Integer(5, 20, 'uniform', name='VAE latent'))
@@ -494,7 +498,8 @@ def hypertrain_AudioConv_VAE():
     # Audio Convolution Auto-Encoder
 
     set_fail_loss(20_000)
-    full_hypertrain("AudioConv_AE")
+    #full_hypertrain("AudioConv_AE") # MPS crashes after a while :(
+    train_best_params("AudioConv_AE", [2, -4, 4, 40, 34, 30])
     full_hypertrain("AudioConv_VAE_Incremental")
 
     #grid_search_AudioConv_AE()
