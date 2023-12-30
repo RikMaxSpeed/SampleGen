@@ -126,12 +126,20 @@ class AudioConv_AE(nn.Module):  # no VAE
         if is_decoder:
             layers.reverse()
 
+        if False:
+            layers2 = []
+            for l in layers:
+                layers2.append(l)
+                layers2.append(nn.LeakyReLU())
+            layers = layers2
+
         # Add a tanh to the encoder so the VAE only sees numbers between [-1, 1].
         # And similarly to the decoder so the audio doesn't saturate (although this could behave like a compressor)
         #layers.append(torch.nn.Tanh())
-        if is_decoder:
-            layers.append(torch.nn.Hardtanh()) # same as clamp(-1, 1)
 
+        # encoder: needs this otherwise the VAE sees crazy large values.
+        # decoder: valid audio is between [-1, 1]
+        layers.append(torch.nn.Hardtanh()) # same as clamp(-1, 1)
 
         return nn.Sequential(*layers)
 
@@ -154,7 +162,7 @@ class AudioConv_AE(nn.Module):  # no VAE
         for i in range(len(kernels)):
             c = length / lengths[i]
             length = lengths[i]
-            print(f"\tlayer {i+1}: kernel={kernels[i]:>3}, stride={strides[i]:>2}, length={lengths[i]:>4}, compression={c:>6.1f}x")
+            print(f"\tlayer {i+1}: kernel={kernels[i]:>3}, stride={strides[i]:>2}, length={lengths[i]:>5,}, compression={c:>6.1f}x")
 
         self.expected_length = lengths[-1]
 

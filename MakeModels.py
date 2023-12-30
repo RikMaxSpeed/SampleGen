@@ -52,8 +52,8 @@ def make_RNN_VAE(model_type, model_params, max_params):
     
     return model, model_text, approx_size, vae_size
 
-min_compression =  49 # Larger values help the VAE?
-max_compression = 10000 # or the auto-encoder won't work
+min_compression = 20  # Larger values help the VAE?
+max_compression = 200 # the auto-encoder fails for huge compression ratios.
 
 def make_Conv2D_VAE(model_type, model_params, max_params):
     layer_count, kernel_count, kernel_size, latent_size, vae_depth, vae_ratio = model_params

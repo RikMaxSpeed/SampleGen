@@ -235,7 +235,7 @@ def train_model(model_name, hyper_params, max_epochs, max_time, max_params, max_
         window = 10
 
     if max_epochs >= 1000:
-        window = 15 # allow the model longer to recover from any exploratory excursions.
+        window = 50 # allow the model longer to recover from any exploratory excursions.
         
     # Plot a graph of the loss vs epoch at regular intervals
     graph_interval = 5
@@ -251,7 +251,7 @@ def train_model(model_name, hyper_params, max_epochs, max_time, max_params, max_
             # Forward pass
             loss, _ = active_model.forward_loss(inputs)
             
-            numeric_loss = loss.item() # loss is a tensor
+            numeric_loss = loss.detach().item() # loss is a tensor
             
             if np.isnan(numeric_loss) or numeric_loss > max_loss:
                 print(f"*** Aborting: model exploded! loss={loss:.0f} vs max={max_loss:,}")
@@ -273,7 +273,7 @@ def train_model(model_name, hyper_params, max_epochs, max_time, max_params, max_
             pct_error = 100 * (train_loss/exact_train_loss - 1)
             print(f"training loss: exact={exact_train_loss:.2f}, approx={train_loss:.2f}, diff={pct_error:.2f}%")
             train_loss = exact_train_loss
-            
+
         test_loss = compute_average_loss(active_model, test_dataset, batch_size) # this is an acceptable overhead if the test set is several times smaller than the train set.
         train_losses.append(train_loss)
         test_losses.append(test_loss)
@@ -321,7 +321,7 @@ def train_model(model_name, hyper_params, max_epochs, max_time, max_params, max_
 
         if verbose and now - lastGraph > graph_interval and len(train_losses) > 1:
             if is_interactive:
-                plot_train_test_losses(train_losses, test_losses, model_name)
+                plot_train_test_losses(train_losses, test_losses, model_name + f" {model_params}")
             lastGraph = now
             graph_interval = int(min(hour, 1.5 * graph_interval)) # less & less frequently!
 
@@ -377,7 +377,7 @@ def train_model(model_name, hyper_params, max_epochs, max_time, max_params, max_
     plot_multiple_losses(all_train_losses, all_train_names, 5, model_name) # can have 100+ curves.
     
     if verbose and is_interactive:
-        plot_train_test_losses(train_losses, test_losses, model_name)
+        plot_train_test_losses(train_losses, test_losses, model_name + f" {model_params}")
 
 
 

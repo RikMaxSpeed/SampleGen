@@ -122,6 +122,7 @@ def vae_loss_function(inputs, outputs, mu, logvar):
     assert kl_div >= 0, f"negative kl_div={kl_div}"
 
     loss = distance + kl_div
+    #print(f"vae_loss={loss:.2f}, distance={distance:.2f}, kl_div={kl_div:.2f}")
 
     # We seem to get into situations where the reconstruction loss and the KL loss are fighting each other :(
     # Try to focus the optimiser on whichever loss is largest:
@@ -134,10 +135,6 @@ def vae_loss_function(inputs, outputs, mu, logvar):
 
     return loss
 
-
-
-    return loss
-    
 
 def vae_reparameterize(mu, logvar):
     std = torch.exp(0.5 * logvar)
