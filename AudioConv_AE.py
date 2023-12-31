@@ -50,7 +50,7 @@ class AudioConv_AE(nn.Module):  # no VAE
         strides=[]
         lengths = []
         length = audio_length
-        min_length = 4
+        min_length = 1 # this is a bit silly, but let's see what happens...
         for i in range(depth):
             stride = int(ratio ** (depth - i) + 0.5)
             stride = max(stride, 2)
@@ -75,8 +75,8 @@ class AudioConv_AE(nn.Module):  # no VAE
 
             next_length = conv1d_output_size(length, kernel, stride)
 
-            if next_length < min_length: # over-compressing
-                print(f"length={next_length}, must be at least {min_length}.")
+            if i+1 < depth and next_length < min_length: # over-compressing
+                print(f"output length={next_length}, must be at least {min_length}.")
                 return failed
 
             kernels.append(kernel)

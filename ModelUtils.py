@@ -11,6 +11,7 @@ import numpy as np
 
 
 default_activation_function = nn.ReLU()
+#default_activation_function = nn.LeakyReLU()
 #default_activation_function = nn.GELU()
 
 

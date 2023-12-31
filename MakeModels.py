@@ -1,7 +1,3 @@
-import Conv2D_AE
-from Debug import *
-from MakeSTFTs import *
-from ModelUtils import *
 from STFT_VAE import *
 from MLP_AE import *
 from RNN_AE import *
@@ -52,8 +48,8 @@ def make_RNN_VAE(model_type, model_params, max_params):
     
     return model, model_text, approx_size, vae_size
 
-min_compression = 20  # Larger values help the VAE?
-max_compression = 200 # the auto-encoder fails for huge compression ratios.
+min_compression = 20  # Larger values may help the VAE
+max_compression = 2000 # The auto-encoder may fail for huge compression ratios
 
 def make_Conv2D_VAE(model_type, model_params, max_params):
     layer_count, kernel_count, kernel_size, latent_size, vae_depth, vae_ratio = model_params
@@ -105,6 +101,8 @@ def make_AudioConv_VAE(model_type, model_params, max_params):
 
     vae_sizes[0] = list(audio_hidden_shape) # maintain the 2D grid shape
     model = CombinedVAE(audio_conv, vae_sizes)
+
+    model.vae.enable_variational(False) # very hacky
 
     return model, model_text, approx_size, vae_size
 
@@ -341,7 +339,7 @@ def make_model(model_type, model_params, max_params, verbose):
     size_error = approx_size / size  - 1
     if np.abs(size_error) > 0.01:
         print(f"*** Inaccurate approximate size={approx_size:,} vs actual size={size:,}, error={100*size_error:.2f}%")
-    else:
+    elif size != approx_size:
         print(f"real size={size:,} vs estimated={approx_size:,}, error={100 * size_error:.3f}%")
 
     # Too big?

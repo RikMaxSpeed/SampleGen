@@ -243,13 +243,12 @@ def plot_loss(losses, name=None, colour=None, linewidth = 1):
 
     epochs = 1 + np.array(range(len(losses)))
     line, = plt.plot(epochs, losses, label=name, color=colour, linewidth=linewidth)
-    
-    i = np.argmin(losses)
-    min_loss = losses[i]
-    
-    plt.scatter(i+1, min_loss, c=colour, s=8*linewidth)
-    if name is not None:
-        plt.text(i+1, min_loss, f"{min_loss:.2f}", color = colour)
+
+    for i in [np.argmin(losses), np.argmax(losses)]:
+        loss = losses[i]
+        plt.scatter(i+1, loss, c=colour, s=8*linewidth)
+        if name is not None:
+            plt.text(i+1, loss, f"{loss:.2f}", color = colour)
 
     return line
 
@@ -270,13 +269,13 @@ def plot_train_test_losses(train_losses, test_losses, title):
 
     # Create a second y-axis for the overfit ratio
     ax2 = plt.gca().twinx()
+    ax2.set_ylabel('Overfit Ratio')
     overfit_ratio = [test / train for train, test in zip(train_losses, test_losses)]
     line3, = ax2.plot(1 + np.array(range(len(overfit_ratio))), overfit_ratio, label='Overfit', color='tab:blue', linestyle='--')
-    i = np.argmax(overfit_ratio)
-    max_overfit = overfit_ratio[i]
-    ax2.scatter(i + 1, max_overfit, c='tab:blue', s=8)
-    ax2.text(i + 1, max_overfit, f"{max_overfit:.2f}", color='tab:blue')
-    ax2.set_ylabel('Overfit Ratio')
+    for i in [np.argmin(overfit_ratio), np.argmax(overfit_ratio)]:
+        overfit = overfit_ratio[i]
+        ax2.scatter(i + 1, overfit, c='tab:blue', s=8)
+        ax2.text(i + 1, overfit, f"{overfit:.2f}", color='tab:blue')
 
     # Set the limits for the overfit axis
     ax2.set_ylim([0.5, max(max(overfit_ratio), 1.5)])
@@ -447,7 +446,7 @@ def hide_sub_plot(i):
     ax.set_frame_on(False)  # Remove frame around the image
 
 
-def display_image_grid(images, title, colour_map = 'gray', min_width=15):
+def display_image_grid(images, title, colour_map = 'gray', min_width=10):
     count = len(images)
     cols = int(np.sqrt(count))
     rows = count // cols
@@ -457,7 +456,14 @@ def display_image_grid(images, title, colour_map = 'gray', min_width=15):
     # Ensure the entire grid is at least `min_width` units wide
     iw = images[0].size(0)
     ih = images[0].size(1)
-    
+    #print(f"iw={iw}, ih={ih}")
+
+    if ih*2 < iw: # transpose
+        title += " (transposed)"
+        images = images.transpose(2, 1)
+        iw = images[0].size(0)
+        ih = images[0].size(1)
+
     fig_width = max(min_width, cols)
     fig_height = (fig_width / cols) * rows * iw / ih  # Scale height to maintain square pixels
 

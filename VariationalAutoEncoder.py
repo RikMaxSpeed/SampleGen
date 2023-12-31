@@ -5,17 +5,17 @@ import copy
 
 from ModelUtils import *
 
-
+percentage = 100
 
 # Loss functions
 def basic_reconstruction_loss(inputs, outputs):
-    return F.mse_loss(inputs, outputs, reduction='sum') / inputs.size(0) # normalise
+    return percentage * F.mse_loss(inputs, outputs)
 
 
 cached_weights = {}
 
 # Weight the samples over time: it's critical to get start of the sound correct.
-def weighted_time_reconstruction_loss(inputs, outputs, weight, time_ratio=0.15, verbose=True):
+def weighted_time_reconstruction_loss(inputs, outputs, weight, time_ratio=0.15, verbose=False):
     assert inputs.dim() >= 2, f"Expected inputs to be greater than 2, not {inputs.dim()}"
     assert weight >= 1, f"Expected weight to be greater than 1, not {weight}"
     assert time_ratio >= 0 and time_ratio <= 1, f"Expected time_ratio to be between 0 and 1, not {time_ratio}"
@@ -30,8 +30,8 @@ def weighted_time_reconstruction_loss(inputs, outputs, weight, time_ratio=0.15, 
     else:
         features = 1
 
-    if features > sequence_length:
-        print(f"Warning: features={features} is greater than sequence_length={sequence_length}")
+    # if features > sequence_length:
+    #     print(f"Warning: features={features} is greater than sequence_length={sequence_length}")
 
     # Linear interpolation of weights from 'weight' to 1 over N steps
     global cached_weights
@@ -63,29 +63,30 @@ def weighted_time_reconstruction_loss(inputs, outputs, weight, time_ratio=0.15, 
 
     loss = torch.sum(weighted_loss)
 
-    loss /= (batch_size * average_weight)
+    loss /= (batch_size * average_weight * sequence_length * features)
 
-    return torch.clamp(loss, 0)
+    return percentage * torch.clamp(loss, 0)
 
 
 
 def reconstruction_loss(inputs, outputs):
     assert inputs.shape == outputs.shape, f"reconstruction_loss: shapes don't match, inputs={inputs.shape}, outputs={outputs.shape}"
-    #return basic_reconstruction_loss(inputs, outputs)
+    return basic_reconstruction_loss(inputs, outputs)
 
+    # this does work too.
     return weighted_time_reconstruction_loss(inputs, outputs, weight=10)
 
 # Test the basic loss & weighted loss:
 if __name__ == '__main__':
-    inputs = torch.randn(7, 15, 30)
-    outputs = inputs + torch.randn(inputs.shape)*0.1
-    time_steps = 5
+    inputs = torch.randn(7, 100, 1000)
+    outputs = inputs + (2 * torch.randn(inputs.shape) - 1) * 0.4
+    time_steps = 1/3
     basic = basic_reconstruction_loss(inputs, outputs).item()
     loss1 = weighted_time_reconstruction_loss(inputs, outputs, 1, time_steps).item()
     print(f"basic={basic:.2f}, loss1={loss1:.2f}")
-    assert abs(basic - loss1) < 1e-5
+    assert abs(basic - loss1) < 1e-4
 
-    lossW = weighted_time_reconstruction_loss(inputs, outputs, 10, time_steps, verbose=True).item()
+    lossW = weighted_time_reconstruction_loss(inputs, outputs, 10, time_steps).item()
     delta = basic/lossW - 1
     print(f"weighted loss={lossW:.2f}, vs basic={basic:.2f}, difference={100*delta:.2f}%")
     assert abs(delta) < 0.05 # we expect these two to be commensurate
@@ -95,25 +96,7 @@ def kl_divergence(mu, logvar):
     # see https://stackoverflow.com/questions/74865368/kl-divergence-loss-equation
     return -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
 
-
-def vae_selective_loss(inputs, outputs, mu, logvar):
-    # Selective loss
-    batch = inputs.size(0)
-
-    assert outputs.size(0) == batch, f"batch={batch} but outputs.size(0)={outputs.size(0)}"
-    assert mu.size(0) == batch, f"batch={batch} but mu.size(0)={mu.size(0)}"
-    assert logvar.size(0) == batch, f"batch={batch} but logvar.size(0)={logvar.size(0)}"
-
-    loss = (inputs - outputs) ** 2
-    loss = torch.sum(loss, dim=tuple(range(1, loss.dim())))
-    threshold = torch.quantile(loss, 0.75)
-    mask = loss >= threshold
-    loss = loss[mask].sum() - 0.5 * sum(1 + logvar[mask,:] - mu[mask,:] ** 2 - logvar[mask,:].exp())
-    return loss.sum() / batch
-
-
-def vae_loss_function(inputs, outputs, mu, logvar):
-    #return vae_selective_loss(inputs, outputs, mu, logvar) # Not convinced this yields better results :(
+def _vae_loss_function(inputs, outputs, mu, logvar):
 
     distance  = reconstruction_loss(inputs, outputs)
     assert distance >= 0, f"negative distance={distance}"
@@ -122,7 +105,9 @@ def vae_loss_function(inputs, outputs, mu, logvar):
     assert kl_div >= 0, f"negative kl_div={kl_div}"
 
     loss = distance + kl_div
-    #print(f"vae_loss={loss:.2f}, distance={distance:.2f}, kl_div={kl_div:.2f}")
+
+    if np.random.random() < 1e-2:
+        print(f"vae_loss={loss:.2f}, distance={distance:.2f}, kl_div={kl_div:.2f}")
 
     # We seem to get into situations where the reconstruction loss and the KL loss are fighting each other :(
     # Try to focus the optimiser on whichever loss is largest:
@@ -176,6 +161,12 @@ class VariationalAutoEncoder(nn.Module):
         self.decoder_layers = sequential_fully_connected(d_sizes, None)
         self.compression = sizes[0]/sizes[-1]
         print(f"VariationalAutoEncoder: layers={sizes}, parameters={count_trainable_parameters(self):,}, compression={self.compression:.1f}")
+        self.enable_variational(True)
+
+    def enable_variational(self, enable=True):
+        self.is_variational = enable
+        if not self.is_variational:
+            print("\n*** VAE is DISABLED! ***\n")
 
     def encode(self, x):
         assert x[0].shape == self.input_shape, f"VAE.encode expected shape={self.input_shape} but got {x[0].shape}"
@@ -185,7 +176,12 @@ class VariationalAutoEncoder(nn.Module):
             x = self.encoder_layers(x)
             
         mu = self.fc_mu(x)
-        logvar = self.fc_logvar(x)
+
+        if self.is_variational:
+            logvar = self.fc_logvar(x)
+        else:
+            mu = nn.Tanh()(mu)
+            logvar = torch.zeros(mu.shape).to(device)
         
         return mu, logvar
 
@@ -202,15 +198,27 @@ class VariationalAutoEncoder(nn.Module):
 
     def forward(self, x):
         mu, logvar = self.encode(x)
-        z = vae_reparameterize(mu, logvar)
-        
+
+        if self.is_variational:
+            z = vae_reparameterize(mu, logvar)
+        else:
+            z = mu
+
         return self.decode(z), mu, logvar
 
     # For compatibility with the combined VAE
     def forward_loss(self, inputs):
         outputs, mus, logvars = self.forward(inputs)
-        loss = vae_loss_function(inputs, outputs, mus, logvars)
+
+        loss = self.loss_function(inputs, outputs, mus, logvars)
+
         return loss, outputs
+
+    def loss_function(self, inputs, outputs, mus, logvars):
+        if self.is_variational:
+            return _vae_loss_function(inputs, outputs, mus, logvars)
+        else:
+            return reconstruction_loss(inputs, outputs)
 
 
 #########################################################################################################################
@@ -253,7 +261,7 @@ class CombinedVAE(nn.Module):
 
     def forward_loss(self, inputs):
         outputs, mus, logvars = self.forward(inputs)
-        loss = vae_loss_function(inputs, outputs, mus, logvars)
+        loss = self.vae.loss_function(inputs, outputs, mus, logvars)
         return loss, outputs
 
 

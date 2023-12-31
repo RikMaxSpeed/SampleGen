@@ -78,16 +78,16 @@ class Sample_Generator():
 
 
     def is_vae(self):
-        return "V" in self.model_name # simple, but a bit hacky!!
+        return "VAE" in self.model_name
 
 
-    def encode_input(self, stft, noise_range):
+    def encode_input(self, sample, noise_range):
         if self.is_vae():
-            mu, logvar = self.model.encode(stft)
+            mu, logvar = self.model.encode(sample)
             return vae_reparameterize(mu, logvar * noise_range)
         else:
-            encode = self.model.encode(stft)
-            encode += (2 * torch.randn(encode.shape) - 1) * noise_range
+            encode = self.model.encode(sample)
+            encode += ((2 * torch.randn(encode.shape) - 1) * noise_range).to(device)
             return encode
 
 
@@ -170,9 +170,11 @@ class Sample_Generator():
             save_and_play_resynthesized_audio(stft, sample_rate, stft_hop, "Results/" + save_file + ".wav", play_sound)
 
 
-    def randomise_sample(self, pattern, max_noise=0.5, play_sound=True, steps=5):
+    def randomise_sample(self, pattern, max_noise=0.2, play_sound=True, steps=5):
         name, stft, encode = self.encode_sample_matching(pattern, 0.0)
-        plot_bar_charts([numpify(encode)], [name], self.model_name + " encoding")
+
+        if self.is_vae():
+            plot_bar_charts([numpify(encode)], [name], self.model_name + " encoding")
 
         for i in range(steps):
             amount = max_noise * i / (steps - 1)
@@ -434,10 +436,10 @@ def plot_categories(categories = None):
 
 
 def plot_encodings():
-    g.speed_test()
-
     for type in ["organ", "piano", "epiano", "string", "acoustic guitar", "marimba", "pad", "fm", "voice", ""]:
         g.plot_encodings(type, 1000)
+
+    g.speed_test()
 
 def test_all():
     g.test_all()
@@ -450,7 +452,7 @@ def demo_encodings():
 def demo_sounds():
     g.encode_file("RandomVoiceTest.wav")
     g.encode_file("Baaaah.wav")
-    g.generate_main_encodings([-2, -1, 0, +1, +2])
+    #g.generate_main_encodings([-2, -1, 0, +1, +2])
     generate_variations()
     generate_morphs()
 

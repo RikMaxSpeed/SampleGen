@@ -74,7 +74,7 @@ def evaluate_model(params):
     
     max_epochs = 80 # This is sufficient to figure out which model will converge best if we let it run for longer.
     if is_incremental_vae(hyper_model) or is_audio(hyper_model): # fast models
-        max_overfit = 2
+        max_overfit = 10
         max_epochs = 5000 # assuming we'll bump into max_time first!
 
     max_time = 3*60 # we don't like slow models...
@@ -109,7 +109,7 @@ def evaluate_model(params):
         display_best_hyper_parameters()
 
     elapsed = time.time() - hyper_start
-    print(f"Hyper-tuning: total {count} iterations in time={int(elapsed):,} sec = {int(elapsed/count):,} sec/iteration")
+    print(f"Hyper-tuning: total {tuning_count} iterations in {int(elapsed):,} sec = {int(elapsed/tuning_count):,} sec/iteration")
 
     return final_loss
 
@@ -142,17 +142,12 @@ def generate_parameters(search_space, amount):
 
 
 
-def optimise_hyper_parameters(model_name):
+def optimise_hyper_parameters(model_name, sample_count = 200):
     print(f"\n\n\nOptimising Hyper Parameters for {model_name}\n")
     reset_hyper_training(model_name)
 
-    # Use a smaller data-set here to speed things up? Could favour small models that can't handle the entire data-set.
-    how_many = None # full data-set, this may be more representative
-    if model_name == "AudioConv_AE":
-        how_many = 200 # 80% = 10 x batch=16
-        # In practice, this is very difficult data set to converge on!
-
-    samples, _ = generate_training_data(how_many, hyper_stfts)
+    # Note: using the 200 most diverse samples is a tough challenge to converge on.
+    samples, _ = generate_training_data(sample_count, hyper_stfts)
 
     print(f"Training data set has {samples} samples.")
 
@@ -248,10 +243,10 @@ def optimise_hyper_parameters(model_name):
         case "AudioConv_AE":
             # audio_length, depth, kernel_count, kernel_size, stride
             max_kernel_size = int(sample_rate / middleCHz)
-            search_space.append(Integer( 2,     7,     'uniform',  name='layers'))
-            search_space.append(Integer(20,    80,     'log-uniform',  name='kernels'))
-            search_space.append(Integer(20,    max_kernel_size, 'log-uniform',  name='kernel_size'))
-            search_space.append(Integer( 30,    80, 'log-uniform',  name='compression'))
+            search_space.append(Integer( 2,     6,     'uniform',  name='layers'))
+            search_space.append(Integer(30,    50,     'log-uniform',  name='kernels'))
+            search_space.append(Integer(50,    max_kernel_size, 'log-uniform',  name='kernel_size'))
+            search_space.append(Integer( 200,    1000, 'log-uniform',  name='compression'))
 
         case "AudioConv_VAE_Incremental":
             search_space.append(Integer(5, 20, 'uniform', name='VAE latent'))
@@ -295,7 +290,7 @@ def resume_train(model_name):
     train_best_params(model_name, params, finest=True)
 
 
-def train_best_params(model_name, params = None, finest = False):
+def train_best_params(model_name, params = None, samples = None, finest = False):
     if finest:
         print(f"\n\n\nFine-Tuning {model_name}\n")
     else:
@@ -303,9 +298,7 @@ def train_best_params(model_name, params = None, finest = False):
 
     reset_train_losses(model_name, False)
 
-    #generate_training_data(200, hyper_stfts) # Small dataset of the most difficult samples
-    generate_training_data(None, hyper_stfts) # Full dataset with no augmentation
-    #generate_training_stfts(3000) # use a large number of samples with augmentation
+    generate_training_data(samples, hyper_stfts)
 
     if params is None:
         model_name, params, _ = get_best_configuration_for_model(model_name)
@@ -314,7 +307,7 @@ def train_best_params(model_name, params = None, finest = False):
     start_new_stft_video(f"STFT - train {model_name}", True)
 
     max_time = 2 * hour # hopefully the model converges way before this!
-    max_overfit = 2.0 # if we set this too high, the VAE stdevs become huge and the model doesn't generalise.
+    max_overfit = 1.3 # if we set this too high, the VAE stdevs become huge and the model doesn't generalise.
 
     # if "VAE" in model_name: # Allow the Auto-Encoders to over-fit
     #     max_overfit = 10.0
@@ -337,8 +330,8 @@ def train_best_params(model_name, params = None, finest = False):
     train_model(model_name, params, max_epochs, max_time, max_params, max_overfit, max_loss, verbose, finest)
 
 
-def full_hypertrain(model_name):
-    optimise_hyper_parameters(model_name)
+def full_hypertrain(model_name, sample_count = 200):
+    optimise_hyper_parameters(model_name, sample_count)
     train_best_params(model_name)
     fine_tune(model_name)
 
@@ -498,9 +491,13 @@ def hypertrain_AudioConv_VAE():
     # Audio Convolution Auto-Encoder
 
     set_fail_loss(20_000)
-    #full_hypertrain("AudioConv_AE") # MPS crashes after a while :(
-    train_best_params("AudioConv_AE", [2, -4, 4, 40, 34, 30])
-    full_hypertrain("AudioConv_VAE_Incremental")
+    set_device('cpu') # Aaargh, bug in MPS... Apple informed
+    full_hypertrain("AudioConv_AE") # MPS crashes after a while :(
+    #train_best_params("AudioConv_AE", [2, -4, 4, 40, 34, 30])
+
+    #full_hypertrain("AudioConv_VAE_Incremental")
+    #train_best_params("AudioConv_VAE_Incremental", [2, -6, 9, 2, 1.66])
+    train_best_params("AudioConv_VAE_Incremental", [1, -6, 9, 4, 1.0])
 
     #grid_search_AudioConv_AE()
     #grid_search_AudioConv_VAE_I()

@@ -1,17 +1,8 @@
 import torch.optim as optim
 from torch.utils.data import TensorDataset, DataLoader
-import time
-import matplotlib.pyplot as plt
-from IPython.display import FileLink
-import math
-
-from ModelUtils import *
 from MakeModels import *
-from MakeSTFTs import *
 from Graph import *
 from Augment import *
-
-
 
 from IPython.display import HTML, display
 
@@ -43,8 +34,6 @@ def predict_sample(model, input, use_stfts):
 
     resynth = resynth.squeeze(0)
 
-    loss = np.sqrt(loss.item() / resynth.numel())
-
     return convert_output_to_sample(resynth, use_stfts), loss.item()
 
 
@@ -64,7 +53,7 @@ def resynth_test_tones(model_name, model, use_stfts):
         resynth, loss = predict_sample(model, sample, use_stfts)
         file_name = f"Results/{model_name} {name} - resynth.wav"
         save_and_play_resynthesized_audio(resynth, sample_rate, stft_hop, file_name, False)
-        display_custom_link(file_name, f"Resynth {name}: loss={100 * loss:.2f}%")
+        display_custom_link(file_name, f"Resynth {name}: loss={loss:.2f}%")
 
 
 def is_incremental_vae(model_name):
@@ -192,7 +181,7 @@ def train_model(model_name, hyper_params, max_epochs, max_time, max_params, max_
     use_stfts = model_uses_STFTs(model_name)
 
     learning_rate *= batch_size  # see https://www.baeldung.com/cs/learning-rate-batch-size
-    weight_decay = 0
+    weight_decay = 0 #1e-6
     optimiser_text = f"Adam batch={batch_size}, learning_rate={learning_rate:.2g}, weight_decay={weight_decay:.2g}"
     print(f"optimiser: {optimiser_text}")
 
@@ -214,7 +203,7 @@ def train_model(model_name, hyper_params, max_epochs, max_time, max_params, max_
 
     # Train/Test & DataLoader
     dataloader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
-    print(f"train={len(train_dataset)} samples, batch={batch_size} --> {len(train_dataset)/batch_size:.1f} batches/epoch")
+    print(f"train={len(train_dataset)} samples, batch={batch_size} --> {len(train_dataset)/batch_size:.1f} batches/epoch, device={device}")
 
     # Optimiser
     optimizer = optim.Adam(model.parameters(), lr=learning_rate, weight_decay=weight_decay)
