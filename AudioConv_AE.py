@@ -4,7 +4,7 @@ import torch.nn.functional as F
 import time
 
 from Debug import debug
-from ModelUtils import conv1d_size, periodically_display_2D_output, model_output_shape_and_size, conv1d_output_size
+from ModelUtils import *
 from VariationalAutoEncoder import reconstruction_loss, basic_reconstruction_loss, CombinedVAE
 from ModelUtils import interpolate_layer_sizes, count_trainable_parameters
 from Device import device
@@ -38,13 +38,8 @@ if __name__ == '__main__' and False: # no longer required
 
 class AudioConv_AE(nn.Module):  # no VAE
     @staticmethod
-    def compute_kernel_sizes_and_strides(audio_length, depth, kernel_count, kernel_size, target_compression):
+    def compute_kernel_sizes_and_strides(audio_length, depth, kernel_count, kernel_size, ratio):
         failed = [], 0, 0
-
-        # Here we approximate the stride required at each layer in order to achieve the target comopression ratio
-        target = kernel_count * target_compression
-        total = (depth * (depth + 1)) / 2
-        ratio = target**(1/total)
 
         kernels = []
         strides=[]
@@ -52,17 +47,11 @@ class AudioConv_AE(nn.Module):  # no VAE
         length = audio_length
         min_length = 1 # this is a bit silly, but let's see what happens...
         for i in range(depth):
-            stride = int(ratio ** (depth - i) + 0.5)
-            stride = max(stride, 2)
-
-            if i == 0:
-                kernel = kernel_size
-                kernel_ratio = kernel / stride
-            else:
-                kernel = int(stride * kernel_ratio + 1)
+            kernel = min(kernel_size // (2**i), length)
+            stride = int(kernel / ratio)
 
             if kernel < 2:
-                print(f"kernel={kernel} is too smalle.")
+                print(f"kernel={kernel} is too small.")
                 return failed
 
             if stride > kernel:
@@ -86,8 +75,6 @@ class AudioConv_AE(nn.Module):  # no VAE
 
         assert len(kernels) == depth
         assert len(strides) == depth
-
-        #print(f"kernels={kernels}, strides={strides}, lengths={lengths}")
 
         return kernels, strides, lengths
 
@@ -126,28 +113,23 @@ class AudioConv_AE(nn.Module):  # no VAE
         if is_decoder:
             layers.reverse()
 
-        if False:
-            layers2 = []
-            for l in layers:
-                layers2.append(l)
-                layers2.append(nn.LeakyReLU())
-            layers = layers2
-
         # Add a tanh to the encoder so the VAE only sees numbers between [-1, 1].
         # And similarly to the decoder so the audio doesn't saturate (although this could behave like a compressor)
         #layers.append(torch.nn.Tanh())
 
         # encoder: needs this otherwise the VAE sees crazy large values.
         # decoder: valid audio is between [-1, 1]
-        layers.append(torch.nn.Hardtanh()) # same as clamp(-1, 1)
+        #layers.append(torch.nn.Hardtanh()) # same as clamp(-1, 1)
 
         return nn.Sequential(*layers)
 
     def __init__(self, audio_length, depth, kernel_count, kernel_size, compression):
         super(AudioConv_AE, self).__init__()
 
+        self.depth = depth # excluding the TanH on the end.
         self.audio_length = audio_length
         self.kernel_count = kernel_count
+        self.compression = -1 # this is used to indicate the model is valid.
 
         kernels, strides, lengths = AudioConv_AE.compute_kernel_sizes_and_strides(audio_length, depth,
                                                                                   kernel_count, kernel_size,
@@ -155,7 +137,6 @@ class AudioConv_AE(nn.Module):  # no VAE
 
         if len(kernels) != depth:
             print(f"AudioConv_AE: only has depth={len(kernels)} instead of {depth}")
-            self.compression = 0
             return
 
         length = audio_length
@@ -169,6 +150,9 @@ class AudioConv_AE(nn.Module):  # no VAE
         self.encoder = self.make_layers(False, kernel_count, kernels, strides)
         self.decoder = self.make_layers(True,  kernel_count, kernels, strides)
 
+        assert len(self.encoder) == len(self.decoder), f"size mismatch: encoder={len(self.encoder)} decoder={len(self.decoder)}"
+        self.set_freeze_depth(None)
+
         try:
             self.encoded_shape, self.encoded_size = model_output_shape_and_size(self.encoder, [audio_length])
             print(f"\tencoded shape={self.encoded_shape}, size={self.encoded_size}")
@@ -180,53 +164,76 @@ class AudioConv_AE(nn.Module):  # no VAE
             print(f"\tdecoded shape={decode_shape}, size={decode_size}")
         except Exception as e:
             print(f"Model doesn't work: {e}")
-            self.compression = 0
             return
 
         except BaseException as e:
             print(f"Model is broken! {e}")
-            self.compression = 0
             return
 
+        # All OK!
         self.compression = audio_length / self.encoded_size
         print(f"AudioConv_AE {count_trainable_parameters(self):,} parameters, compression={self.compression:.1f}")
 
+        # Hack
+        self.set_freeze_depth(2)
+
+    def set_freeze_depth(self, level):
+        print("set_freeze_depth", level)
+
+        if level is None:
+            self.eval_depth = self.depth
+        else:
+            assert level < self.depth, f"Level={level} must be less than depth={self.depth}"
+            self.eval_depth = level
+
+        enabled_layers = 0
+        for i in range(self.depth - 1):
+            enable =  level is None or i == self.eval_depth
+            set_layer_grad(self.encoder[i], enable)
+            set_layer_grad(self.decoder[self.depth - i - 1], enable)
+            enabled_layers += 2
+
+        trainable = count_trainable_parameters(self)
+        print(f"AduioConvAE: eval_depth={self.eval_depth} / {self.depth} layers, enabled_layers={enabled_layers}, trainable {trainable:,} parameters")
+
     def encode(self, x):
-        #debug("encode.x", x)
         batch_size = x.size(0)
-        assert(x.size(1) == self.audio_length)
+        assert x.size(1) == self.audio_length, f"expected audio length={self.audio_length} but got {x.size(1)}"
+
         x = x.view(batch_size, 1, self.audio_length)
-        #debug("x.view", x)
-        hiddens = self.encoder(x)
-        #debug("hiddens", hiddens)
+        for i in range(self.eval_depth):
+            x = self.encoder[i](x)
 
-        #hiddens = hiddens.transpose(2, 1) # convert to [batch, time, features]
-        periodically_display_2D_output(hiddens)
+        if self.eval_depth == self.depth:
+            x = nn.Hardtanh()(x)
 
-        #encoded = hiddens.flatten(-2)
-        #debug("encoded", encoded)
-        return hiddens
+        periodically_display_2D_output(x)
+
+        return x
 
     def decode(self, x):
-        #debug("decode.x", x)
         batch_size = x.size(0)
-        #hiddens = x.view(batch_size, self.kernel_count, -1)
-        #x = x.transpose(2, 1) # convert to [batch, features, time] for the ConvTranspose1D
-        #debug("hiddens", hiddens)
-        decoded = self.decoder(x)
-        #debug("decoded", decoded)
-        decoded = decoded.view(batch_size, -1)
-        #debug("decoded.view", decoded)
-        len = decoded.size(1)
+
+        for i in range(self.depth - self.eval_depth, self.depth):
+            x = self.decoder[i](x)
+
+        debug("decoded.x", x)
+
+        x = nn.Hardtanh()(x)
+
+        x = x.view(batch_size, -1)
+        len = x.size(1)
         missing = self.audio_length - len
-        assert(missing >= 0)
-        audio = F.pad(decoded, (0, missing))
-        #debug("audio", audio)
+        assert missing >= 0, f"unexpected length={len:,}, vs audio={self.audio_length:,}, missing={missing}"
+        audio = F.pad(x, (0, missing))
         return audio
 
     def forward(self, inputs):
+        debug("inputs", inputs)
         hiddens = self.encode(inputs)
+        debug("hiddens", hiddens)
         outputs = self.decode(hiddens)
+        debug("outputs", outputs)
         return outputs
 
     def forward_loss(self, inputs):
@@ -234,7 +241,7 @@ class AudioConv_AE(nn.Module):  # no VAE
         loss = reconstruction_loss(inputs, outputs)
         return loss, outputs
 
-    def stft_loss(self, inputs, outputs):
+    def stft_loss(self, inputs, outputs): # unused!
         # Compare the STFT instead, fortunately PyTorch provides a differentiable STFT
 
         # torch.stft is not supported on MPS so we have to move things back to the CPU

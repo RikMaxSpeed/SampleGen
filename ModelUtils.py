@@ -290,6 +290,10 @@ def freeze_model(model):
         param.requires_grad = False
 
 
+def set_layer_grad(layer, enable_grad):
+    for param in layer.parameters():
+        param.requires_grad = enable_grad
+
 count = 0
 last_count = 0
 do_display_hiddens = False
