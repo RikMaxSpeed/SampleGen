@@ -15,7 +15,7 @@ def basic_reconstruction_loss(inputs, outputs):
 cached_weights = {}
 
 # Weight the samples over time: it's critical to get start of the sound correct.
-def weighted_time_reconstruction_loss(inputs, outputs, weight, time_ratio=0.15, verbose=False):
+def weighted_time_reconstruction_loss(inputs, outputs, weight, time_ratio, verbose=False):
     assert inputs.dim() >= 2, f"Expected inputs to be greater than 2, not {inputs.dim()}"
     assert weight >= 1, f"Expected weight to be greater than 1, not {weight}"
     assert time_ratio >= 0 and time_ratio <= 1, f"Expected time_ratio to be between 0 and 1, not {time_ratio}"
@@ -71,10 +71,10 @@ def weighted_time_reconstruction_loss(inputs, outputs, weight, time_ratio=0.15, 
 
 def reconstruction_loss(inputs, outputs):
     assert inputs.shape == outputs.shape, f"reconstruction_loss: shapes don't match, inputs={inputs.shape}, outputs={outputs.shape}"
-    return basic_reconstruction_loss(inputs, outputs)
+    #return basic_reconstruction_loss(inputs, outputs)
 
     # this does work too.
-    return weighted_time_reconstruction_loss(inputs, outputs, weight=10)
+    return weighted_time_reconstruction_loss(inputs, outputs, weight=10, time_ratio=0.2)
 
 # Test the basic loss & weighted loss:
 if __name__ == '__main__':

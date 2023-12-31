@@ -271,7 +271,7 @@ def plot_train_test_losses(train_losses, test_losses, title):
     ax2 = plt.gca().twinx()
     ax2.set_ylabel('Overfit Ratio')
     overfit_ratio = [test / train for train, test in zip(train_losses, test_losses)]
-    line3, = ax2.plot(1 + np.array(range(len(overfit_ratio))), overfit_ratio, label='Overfit', color='tab:blue', linestyle='--')
+    line3, = ax2.plot(1 + np.array(range(len(overfit_ratio))), overfit_ratio, label='Overfit', color='tab:blue') # removed linestyle='--'
     for i in [np.argmin(overfit_ratio), np.argmax(overfit_ratio)]:
         overfit = overfit_ratio[i]
         ax2.scatter(i + 1, overfit, c='tab:blue', s=8)
