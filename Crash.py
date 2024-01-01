@@ -48,7 +48,7 @@ dataset = TensorDataset(torch.randn(batch, 1, audio) * 2 - 1)
 def test(device):
     global dataset, model
     print(f"device={device}")
-    model.to(device)
+    model.to(get_device())
     dataloader = DataLoader(dataset, batch_size=32, shuffle=True)
 
     # Optimizer
@@ -59,7 +59,7 @@ def test(device):
     for epoch in range(num_epochs):
         model.train()  # Set the model to training mode
         for inputs, in dataloader:
-            inputs = inputs.to(device)
+            inputs = inputs.to(get_device())
             outputs = model(inputs)
             loss = nn.MSELoss()(outputs, inputs)
             optimizer.zero_grad()

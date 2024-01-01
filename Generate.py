@@ -87,13 +87,13 @@ class Sample_Generator():
             return vae_reparameterize(mu, logvar * noise_range)
         else:
             encode = self.model.encode(sample)
-            encode += ((2 * torch.randn(encode.shape) - 1) * noise_range).to(device)
+            encode += ((2 * torch.randn(encode.shape) - 1) * noise_range).to(get_device())
             return encode
 
 
     def encode_sample_matching(self, pattern, noise_range):
         name, stft = self.find_samples_matching(pattern)
-        input_stft = convert_sample_to_input(stft).unsqueeze(0).to(device)
+        input_stft = convert_sample_to_input(stft).unsqueeze(0).to(get_device())
         encode = self.encode_input(input_stft, noise_range)
         print(f"Encoded {name} to {encode.shape}")
         return name, stft.numpy(), encode
@@ -187,7 +187,7 @@ class Sample_Generator():
         names, stfts = self.find_samples_matching(pattern, count)
         encodes=[]
         for stft in stfts:
-            input_stft = convert_sample_to_input(stft).unsqueeze(0).to(device)
+            input_stft = convert_sample_to_input(stft).unsqueeze(0).to(get_device())
             encodes.append(numpify(self.model.encode(input_stft)[0]))
         plot_bar_charts(encodes, names, f"{self.model_name}: {len(names)} {pattern} encodings")
     
@@ -196,7 +196,7 @@ class Sample_Generator():
         start_new_stft_video(f"{self.model_name} - main encodings", False)
         # Determine the latent size:
         stft = self.samples[0]
-        input_stft = convert_sample_to_input(stft).unsqueeze(0).to(device)
+        input_stft = convert_sample_to_input(stft).unsqueeze(0).to(get_device())
         
         with torch.no_grad():
             mu, logvar = self.model.encode(input_stft)
@@ -207,8 +207,8 @@ class Sample_Generator():
         
         # Decode each variable one by one
         for var in range(latent_size):
-            mus  = torch.zeros(mu.shape).to(device)
-            vars = torch.zeros(logvar.shape).to(device)
+            mus  = torch.zeros(mu.shape).to(get_device())
+            vars = torch.zeros(logvar.shape).to(get_device())
             
             for value in values:
                 if value == 0 and var > 0: # we only need to generate 0,0,0,0... once
@@ -222,7 +222,7 @@ class Sample_Generator():
         sr, stft, audio = compute_stft_for_file("Samples/" + file_name, stft_buckets, stft_hop)
         assert (sr == sample_rate)
         sample = torch.tensor(stft if self.use_stfts else audio)
-        input = convert_sample_to_input(sample).unsqueeze(0).to(device)
+        input = convert_sample_to_input(sample).unsqueeze(0).to(get_device())
 
         for i in range(5):
             with torch.no_grad():
@@ -238,10 +238,10 @@ class Sample_Generator():
         if not is_audio(self.model_name):
             return
 
-        print(f"\n\nPerformance Test for model {self.model_name}, device={device}, {audio_length:,} floats at {sample_rate:,} Hz\n")
+        print(f"\n\nPerformance Test for model {self.model_name}, device={get_device()}, {audio_length:,} floats at {sample_rate:,} Hz\n")
         for batch in [1, 10, 100, 1000]:
             print(f"\nBatch={batch}")
-            samples = (torch.rand(batch, audio_length)*2 - 1).to(device)
+            samples = (torch.rand(batch, audio_length)*2 - 1).to(get_device())
             count = 0
             latent = None
             for decode in [False, True]:
@@ -319,7 +319,7 @@ class Sample_Generator():
         encode_size = None
         for i in range(len(self.samples)):
             if self.categories[i] in category_filter:
-                input_stft = convert_sample_to_input(self.samples[i]).unsqueeze(0).to(device)
+                input_stft = convert_sample_to_input(self.samples[i]).unsqueeze(0).to(get_device())
                 encode = numpify(self.model.encode(input_stft)[0])
                 if encode_size is None:
                     encode_size = len(encode)

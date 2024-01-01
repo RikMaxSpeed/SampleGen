@@ -74,7 +74,7 @@ def reconstruction_loss(inputs, outputs):
     #return basic_reconstruction_loss(inputs, outputs)
 
     # this does work too.
-    return weighted_time_reconstruction_loss(inputs, outputs, weight=10, time_ratio=0.2)
+    return weighted_time_reconstruction_loss(inputs, outputs, weight=5, time_ratio=0.2)
 
 # Test the basic loss & weighted loss:
 if __name__ == '__main__':
@@ -181,7 +181,7 @@ class VariationalAutoEncoder(nn.Module):
             logvar = self.fc_logvar(x)
         else:
             mu = nn.Tanh()(mu)
-            logvar = torch.zeros(mu.shape).to(device)
+            logvar = torch.zeros(mu.shape).to(get_device())
         
         return mu, logvar
 

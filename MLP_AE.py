@@ -54,12 +54,12 @@ class StepWiseMLPAutoEncoder(nn.Module):
         assert(x.size(1) == self.freq_buckets)
         assert(x.size(2) == self.sequence_length)
         
-        hiddens = torch.zeros(batch_size, self.hidden_size, self.sequence_length).to(device)
-        prev_stft = torch.zeros(batch_size, self.freq_buckets).to(device)
+        hiddens = torch.zeros(batch_size, self.hidden_size, self.sequence_length).to(get_device())
+        prev_stft = torch.zeros(batch_size, self.freq_buckets).to(get_device())
         
         # Process each time step
         for t in range(self.sequence_length):
-            time_step = torch.full((batch_size, 1), t / float(self.sequence_length), dtype=torch.float32).to(device)
+            time_step = torch.full((batch_size, 1), t / float(self.sequence_length), dtype=torch.float32).to(get_device())
             
             # Concatenate previous STFT, current STFT
             curr_stft = x[:, :, t]
@@ -89,13 +89,13 @@ class StepWiseMLPAutoEncoder(nn.Module):
         batch_size = x.size(0)
         assert(x.size(1) == self.sequence_length * self.hidden_size)
         
-        hiddens = x.view(batch_size, self.hidden_size, self.sequence_length).to(device)
-        prev_stft = torch.zeros(batch_size, self.freq_buckets).to(device)
-        reconstructed = torch.zeros(batch_size, self.freq_buckets, self.sequence_length).to(device)
+        hiddens = x.view(batch_size, self.hidden_size, self.sequence_length).to(get_device())
+        prev_stft = torch.zeros(batch_size, self.freq_buckets).to(get_device())
+        reconstructed = torch.zeros(batch_size, self.freq_buckets, self.sequence_length).to(get_device())
 
         # Process each time step
         for t in range(self.sequence_length):
-            time_step = torch.full((batch_size, 1), t / float(self.sequence_length), dtype=torch.float32).to(device)
+            time_step = torch.full((batch_size, 1), t / float(self.sequence_length), dtype=torch.float32).to(get_device())
 
             # Concatenate features and previous STFT
             combined_input = torch.cat([hiddens[:, :, t], prev_stft, time_step], dim=1)

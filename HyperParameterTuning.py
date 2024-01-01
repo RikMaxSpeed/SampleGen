@@ -1,13 +1,14 @@
 # Use a GPR to adjust the hpyer-parameters.
 # The best models are saved to disk.
+from Device import get_device, set_device
 from skopt import gp_minimize
-from skopt.space import Integer, Real, Categorical
+from skopt.space import Integer, Real
 from MakeSTFTs import audio_length
 import time
 
 max_params = 0
 tuning_count = 0
-break_on_exceptions = False # True=Debugging, False allows the GPR to continue even if the model blows up (useful for long tuning runs!)
+break_on_exceptions = True # True=Debugging, False allows the GPR to continue even if the model blows up (useful for long tuning runs!)
 max_loss = audio_length # default
 
 hyper_model = "None"
@@ -72,12 +73,15 @@ def evaluate_model(params):
     
     max_overfit = 1.3 # Ensure we retain the models that generalise reasonably well.
     
-    max_epochs = 80 # This is sufficient to figure out which model will converge best if we let it run for longer.
+    max_epochs = 100 # This is sufficient to figure out which model will converge best if we let it run for longer.
     if is_incremental_vae(hyper_model) or is_audio(hyper_model): # fast models
-        max_overfit = 10
+        max_overfit = 2.0
         max_epochs = 5000 # assuming we'll bump into max_time first!
 
-    max_time = 3*60 # we don't like slow models...
+    max_time = 2*60 # we don't like slow models...
+    if get_device() == 'cpu':
+        max_time *= 10
+
     verbose = False # avoid printing lots of detail for each run
     preload = False
 
@@ -244,14 +248,14 @@ def optimise_hyper_parameters(model_name, sample_count = 200):
             # audio_length, depth, kernel_count, kernel_size, stride
             max_kernel_size = int(sample_rate / middleCHz)
             search_space.append(Integer( 2,     6,     'uniform',  name='layers'))
-            search_space.append(Integer(30,    50,     'log-uniform',  name='kernels'))
-            search_space.append(Integer(50,    max_kernel_size, 'log-uniform',  name='kernel_size'))
-            search_space.append(Integer( 200,    1000, 'log-uniform',  name='compression'))
+            search_space.append(Integer(40,    200,     'log-uniform',  name='kernels'))
+            search_space.append(Integer(20,    max_kernel_size*2, 'log-uniform',  name='kernel_size'))
+            search_space.append(Integer( 2,    16, 'log-uniform',  name='ratio'))
 
         case "AudioConv_VAE_Incremental":
-            search_space.append(Integer(5, 20, 'uniform', name='VAE latent'))
+            search_space.append(Integer(5, 30, 'uniform', name='VAE latent'))
             search_space.append(Integer(2, 5, 'uniform', name='depth'))
-            search_space.append(Real(0.1, 10, 'uniform', name='ratio'))
+            search_space.append(Real(0.1, 10, 'log-uniform', name='ratio'))
 
         case "AudioConv_VAE":
             search_space.append(Integer(   3,     5,    'uniform',  name='layers'))
@@ -346,10 +350,9 @@ def train_topN_hyper_params(topN = 5):
         n = order[i]
         print(f"\n\n\n\nTraining optimised parameters rank #{i+1}: {hyper_names[n]}")
         params = hyper_params[n]
-        params[0] = 2  # batch-size = 2^N
+        params[0] = 3  # batch-size = 2^N
         params[1] = -7 # learning rate = 10^N # this doesn't matter much with Adam?
         train_best_params(hyper_model, params)
-
 
 
 def grid_search(model_name, param_values, data_size=None, max_model_size=30_000_000):
@@ -427,11 +430,11 @@ def grid_search_AudioConv_AE():
     max_kernel_size = int(sample_rate / middleCHz)
 
     grid_search("AudioConv_AE",
-                [[4, 3, 2], # [5, 4, 3, 2] # depth
+                [[4, 3], # [5, 4, 3, 2] # depth
                  [30], #exponential_interpolation(25, 35, 2, True), # kernel count
-                 exponential_interpolation(max_kernel_size//16, max_kernel_size, 10, True), # kernel size
+                 exponential_interpolation(max_kernel_size//2, max_kernel_size*2, 6, True), # kernel size
                  #exponential_interpolation(max_kernel_size / 2, max_kernel_size, 2, True),  # kernel size
-                 [80] # compression
+                 [2, 3, 4, 6, 8] # ratio
                  ],
                 data_size,
                 max_params)
@@ -492,22 +495,17 @@ def hypertrain_AudioConv_VAE():
 
     set_fail_loss(20_000)
     set_device('cpu') # Aaargh, bug in MPS... Apple informed
-    full_hypertrain("AudioConv_AE") # MPS crashes after a while :(
+    assert get_device() == 'cpu', f"problem device={get_device()} :("
+
+    optimise_hyper_parameters("AudioConv_AE", None) # MPS crashes after a while :(
+    train_topN_hyper_params()
+
     #train_best_params("AudioConv_AE", [2, -4, 4, 40, 34, 30])
+    optimise_hyper_parameters("AudioConv_VAE_Incremental", None)
+    train_topN_hyper_params()
 
-    #full_hypertrain("AudioConv_VAE_Incremental")
-    #train_best_params("AudioConv_VAE_Incremental", [2, -6, 9, 2, 1.66])
-    train_best_params("AudioConv_VAE_Incremental", [1, -6, 9, 4, 1.0])
-
-    #grid_search_AudioConv_AE()
-    #grid_search_AudioConv_VAE_I()
-
-    #train_best_params("AudioConv_AE", [4, -6, 3, 30, 186, 30])
-
-    #train_best_params("AudioConv_VAE_Incremental", [4, -6, 20, 3, 0.1])
-    #train_best_params("AudioConv_VAE_Incremental", [4, -6, 8, 3, 0.1])
-
-    # full_hypertrain("AudioConv_VAE")
+    #set_device('mps') # we should be OK now
+    full_hypertrain("AudioConv_VAE_Incremental")
 
 from Generate import Sample_Generator, g, use_model
 

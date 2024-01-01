@@ -48,8 +48,8 @@ def make_RNN_VAE(model_type, model_params, max_params):
     
     return model, model_text, approx_size, vae_size
 
-min_compression = 20  # Larger values may help the VAE
-max_compression = 2000 # The auto-encoder may fail for huge compression ratios
+min_compression = 500  # Larger values may help the VAE
+max_compression = 4000 # The auto-encoder may fail for huge compression ratios
 
 def make_Conv2D_VAE(model_type, model_params, max_params):
     layer_count, kernel_count, kernel_size, latent_size, vae_depth, vae_ratio = model_params
@@ -265,7 +265,7 @@ def make_model(model_type, model_params, max_params, verbose):
 
             model = Conv2DAutoEncoder(freq_buckets, sequence_length, layer_count, kernel_count, kernel_size)
             model.float()
-            model.to(device)
+            model.to(get_device())
 
             if model.compression < min_compression or model.compression > max_compression:
                 print(f"Compression={model.compression:.1f} out of range [{min_compression}, {max_compression}]")
@@ -349,7 +349,7 @@ def make_model(model_type, model_params, max_params, verbose):
 
     # Get ready!
     model.float() # ensure we're using float32 and not float64
-    model.to(device)
+    model.to(get_device())
 
     if verbose:
         print("model={}".format(model))
@@ -378,7 +378,7 @@ def load_saved_model(model_name):
     print(f"Loading weights & biases from file '{file_name}'")
     model.load_state_dict(torch.load(file_name))
     model.eval() # Ensure the model is in evaluation mode
-    model.to(device)
+    model.to(get_device())
     print(f"{model_type} has {count_trainable_parameters(model):,} weights & biases")
     
     return model, model_text, params, model_size

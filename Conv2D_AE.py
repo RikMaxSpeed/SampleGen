@@ -1,14 +1,10 @@
-import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from dask import layers
-
-from ModelUtils import rnn_size, periodically_display_2D_output
-from VariationalAutoEncoder import reconstruction_loss, VariationalAutoEncoder
-from ModelUtils import interpolate_layer_sizes, count_trainable_parameters, model_output_shape_and_size, device
 from Debug import *
+from Device import get_device
+from VariationalAutoEncoder import reconstruction_loss, VariationalAutoEncoder
+from ModelUtils import count_trainable_parameters, model_output_shape_and_size
 from MakeSTFTs import freq_buckets, sequence_length
-import copy
 
 def convolution_output_size(input, kernel, stride, pad):
     return (input + 2*pad - kernel) // stride + 1
@@ -238,7 +234,7 @@ if __name__ == '__main__':
     sequence_length = 80
     model = Conv2DAutoEncoder(freq_buckets, sequence_length, layer_count, kernel_count, kernel_size)
     model.float() # ensure we're using float32 and not float64
-    model.to(device)
+    model.to(get_device())
 
     #print(model)
     exact_params = count_trainable_parameters(model)
@@ -247,7 +243,7 @@ if __name__ == '__main__':
 
     batch_size = 7
     input = torch.randn((batch_size, freq_buckets, sequence_length))
-    input = input.to(device)
+    input = input.to(get_device())
     #debug("input", input)
 
     encoded = model.encode(input)

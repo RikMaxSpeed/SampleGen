@@ -27,7 +27,7 @@ def predict_sample(model, input, use_stfts):
 
     input = input.unsqueeze(0)
     
-    input = input.to(device)
+    input = input.to(get_device())
     
     with torch.no_grad():
         loss, resynth = model.forward_loss(input)
@@ -90,7 +90,7 @@ def generate_training_data(how_many, use_stfts):
 
     # Find key samples to encode
     if how_many <= count/3:
-        samples = select_diverse_samples(samples, file_names, how_many).to(device)
+        samples = select_diverse_samples(samples, file_names, how_many).to(get_device())
 
     if samples.size(0) > how_many: # truncate if too many
         samples = samples[:how_many]
@@ -203,7 +203,7 @@ def train_model(model_name, hyper_params, max_epochs, max_time, max_params, max_
 
     # Train/Test & DataLoader
     dataloader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
-    print(f"train={len(train_dataset)} samples, batch={batch_size} --> {len(train_dataset)/batch_size:.1f} batches/epoch, device={device}")
+    print(f"train={len(train_dataset)} samples, batch={batch_size} --> {len(train_dataset)/batch_size:.1f} batches/epoch, device={get_device()}")
 
     # Optimiser
     optimizer = optim.Adam(model.parameters(), lr=learning_rate, weight_decay=weight_decay)
@@ -235,7 +235,7 @@ def train_model(model_name, hyper_params, max_epochs, max_time, max_params, max_
         sum_train_loss = 0
         sum_batches = 0
         for batch_idx, inputs in enumerate(dataloader):
-            inputs = inputs.to(device)
+            inputs = inputs.to(get_device())
         
             # Forward pass
             loss, _ = active_model.forward_loss(inputs)

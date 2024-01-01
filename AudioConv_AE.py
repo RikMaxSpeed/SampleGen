@@ -7,16 +7,15 @@ from Debug import debug
 from ModelUtils import conv1d_size, periodically_display_2D_output, model_output_shape_and_size, conv1d_output_size
 from VariationalAutoEncoder import reconstruction_loss, basic_reconstruction_loss, CombinedVAE
 from ModelUtils import interpolate_layer_sizes, count_trainable_parameters
-from Device import device
 
 # Loss function using STFTs:
 # However (amazingly) it turns out we're better off using the simple MSE rather than comparing STFTs!!!
 def torch_stft(sample, fft_size = 1024): # verified that 256 is the fastest on my Mac. We're compromising on frequency resolution vs time though...
-    return torch.stft(sample.cpu(), n_fft=fft_size, return_complex=True).abs().to(device)
+    return torch.stft(sample.cpu(), n_fft=fft_size, return_complex=True).abs().to(get_device())
 
 if __name__ == '__main__' and False: # no longer required
     count = 1024
-    sample = torch.rand(count, 85000).to(device)
+    sample = torch.rand(count, 85000).to(get_device())
     fastest_size = None
     fastest_elapsed = 1e99
 
@@ -37,14 +36,10 @@ if __name__ == '__main__' and False: # no longer required
 
 
 class AudioConv_AE(nn.Module):  # no VAE
-    @staticmethod
-    def compute_kernel_sizes_and_strides(audio_length, depth, kernel_count, kernel_size, target_compression):
-        failed = [], 0, 0
 
-        # Here we approximate the stride required at each layer in order to achieve the target comopression ratio
-        target = kernel_count * target_compression
-        total = (depth * (depth + 1)) / 2
-        ratio = target**(1/total)
+    @staticmethod
+    def compute_kernel_sizes_and_strides(audio_length, depth, kernel_count, kernel_size, ratio):
+        failed = [], 0, 0
 
         kernels = []
         strides=[]
@@ -52,17 +47,11 @@ class AudioConv_AE(nn.Module):  # no VAE
         length = audio_length
         min_length = 1 # this is a bit silly, but let's see what happens...
         for i in range(depth):
-            stride = int(ratio ** (depth - i) + 0.5)
-            stride = max(stride, 2)
-
-            if i == 0:
-                kernel = kernel_size
-                kernel_ratio = kernel / stride
-            else:
-                kernel = int(stride * kernel_ratio + 1)
+            kernel = min(kernel_size // (2**i), length)
+            stride = max(int(kernel / ratio), 1)
 
             if kernel < 2:
-                print(f"kernel={kernel} is too smalle.")
+                print(f"kernel={kernel} is too small.")
                 return failed
 
             if stride > kernel:
@@ -87,8 +76,6 @@ class AudioConv_AE(nn.Module):  # no VAE
         assert len(kernels) == depth
         assert len(strides) == depth
 
-        #print(f"kernels={kernels}, strides={strides}, lengths={lengths}")
-
         return kernels, strides, lengths
 
 
@@ -109,6 +96,46 @@ class AudioConv_AE(nn.Module):  # no VAE
 
         return encode + decode
 
+    @staticmethod
+    def compute_kernel_sizes_and_strides(audio_length, depth, kernel_count, kernel_size, ratio):
+        failed = [], 0, 0
+
+        kernels = []
+        strides=[]
+        lengths = []
+        length = audio_length
+        min_length = 1 # this is a bit silly, but let's see what happens...
+        for i in range(depth):
+            kernel = min(kernel_size // (2**i), length)
+            stride = max(int(kernel / ratio), 1)
+
+            if kernel < 2:
+                print(f"kernel={kernel} is too small.")
+                return failed
+
+            if stride > kernel:
+                print(f"stride={stride} must be less than kernel size={kernel}.")
+                return failed
+
+            if kernel >= audio_length:
+                print(f"kernel size={kernel} must be less than audio length={audio_length}.")
+                return failed
+
+            next_length = conv1d_output_size(length, kernel, stride)
+
+            if i+1 < depth and next_length < min_length: # over-compressing
+                print(f"output length={next_length}, must be at least {min_length}.")
+                return failed
+
+            kernels.append(kernel)
+            strides.append(stride)
+            lengths.append(next_length)
+            length = next_length
+
+        assert len(kernels) == depth
+        assert len(strides) == depth
+
+        return kernels, strides, lengths
     def make_layers(self, is_decoder, kernel_count, kernels, strides):
         layers = []
         for i in range(len(kernels)):
@@ -146,6 +173,7 @@ class AudioConv_AE(nn.Module):  # no VAE
     def __init__(self, audio_length, depth, kernel_count, kernel_size, compression):
         super(AudioConv_AE, self).__init__()
 
+        self.compression  = 0 # used to flag the model as invalid
         self.audio_length = audio_length
         self.kernel_count = kernel_count
 
@@ -155,7 +183,6 @@ class AudioConv_AE(nn.Module):  # no VAE
 
         if len(kernels) != depth:
             print(f"AudioConv_AE: only has depth={len(kernels)} instead of {depth}")
-            self.compression = 0
             return
 
         length = audio_length
@@ -180,12 +207,10 @@ class AudioConv_AE(nn.Module):  # no VAE
             print(f"\tdecoded shape={decode_shape}, size={decode_size}")
         except Exception as e:
             print(f"Model doesn't work: {e}")
-            self.compression = 0
             return
 
         except BaseException as e:
             print(f"Model is broken! {e}")
-            self.compression = 0
             return
 
         self.compression = audio_length / self.encoded_size
@@ -250,10 +275,10 @@ if __name__ == "__main__":
     # audio_length, depth, kernel_count, kernel_size, compression
     model = AudioConv_AE(85_000, 3, 25, 80, 100)
     model.float()
-    model.to(device)
+    model.to(get_device())
     audio_length = 85_000
     print(f"encoded_shape={model.encoded_shape}")
-    batched_input = torch.randn(7, audio_length).to(device)
+    batched_input = torch.randn(7, audio_length).to(get_device())
     print(f"batched_input.shape={batched_input.shape}")
     loss, batched_output = model.forward_loss(batched_input)
     print(f"loss={loss}, batched_output={batched_output.shape}")
@@ -263,7 +288,7 @@ if __name__ == "__main__":
     vae_sizes = [list(model.encoded_shape), 300, 200, 8]
     combined = CombinedVAE(model, vae_sizes)
     combined.float()
-    combined.to(device)
+    combined.to(get_device())
 
     loss, batched_output = combined.forward_loss(batched_input)
     print(f"loss={loss}, batched_output={batched_output.shape}")

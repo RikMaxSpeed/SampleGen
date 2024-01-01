@@ -53,7 +53,7 @@ class RNNAutoEncoder(nn.Module): # no VAE
 
     def decode(self, x):
         batch_size = x.size(0)
-        hiddens = x.view(batch_size, self.sequence_length, self.hidden_size)#.to(device)
+        hiddens = x.view(batch_size, self.sequence_length, self.hidden_size)#.to(get_device())
         reconstructed, _ = self.decoder(hiddens) # Note: RNN uses Tanh by default so all our outputs will be constrained to [-1, 1]
         reconstructed = reconstructed.transpose(2, 1)
         return reconstructed

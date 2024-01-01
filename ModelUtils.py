@@ -1,11 +1,9 @@
-from Device import *
-from Debug import *
+from Device import get_device
 from Graph import *
 
 import time
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 from torch.utils.data import DataLoader, random_split
 import numpy as np
 
@@ -56,7 +54,7 @@ def compute_average_loss(model, dataset, batch_size):
 
     with torch.no_grad():  # Disable gradient computations during evaluation
         for batch_idx, inputs in enumerate(data_loader):
-            inputs = inputs.to(device)
+            inputs = inputs.to(get_device())
             loss, _ = model.forward_loss(inputs)
             loss = loss.item()
             
@@ -275,6 +273,8 @@ def conv1d_output_size(input_size, kernel_size, stride):
     if kernel_size > input_size:
         return -999 # this isn't going to end well
 
+    assert stride >= 1, f"Invalid stride={stride}."
+
     return (input_size - kernel_size) // stride + 1
 
 
@@ -336,9 +336,9 @@ if __name__ == '__main__':
 
 def model_output_shape_and_size(model, input_shape):
     model.float()
-    model.to(device)
+    model.to(get_device())
 
-    input = torch.randn(input_shape).to(device)
+    input = torch.randn(input_shape).to(get_device())
     output = model(input.unsqueeze(0)).squeeze(0)
     size = output.numel()
     shape = tuple(output.shape)

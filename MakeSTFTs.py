@@ -6,7 +6,7 @@ import pickle
 import time
 import sys
 from AudioUtils import *
-from Device import *
+from Device import get_device
 from Debug import *
 
 
@@ -332,11 +332,11 @@ def convert_sample_to_input(sample):
         sample = mu_law.encode(sample)
 
     assert(sample.dtype == torch.float32)
-    return sample.to(device)
+    return sample.to(get_device())
 
 
 def convert_samples_to_inputs(samples):
-    return torch.stack([convert_sample_to_input(stft) for stft in samples]).to(device)
+    return torch.stack([convert_sample_to_input(stft) for stft in samples]).to(get_device())
 
 
 def convert_output_to_sample(output, use_stfts):
