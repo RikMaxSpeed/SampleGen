@@ -1,4 +1,4 @@
-# Use a GPR to adjust the hpyer-parameters.
+# Use a GPR to adjust the hyper-parameters.
 # The best models are saved to disk.
 from Device import get_device, set_device
 from skopt import gp_minimize
@@ -9,7 +9,7 @@ import time
 max_params = 0
 tuning_count = 0
 break_on_exceptions = True # True=Debugging, False allows the GPR to continue even if the model blows up (useful for long tuning runs!)
-max_loss = audio_length # default
+max_loss = 200 # default
 
 hyper_model = "None"
 hyper_losses = []
@@ -313,6 +313,9 @@ def train_best_params(model_name, params = None, samples = None, finest = False)
     max_params = 1e9  # not relevant, we have a valid model
     max_epochs = 9999 # ignore
     max_loss = 100
+    if is_incremental(model_name):
+        max_loss = 500
+
     set_fail_loss(audio_length)
 
      # This does improve the final accuracy, but it's very slow.

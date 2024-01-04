@@ -96,6 +96,14 @@ def kl_divergence(mu, logvar):
     # see https://stackoverflow.com/questions/74865368/kl-divergence-loss-equation
     return -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
 
+# KL annealing: we'll evolve the KL divergence weight over time from 0 (target the reconstruction loss) to 1 (normalise the latent space variables)
+kl_weight = 1
+def set_kl_weight(kl):
+    global kl_weight
+    if kl_weight != kl:
+        kl_weight = kl
+        print(f"Using VAE KL divergence weight={100*kl_weight:.1f}%")
+
 def _vae_loss_function(inputs, outputs, mu, logvar):
 
     distance  = reconstruction_loss(inputs, outputs)
@@ -106,7 +114,7 @@ def _vae_loss_function(inputs, outputs, mu, logvar):
         print(f"negative kl_div={kl_div}")
         kl_div = 0
 
-    loss = distance + kl_div # * 1e4
+    loss = distance + kl_div * kl_weight
 
     # if np.random.random() < 1e-2:
     #     print(f"vae_loss={loss:.2f}, distance={distance:.2f}, kl_div={kl_div:.6f}")

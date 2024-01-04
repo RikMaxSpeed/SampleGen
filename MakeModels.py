@@ -106,11 +106,19 @@ def make_AudioConv_VAE(model_type, model_params, max_params):
 
     return model, model_text, approx_size, vae_size
 
+
+def is_vae(model_name):
+    return "VAE" in model_name
+
+def is_incremental_vae(model_name):
+    return "VAE_Incremental" in model_name
+
 def is_incremental(model_name):
     return "Incremental" in model_name
 
 def is_audio(model_name):
     return "audio" in model_name.lower()
+
 
 def model_uses_STFTs(model_name):
     return not is_audio(model_name)

@@ -53,9 +53,6 @@ def resynth_test_tones(model_name, model, use_stfts):
         display_custom_link(file_name, f"Resynth {name}: loss={loss:.2f}%")
 
 
-def is_incremental_vae(model_name):
-    return "VAE_Incremental" in model_name
-
 
 def generate_training_data(how_many, use_stfts):
     global demo_samples, demo_names, train_dataset, test_dataset
@@ -188,9 +185,7 @@ def train_model(model_name, hyper_params, max_epochs, max_time, max_params, max_
     print(f"model: {model_text}")
 
     # Optimisation for Incremental VAE: encode the STFTs using the auto_encoder layers only.
-    is_vae = is_incremental_vae(model_name)
-
-    if is_vae:
+    if is_incremental_vae(model_name):
         # We will only be training the inner VAE, so we first encode the STFTs
         active_model = model.vae
         train_dataset = encode_outer_layer(model.auto_encoder, "Train", train_dataset)
@@ -228,7 +223,12 @@ def train_model(model_name, hyper_params, max_epochs, max_time, max_params, max_
     
     for epoch in range(0, max_epochs):
         active_model.train() # ensure we compute gradients
-        
+
+        # KL Annealing: adjust the KL weight over time, initially focusing on reconstruction loss, and later normalising the latent space
+        if is_vae(model_name):
+            progress = min(epoch / (10 * window), 1) # this is effectively another hyper-parameter 🙀
+            set_kl_weight(progress)
+
         sum_train_loss = 0
         sum_batches = 0
         batch_losses = []
@@ -356,7 +356,7 @@ def train_model(model_name, hyper_params, max_epochs, max_time, max_params, max_
     .format(epochs, elapsed, elapsed/epochs, sample_duration, testL, trainL, testL/trainL))
 
     if elapsed > 60: # don't blab about aborted attempts
-        say_out_loud(f"final loss = {trainL:.0f}")
+        say_out_loud(f"final loss = {trainL:.2f}")
 
     train_rate = compute_final_learning_rate("Train", train_losses, window)
     test_rate = compute_final_learning_rate("Test", test_losses, window)
