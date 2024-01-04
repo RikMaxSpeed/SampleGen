@@ -3,6 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import time
 
+from Device import get_device
 from Debug import debug
 from ModelUtils import conv1d_size, periodically_display_2D_output, model_output_shape_and_size, conv1d_output_size
 from VariationalAutoEncoder import reconstruction_loss, basic_reconstruction_loss, CombinedVAE
@@ -35,6 +36,63 @@ if __name__ == '__main__' and False: # no longer required
     print(f"\nFastest FFT size={fastest_size}")
 
 
+
+class NormalizeWithAmplitudes(nn.Module):
+    def __init__(self, temperature=0.1):
+        super(NormalizeWithAmplitudes, self).__init__()
+        self.temperature = temperature
+
+    def forward(self, x):
+        # Using softmax to approximate max and min
+        pos_weights = torch.softmax(x / self.temperature, dim=2)
+        neg_weights = torch.softmax(-x / self.temperature, dim=2)
+
+        max_approx = torch.sum(pos_weights * x, dim=2)
+        min_approx = torch.sum(neg_weights * x, dim=2)
+
+        max_abs_values = torch.where(torch.abs(max_approx) > torch.abs(min_approx), max_approx, min_approx)
+        max_abs_values_unsqueezed = max_abs_values.unsqueeze(2)
+        normalized = x / max_abs_values_unsqueezed
+
+        return torch.cat((normalized, max_abs_values_unsqueezed), dim=2)
+
+class ReverseNormalizeWithAmplitudes(nn.Module):
+    def __init__(self):
+        super(ReverseNormalizeWithAmplitudes, self).__init__()
+
+    def forward(self, x):
+        max_abs_values = x[:, :, -1]
+        normalized_data = x[:, :, :-1]
+        # Use out-of-place operation for scaling
+        result = normalized_data * max_abs_values.unsqueeze(2)
+        return result
+
+
+
+if __name__ == '__main__':
+    print("\n\nTesting normalisation:")
+    batch = 3
+    features = 5
+    steps = 7
+
+    sample = 10 * torch.rand(batch, features, steps).to(get_device()) - 5
+    print(f"sample={sample}\n")
+
+    normalised = NormalizeWithAmplitudes()(sample)
+    print(f"normalised={normalised}\n")
+    assert normalised.shape[-1] == sample.shape[-1] + 1
+
+    reversed = ReverseNormalizeWithAmplitudes()(normalised)
+    print(f"reversed={reversed}\n")
+
+    error = F.mse_loss(sample, reversed, reduction='sum').item()
+
+    print(f"\tbatch={batch}, features={features}, time-steps={steps}, error={error:.8f}")
+
+    assert error < 1e-3, f"Expected a very small error, got {error}"
+    print("Normalisation is OK\n\n")
+
+
 class AudioConv_AE(nn.Module):  # no VAE
 
     @staticmethod
@@ -45,7 +103,7 @@ class AudioConv_AE(nn.Module):  # no VAE
         lengths = []
         length = audio_length
         min_length = 1 # this is a bit silly, but let's see what happens...
-        
+
         for i in range(depth):
             kernel = min(int(kernel_size / (2 ** (i/2))), length)
             stride = int(kernel / ratio)
@@ -115,22 +173,16 @@ class AudioConv_AE(nn.Module):  # no VAE
             #layers.append(torch.nn.LeakyReLU()) # training is markedly worse.
 
         if is_decoder:
+            layers.append(ReverseNormalizeWithAmplitudes())
+        else:
+            layers.append(NormalizeWithAmplitudes())
+
+        if is_decoder:
             layers.reverse()
-
-        if False:
-            layers2 = []
-            for l in layers:
-                layers2.append(l)
-                layers2.append(nn.LeakyReLU())
-            layers = layers2
-
-        # Add a tanh to the encoder so the VAE only sees numbers between [-1, 1].
-        # And similarly to the decoder so the audio doesn't saturate (although this could behave like a compressor)
-        #layers.append(torch.nn.Tanh())
 
         # encoder: needs this otherwise the VAE sees crazy large values.
         # decoder: valid audio is between [-1, 1]
-        layers.append(torch.nn.Hardtanh()) # same as clamp(-1, 1)
+        #layers.append(torch.nn.Hardtanh()) # same as clamp(-1, 1)
 
         return nn.Sequential(*layers)
 
@@ -155,62 +207,48 @@ class AudioConv_AE(nn.Module):  # no VAE
             length = lengths[i]
             print(f"\tlayer {i+1}: kernel={kernels[i]:>3}, stride={strides[i]:>2}, length={lengths[i]:>5,}, compression={c:>6.1f}x")
 
-        self.expected_length = lengths[-1]
+        self.expected_length = lengths[-1] + 1 # add 1 for the amplitude
 
         self.encoder = self.make_layers(False, kernel_count, kernels, strides)
         self.decoder = self.make_layers(True,  kernel_count, kernels, strides)
 
-        try:
-            self.encoded_shape, self.encoded_size = model_output_shape_and_size(self.encoder, [audio_length])
+#        try:
+        if True:
+            self.encoded_shape, self.encoded_size = model_output_shape_and_size(self.encoder, [1, audio_length])
             print(f"\tencoded shape={self.encoded_shape}, size={self.encoded_size}")
             assert self.encoded_shape[0] == self.kernel_count
-            assert self.encoded_shape[1] == self.expected_length
+            assert self.encoded_shape[1] == self.expected_length, f"encoded shape[1]={self.encoded_shape[1]} instead of {self.expected_length}"
             assert self.encoded_size == self.expected_length * self.kernel_count, f"expected encoded_size={self.expected_length * self.kernel_count} but got {encoded_size}"
 
             decode_shape, decode_size = model_output_shape_and_size(self.decoder, self.encoded_shape)
             print(f"\tdecoded shape={decode_shape}, size={decode_size}")
-        except Exception as e:
-            print(f"Model doesn't work: {e}")
-            return
-
-        except BaseException as e:
-            print(f"Model is broken! {e}")
-            return
+        # except Exception as e:
+        #     print(f"Model doesn't work: {e}")
+        #     return
+        #
+        # except BaseException as e:
+        #     print(f"Model is broken! {e}")
+        #     return
 
         self.compression = audio_length / self.encoded_size
         print(f"AudioConv_AE {count_trainable_parameters(self):,} parameters, compression={self.compression:.1f}")
 
     def encode(self, x):
-        #debug("encode.x", x)
         batch_size = x.size(0)
         assert(x.size(1) == self.audio_length)
         x = x.view(batch_size, 1, self.audio_length)
-        #debug("x.view", x)
         hiddens = self.encoder(x)
-        #debug("hiddens", hiddens)
-
-        #hiddens = hiddens.transpose(2, 1) # convert to [batch, time, features]
         periodically_display_2D_output(hiddens)
-
-        #encoded = hiddens.flatten(-2)
-        #debug("encoded", encoded)
         return hiddens
 
     def decode(self, x):
-        #debug("decode.x", x)
         batch_size = x.size(0)
-        #hiddens = x.view(batch_size, self.kernel_count, -1)
-        #x = x.transpose(2, 1) # convert to [batch, features, time] for the ConvTranspose1D
-        #debug("hiddens", hiddens)
         decoded = self.decoder(x)
-        #debug("decoded", decoded)
         decoded = decoded.view(batch_size, -1)
-        #debug("decoded.view", decoded)
         len = decoded.size(1)
         missing = self.audio_length - len
         assert(missing >= 0)
         audio = F.pad(decoded, (0, missing))
-        #debug("audio", audio)
         return audio
 
     def forward(self, inputs):
@@ -237,7 +275,8 @@ class AudioConv_AE(nn.Module):  # no VAE
 
 if __name__ == "__main__":
     # audio_length, depth, kernel_count, kernel_size, compression
-    model = AudioConv_AE(85_000, 3, 25, 80, 100)
+    print("\n\nTesting AudioConv_AE")
+    model = AudioConv_AE(85_000, 3, 25, 168, 2.1)
     model.float()
     model.to(get_device())
     audio_length = 85_000
@@ -247,8 +286,9 @@ if __name__ == "__main__":
     loss, batched_output = model.forward_loss(batched_input)
     print(f"loss={loss}, batched_output={batched_output.shape}")
     assert batched_output.shape == batched_input.shape
-    print("\nAudioConv_AE is OK!\n\n")
+    print("AudioConv_AE is OK!\n\n")
 
+    print("\n\nTesting AudioConv_VAE")
     vae_sizes = [list(model.encoded_shape), 300, 200, 8]
     combined = CombinedVAE(model, vae_sizes)
     combined.float()
@@ -257,7 +297,7 @@ if __name__ == "__main__":
     loss, batched_output = combined.forward_loss(batched_input)
     print(f"loss={loss}, batched_output={batched_output.shape}")
     assert batched_output.shape == batched_input.shape
-    assert abs(loss - audio_length) < 2000, f"loss={loss} is greater than expected"
+    assert abs(loss - 100) < 1, f"loss={loss} is greater than expected"
 
     hidden_input = combined.auto_encoder.encode(batched_input)
     debug("hidden_input", hidden_input)
@@ -268,5 +308,5 @@ if __name__ == "__main__":
     assert hidden_input.shape == hidden_output.shape
 
 
-    print("\nAudioConv_VAE is OK!\n\n")
+    print("AudioConv_VAE is OK!\n\n")
 

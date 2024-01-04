@@ -8,6 +8,9 @@ from AudioConv_AE import *
 import ast
 
 
+# Helps detect any non-differentiable function calls!
+torch.autograd.set_detect_anomaly(True)
+
 
 def make_stepwiseMLPVAE(params, max_params):
 
@@ -48,8 +51,8 @@ def make_RNN_VAE(model_type, model_params, max_params):
     
     return model, model_text, approx_size, vae_size
 
-min_compression = 77  # Larger values may help the VAE
-max_compression = 120 # The auto-encoder may fail for huge compression ratios
+min_compression = 75  # Larger values may help the VAE
+max_compression = 150 # The auto-encoder may fail for huge compression ratios
 
 def make_Conv2D_VAE(model_type, model_params, max_params):
     layer_count, kernel_count, kernel_size, latent_size, vae_depth, vae_ratio = model_params

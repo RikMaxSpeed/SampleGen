@@ -240,7 +240,7 @@ def optimise_hyper_parameters(model_name, sample_count = 200):
         case "AudioConv_AE":
             # audio_length, depth, kernel_count, kernel_size, stride
             max_kernel_size = int(sample_rate / middleCHz)
-            search_space.append(Integer( 3,     7,     'uniform',  name='layers'))
+            search_space.append(Integer( 2,     4,     'uniform',  name='layers'))
             search_space.append(Integer(1,    50,     'log-uniform',  name='kernels'))
             search_space.append(Integer(10,    max_kernel_size, 'log-uniform',  name='kernel_size'))
             search_space.append(Real(  2,    5, 'log-uniform',  name='ratio'))
