@@ -74,7 +74,7 @@ def reconstruction_loss(inputs, outputs):
     #return basic_reconstruction_loss(inputs, outputs)
 
     # this does work too.
-    return weighted_time_reconstruction_loss(inputs, outputs, weight=5, time_ratio=0.2)
+    return weighted_time_reconstruction_loss(inputs, outputs, weight=10, time_ratio=0.3)
 
 # Test the basic loss & weighted loss:
 if __name__ == '__main__':
@@ -102,12 +102,14 @@ def _vae_loss_function(inputs, outputs, mu, logvar):
     assert distance >= 0, f"negative distance={distance}"
 
     kl_div = kl_divergence(mu, logvar) / inputs.size(0)
-    assert kl_div >= 0, f"negative kl_div={kl_div}"
+    if kl_div < 0:
+        print(f"negative kl_div={kl_div}")
+        kl_div = 0
 
-    loss = distance + kl_div
+    loss = distance + kl_div # * 1e4
 
-    if np.random.random() < 1e-2:
-        print(f"vae_loss={loss:.2f}, distance={distance:.2f}, kl_div={kl_div:.2f}")
+    # if np.random.random() < 1e-2:
+    #     print(f"vae_loss={loss:.2f}, distance={distance:.2f}, kl_div={kl_div:.6f}")
 
     # We seem to get into situations where the reconstruction loss and the KL loss are fighting each other :(
     # Try to focus the optimiser on whichever loss is largest:

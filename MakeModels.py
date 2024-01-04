@@ -48,8 +48,8 @@ def make_RNN_VAE(model_type, model_params, max_params):
     
     return model, model_text, approx_size, vae_size
 
-min_compression = 500  # Larger values may help the VAE
-max_compression = 4000 # The auto-encoder may fail for huge compression ratios
+min_compression = 77  # Larger values may help the VAE
+max_compression = 120 # The auto-encoder may fail for huge compression ratios
 
 def make_Conv2D_VAE(model_type, model_params, max_params):
     layer_count, kernel_count, kernel_size, latent_size, vae_depth, vae_ratio = model_params
@@ -78,11 +78,11 @@ def make_Conv2D_VAE(model_type, model_params, max_params):
 
 
 def make_AudioConv_VAE(model_type, model_params, max_params):
-    depth, kernel_count, kernel_size, compression, latent_size, vae_depth, vae_ratio = model_params
-    model_text = f"{model_type} layers={depth}, kernels={kernel_count}, size={kernel_size}, compression={compression}, VAE latent={latent_size}, depth={vae_depth}, ratio={vae_ratio:.2f}"
+    depth, kernel_count, kernel_size, stride_ratio, latent_size, vae_depth, vae_ratio = model_params
+    model_text = f"{model_type} layers={depth}, kernels={kernel_count}, size={kernel_size}, stride_ratio={stride_ratio}, VAE latent={latent_size}, depth={vae_depth}, ratio={vae_ratio:.2f}"
     print(model_text)
 
-    audio_conv = AudioConv_AE(audio_length, depth, kernel_count, kernel_size, compression)
+    audio_conv = AudioConv_AE(audio_length, depth, kernel_count, kernel_size, stride_ratio)
     if audio_conv.compression <= 0: # model failed
         return None, model_text, 0, 0
 
@@ -91,7 +91,7 @@ def make_AudioConv_VAE(model_type, model_params, max_params):
     vae_sizes = interpolate_layer_sizes(audio_hidden_size, latent_size, vae_depth, vae_ratio)
     print(f"VAE layers={vae_sizes}")
 
-    conv_size = AudioConv_AE.approx_trainable_parameters(audio_length, depth, kernel_count, kernel_size, compression)
+    conv_size = AudioConv_AE.approx_trainable_parameters(audio_length, depth, kernel_count, kernel_size, stride_ratio)
     vae_size  = VariationalAutoEncoder.approx_trainable_parameters(vae_sizes)
     approx_size = conv_size + vae_size
     print(f"AudioConvAE={conv_size:,}, VAE={vae_size:,}, approx total={approx_size:,}")
@@ -102,7 +102,7 @@ def make_AudioConv_VAE(model_type, model_params, max_params):
     vae_sizes[0] = list(audio_hidden_shape) # maintain the 2D grid shape
     model = CombinedVAE(audio_conv, vae_sizes)
 
-    model.vae.enable_variational(False) # very hacky
+    #model.vae.enable_variational(False) # very hacky
 
     return model, model_text, approx_size, vae_size
 
@@ -288,14 +288,14 @@ def make_model(model_type, model_params, max_params, verbose):
             approx_size = vae_size  # we're not re-training the Conv2D parameters
 
         case "AudioConv_AE":
-            depth, kernel_count, kernel_size, compression = model_params
-            model_text = f"{model_type} layers={depth}, kernels={kernel_count}, size={kernel_size}, compression={compression}"
+            depth, kernel_count, kernel_size, stride_ratio = model_params
+            model_text = f"{model_type} layers={depth}, kernels={kernel_count}, size={kernel_size}, stride_ratio={stride_ratio}"
             print(model_text)
-            approx_size = AudioConv_AE.approx_trainable_parameters(audio_length, depth, kernel_count, kernel_size, compression)
+            approx_size = AudioConv_AE.approx_trainable_parameters(audio_length, depth, kernel_count, kernel_size, stride_ratio)
             if is_too_large(approx_size, max_params):
                 return invalid_model(approx_size)
 
-            model = AudioConv_AE(audio_length, depth, kernel_count, kernel_size, compression)
+            model = AudioConv_AE(audio_length, depth, kernel_count, kernel_size, stride_ratio)
 
             if model.compression < min_compression or model.compression > max_compression:
                 print(f"Compression={model.compression:.1f} out of range [{min_compression}, {max_compression}]")
@@ -379,7 +379,7 @@ def load_saved_model(model_name):
     model.load_state_dict(torch.load(file_name))
     model.eval() # Ensure the model is in evaluation mode
     model.to(get_device())
-    print(f"{model_type} has {count_trainable_parameters(model):,} weights & biases")
+    print(f"{model_type} has {count_trainable_parameters(model):,} weights & biases, using device={get_device()}")
     
     return model, model_text, params, model_size
 

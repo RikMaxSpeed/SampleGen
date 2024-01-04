@@ -24,11 +24,8 @@ def log_interp(start, end, steps):
 
 def predict_sample(model, input, use_stfts):
     input = convert_sample_to_input(input)
+    input = input.unsqueeze(0) # add batch dimension
 
-    input = input.unsqueeze(0)
-    
-    input = input.to(get_device())
-    
     with torch.no_grad():
         loss, resynth = model.forward_loss(input)
 
@@ -132,7 +129,7 @@ best_train_losses = []
 
 use_exact_train_loss = False # Setting to True is more accurate but very expensive in CPU time
 
-fail_loss = 1_000 # value used to make a model that failed
+fail_loss = 10 # value used to make a model that failed
 def set_fail_loss(loss):
     global fail_loss, last_saved_loss
     if fail_loss != loss:
@@ -183,7 +180,7 @@ def train_model(model_name, hyper_params, max_epochs, max_time, max_params, max_
     learning_rate *= batch_size  # see https://www.baeldung.com/cs/learning-rate-batch-size
     weight_decay = 0 #1e-6
     optimiser_text = f"Adam batch={batch_size}, learning_rate={learning_rate:.2g}, weight_decay={weight_decay:.2g}"
-    print(f"optimiser: {optimiser_text}")
+    print(f"optimiser: {optimiser_text}, device={get_device()}")
 
     trainable = count_trainable_parameters(model)
     model_text += f" (params={model_size:,}, compression={model.compression:.1f}x)"
@@ -234,6 +231,7 @@ def train_model(model_name, hyper_params, max_epochs, max_time, max_params, max_
         
         sum_train_loss = 0
         sum_batches = 0
+        batch_losses = []
         for batch_idx, inputs in enumerate(dataloader):
             inputs = inputs.to(get_device())
         
@@ -249,6 +247,7 @@ def train_model(model_name, hyper_params, max_epochs, max_time, max_params, max_
 
             sum_train_loss += numeric_loss * len(inputs)
             sum_batches += len(inputs)
+            batch_losses.append(numeric_loss) # average loss for this batch
 
             # Backward pass and optimization
             optimizer.zero_grad()
@@ -299,6 +298,8 @@ def train_model(model_name, hyper_params, max_epochs, max_time, max_params, max_
                 file.write(f"train loss={train_loss:.2f}, test loss={test_loss:.2f}, overfit={test_loss/train_loss:.2f}\n")
                 file.write(f"time={total_time:.0f} sec, train_size={len(train_dataset)}, batch_size={batch_size}, epoch={epoch} = {total_time/(epoch+1):.1f} sec/epoch\n")
                 file.write(f"\n{active_model}\n")
+
+            plot_multiple_histograms_vs_gaussian([batch_losses], ["Batch Loss"])
 
             resynth_test_tones(model_name, model, use_stfts)
 

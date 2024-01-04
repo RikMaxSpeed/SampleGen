@@ -40,15 +40,19 @@ class AudioConv_AE(nn.Module):  # no VAE
     @staticmethod
     def compute_kernel_sizes_and_strides(audio_length, depth, kernel_count, kernel_size, ratio):
         failed = [], 0, 0
-
         kernels = []
         strides=[]
         lengths = []
         length = audio_length
         min_length = 1 # this is a bit silly, but let's see what happens...
+        
         for i in range(depth):
-            kernel = min(kernel_size // (2**i), length)
-            stride = max(int(kernel / ratio), 1)
+            kernel = min(int(kernel_size / (2 ** (i/2))), length)
+            stride = int(kernel / ratio)
+
+            if stride <= 1:
+                print(f"stride={stride} is too small")
+                return failed
 
             if kernel < 2:
                 print(f"kernel={kernel} is too small.")
@@ -96,46 +100,6 @@ class AudioConv_AE(nn.Module):  # no VAE
 
         return encode + decode
 
-    @staticmethod
-    def compute_kernel_sizes_and_strides(audio_length, depth, kernel_count, kernel_size, ratio):
-        failed = [], 0, 0
-
-        kernels = []
-        strides=[]
-        lengths = []
-        length = audio_length
-        min_length = 1 # this is a bit silly, but let's see what happens...
-        for i in range(depth):
-            kernel = min(kernel_size // (2**i), length)
-            stride = max(int(kernel / ratio), 1)
-
-            if kernel < 2:
-                print(f"kernel={kernel} is too small.")
-                return failed
-
-            if stride > kernel:
-                print(f"stride={stride} must be less than kernel size={kernel}.")
-                return failed
-
-            if kernel >= audio_length:
-                print(f"kernel size={kernel} must be less than audio length={audio_length}.")
-                return failed
-
-            next_length = conv1d_output_size(length, kernel, stride)
-
-            if i+1 < depth and next_length < min_length: # over-compressing
-                print(f"output length={next_length}, must be at least {min_length}.")
-                return failed
-
-            kernels.append(kernel)
-            strides.append(stride)
-            lengths.append(next_length)
-            length = next_length
-
-        assert len(kernels) == depth
-        assert len(strides) == depth
-
-        return kernels, strides, lengths
     def make_layers(self, is_decoder, kernel_count, kernels, strides):
         layers = []
         for i in range(len(kernels)):

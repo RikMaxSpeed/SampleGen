@@ -29,10 +29,7 @@ def reset_hyper_training(model_name):
     reset_train_losses(model_name, True)
     hyper_start = time.time()
 
-    if is_audio(model_name):
-        set_fail_loss(15000)
-    else:
-        set_fail_loss(1000)
+    set_fail_loss(10)
 
 
 from Train import *
@@ -42,9 +39,9 @@ print(f"1 sample = {freq_buckets:,} x {sequence_length:,} = {one_sample:,}")
 
 def display_best_hyper_parameters():
 
-    print("\nBest hyper parameters:")
     order = np.argsort(hyper_losses)
     topN = min(15, len(hyper_losses))
+    print(f"\nBest {topN}/{len(hyper_losses)} hyper parameters:")
     for i in range(topN):
         o = order[i]
         print(f"#{i + 1} {hyper_losses[o]:.2f}, {hyper_names[o]}")
@@ -74,13 +71,13 @@ def evaluate_model(params):
     max_overfit = 1.3 # Ensure we retain the models that generalise reasonably well.
     
     max_epochs = 100 # This is sufficient to figure out which model will converge best if we let it run for longer.
-    if is_incremental_vae(hyper_model) or is_audio(hyper_model): # fast models
+    if get_device() == "mps" and is_incremental_vae(hyper_model) or is_audio(hyper_model): # fast models
         max_overfit = 2.0
         max_epochs = 5000 # assuming we'll bump into max_time first!
 
-    max_time = 2*60 # we don't like slow models...
-    if get_device() == 'cpu':
-        max_time *= 10
+    max_time = 5*60 # we don't like slow models...
+    # if get_device() == 'cpu':
+    #     max_time *= 10
 
     verbose = False # avoid printing lots of detail for each run
     preload = False
@@ -162,8 +159,8 @@ def optimise_hyper_parameters(model_name, sample_count = 200):
 
     # Optimiser:
     search_space = list()
-    search_space.append(Integer(2,      6,    'log-uniform',  name='batch'))         # batch_size = 2^batch
-    search_space.append(Integer(-7,    -3,    'uniform',  name='learning_rate')) # 10^lr * batch_size
+    search_space.append(Integer(3,      6,    'log-uniform',  name='batch'))         # batch_size = 2^batch
+    search_space.append(Integer(-6,    -4,    'uniform',  name='learning_rate')) # 10^lr * batch_size
 
     # Model:
     global hyper_model
@@ -175,7 +172,6 @@ def optimise_hyper_parameters(model_name, sample_count = 200):
         case "STFT_VAE":
             # Train the naive STFTVariationalAutoEncoder
             max_params = 50_000_000 # this model needs a huge number of parameters
-            max_loss = 300_000 # and the loss starts off extremely high
             search_space.append(Integer(4,        7,    'uniform',      name='latent_size'))
             search_space.append(Integer(1,        4,    'uniform',      name='vae_depth'))
             search_space.append(Real   (0.1,      10,   'log-uniform',  name='vae_ratio'))
@@ -187,8 +183,6 @@ def optimise_hyper_parameters(model_name, sample_count = 200):
             search_space.append(Real   (0.1,      10,   'log-uniform',  name='ratio'))
 
         case "MLP_VAE":
-            max_loss = 50_000
-
             # StepWiseMLP parameters
             search_space.append(Integer(10,       40,   'uniform',      name='hidden_size'))
             search_space.append(Integer(2,         5,   'uniform',      name='depth'))
@@ -206,7 +200,6 @@ def optimise_hyper_parameters(model_name, sample_count = 200):
             search_space.append(Real   (0.1,      10,   'uniform',      name='vae_ratio'))
 
         case "RNNAutoEncoder": # Train the RNNAutoEncoder (no VAE)
-            max_loss = 20_000
             search_space.append(Integer(10,      50,   'log-uniform',   name='hidden_size'))
             search_space.append(Integer(2,        6,   'uniform',       name='encode_depth'))
             search_space.append(Integer(2,        6,   'uniform',       name='decode_depth'))
@@ -247,10 +240,10 @@ def optimise_hyper_parameters(model_name, sample_count = 200):
         case "AudioConv_AE":
             # audio_length, depth, kernel_count, kernel_size, stride
             max_kernel_size = int(sample_rate / middleCHz)
-            search_space.append(Integer( 2,     6,     'uniform',  name='layers'))
-            search_space.append(Integer(40,    200,     'log-uniform',  name='kernels'))
-            search_space.append(Integer(20,    max_kernel_size*2, 'log-uniform',  name='kernel_size'))
-            search_space.append(Integer( 2,    16, 'log-uniform',  name='ratio'))
+            search_space.append(Integer( 3,     7,     'uniform',  name='layers'))
+            search_space.append(Integer(1,    50,     'log-uniform',  name='kernels'))
+            search_space.append(Integer(10,    max_kernel_size, 'log-uniform',  name='kernel_size'))
+            search_space.append(Real(  2,    5, 'log-uniform',  name='ratio'))
 
         case "AudioConv_VAE_Incremental":
             search_space.append(Integer(5, 30, 'uniform', name='VAE latent'))
@@ -319,7 +312,7 @@ def train_best_params(model_name, params = None, samples = None, finest = False)
 
     max_params = 1e9  # not relevant, we have a valid model
     max_epochs = 9999 # ignore
-    max_loss = audio_length
+    max_loss = 100
     set_fail_loss(audio_length)
 
      # This does improve the final accuracy, but it's very slow.
@@ -493,7 +486,6 @@ def hypertrain_AudioConv_VAE():
     ###############################################################################################
     # Audio Convolution Auto-Encoder
 
-    set_fail_loss(20_000)
     set_device('cpu') # Aaargh, bug in MPS... Apple informed
     assert get_device() == 'cpu', f"problem device={get_device()} :("
 

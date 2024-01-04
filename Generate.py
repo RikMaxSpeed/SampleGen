@@ -274,18 +274,18 @@ class Sample_Generator():
         graphs = False
     
         for i in range(len(self.samples)):
-            stft = self.samples[i]
+            sample = self.samples[i]
             name = self.file_names[i][:-4]
             
-            stft = self.adjust_sample_length(stft)
+            sample = self.adjust_sample_length(sample)
             
             if graphs and self.use_stfts:
-                plot_stft(name, stft, sample_rate)
+                plot_stft(name, sample, sample_rate)
             
             if noisy:
-                save_and_play_resynthesized_audio(stft.cpu().numpy(), sample_rate, stft_hop, None, True)
+                save_and_play_resynthesized_audio(sample.cpu().numpy(), sample_rate, stft_hop, None, True)
             
-            resynth, loss = predict_sample(self.model, stft, self.use_stfts)
+            resynth, loss = predict_sample(self.model, sample, self.use_stfts)
             names.append(name)
             losses.append(loss * 100) # percentage
             
