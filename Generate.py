@@ -95,7 +95,7 @@ class Sample_Generator():
         name, stft = self.find_samples_matching(pattern)
         input_stft = convert_sample_to_input(stft).unsqueeze(0).to(get_device())
         encode = self.encode_input(input_stft, noise_range)
-        print(f"Encoded {name} to {encode.shape}")
+        #print(f"Encoded {name} to {encode.shape}")
         return name, stft.numpy(), encode
 
 

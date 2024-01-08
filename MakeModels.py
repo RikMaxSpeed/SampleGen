@@ -51,7 +51,7 @@ def make_RNN_VAE(model_type, model_params, max_params):
     
     return model, model_text, approx_size, vae_size
 
-min_compression = 75  # Larger values may help the VAE
+min_compression = 35  # Larger values may help the VAE
 max_compression = 150 # The auto-encoder may fail for huge compression ratios
 
 def make_Conv2D_VAE(model_type, model_params, max_params):
@@ -105,7 +105,8 @@ def make_AudioConv_VAE(model_type, model_params, max_params):
     vae_sizes[0] = list(audio_hidden_shape) # maintain the 2D grid shape
     model = CombinedVAE(audio_conv, vae_sizes)
 
-    #model.vae.enable_variational(False) # very hacky
+    # Hack: disable the variational encoder to see if that's what preventing the model from achieving high accuracy...
+    model.vae.enable_variational(False)
 
     return model, model_text, approx_size, vae_size
 

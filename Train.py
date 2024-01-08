@@ -131,7 +131,7 @@ def set_fail_loss(loss):
     global fail_loss, last_saved_loss
     if fail_loss != loss:
         fail_loss = loss
-        last_saved_loss = loss // 2
+        last_saved_loss = loss / 3
         print(f"fail_loss={fail_loss}, last_saved_loss={last_saved_loss}")
 
 def get_fail_loss():
@@ -216,7 +216,7 @@ def train_model(model_name, hyper_params, max_epochs, max_time, max_params, max_
         window = 10
 
     if max_epochs >= 1000:
-        window = 50 # allow the model longer to recover from any exploratory excursions.
+        window = 100 # allow the model longer to recover from any exploratory excursions.
         
     # Plot a graph of the loss vs epoch at regular intervals
     graph_interval = 5
@@ -226,8 +226,11 @@ def train_model(model_name, hyper_params, max_epochs, max_time, max_params, max_
 
         # KL Annealing: adjust the KL weight over time, initially focusing on reconstruction loss, and later normalising the latent space
         if is_vae(model_name):
-            progress = min(epoch / (10 * window), 1) # this is effectively another hyper-parameter 🙀
-            set_kl_weight(progress)
+            t = epoch / (5 * window)
+            weight = min(t, 1.0)
+            wobble = (1 + np.sin(t * 5)/2)/2
+            weight = max(min(weight * wobble, 1), 0)
+            set_kl_weight(0.5 * weight, epoch+1)
 
         sum_train_loss = 0
         sum_batches = 0
@@ -371,5 +374,6 @@ def train_model(model_name, hyper_params, max_epochs, max_time, max_params, max_
 
 
 
-    # We return the Test Loss: ultimatley we're looking for the model that trains best on the training set. Maximum overfit is handled in the stopping condition.
-    return description, model_size, np.min(train_losses), train_rate
+    # We return the Test Loss: ultimatley we're looking for the model that trains best on the training set.
+    # Maximum overfit is handled in the stopping condition.
+    return description, model_size, train_losses[-1], train_rate

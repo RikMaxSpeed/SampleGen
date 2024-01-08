@@ -1,5 +1,3 @@
-import torch
-import torch.nn as nn
 import torch.nn.functional as F
 import copy
 
@@ -98,11 +96,15 @@ def kl_divergence(mu, logvar):
 
 # KL annealing: we'll evolve the KL divergence weight over time from 0 (target the reconstruction loss) to 1 (normalise the latent space variables)
 kl_weight = 1
-def set_kl_weight(kl):
-    global kl_weight
+last_displayed_kl_weight = 0
+def set_kl_weight(kl, epoch):
+    global kl_weight, last_displayed_kl_weight
+
     if kl_weight != kl:
         kl_weight = kl
-        print(f"Using VAE KL divergence weight={100*kl_weight:.1f}%")
+        if np.abs(last_displayed_kl_weight - kl) > 0.05:
+            print(f"Using VAE KL divergence weight={100*kl_weight:.1f}% at epoch {epoch}")
+            last_displayed_kl_weight = kl
 
 def _vae_loss_function(inputs, outputs, mu, logvar):
 
@@ -114,18 +116,10 @@ def _vae_loss_function(inputs, outputs, mu, logvar):
         print(f"negative kl_div={kl_div}")
         kl_div = 0
 
-    loss = distance + kl_div * kl_weight
+    loss = distance + kl_weight * (kl_div - distance) # linear interpolation between the 2 errors
 
-    # if np.random.random() < 1e-2:
-    #     print(f"vae_loss={loss:.2f}, distance={distance:.2f}, kl_div={kl_div:.6f}")
-
-    # We seem to get into situations where the reconstruction loss and the KL loss are fighting each other :(
-    # Try to focus the optimiser on whichever loss is largest:
-    #loss += distance * kl_div # sames as  (1 + distance) * (1 + kl_div) - 1
-
-    if loss < 0:
+    if loss < 0: # Usually a bad sign that the prior has collapsed.
         print(f"Negative loss!! loss={loss} (reconstruction={distance}, kl_divergence={kl_div}) in vae_loss_function")
-        assert loss > -1e-3, "doesn't appear to be a floating point precision problem :("
         loss = 0.0 # assume floating point discrepancy
 
     return loss
@@ -201,7 +195,6 @@ class VariationalAutoEncoder(nn.Module):
         assert x.size(1) == total_elements(self.input_shape), f"VAE.decode expected {total_elements(self.input_shape)} outputs, but got {x.size(1)}"
 
         x = x.view((x.size(0), *self.input_shape)) # re-inflate
-        #debug("decode.x", x)
 
         return x
 

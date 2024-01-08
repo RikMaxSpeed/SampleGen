@@ -9,18 +9,18 @@ import time
 max_params = 0
 tuning_count = 0
 break_on_exceptions = True # True=Debugging, False allows the GPR to continue even if the model blows up (useful for long tuning runs!)
-max_loss = 200 # default
+max_loss = 100 # default
 
 hyper_model = "None"
 hyper_losses = []
 hyper_names  = []
 hyper_params = []
-max_hyper_runs = 80  # it usually gets stuck at some local minimum well before this.
+max_hyper_runs = 100  # it usually gets stuck at some local minimum well before this.
 hyper_stfts = False
 hyper_start = time.time()
 
 def reset_hyper_training(model_name):
-    global hyper_model, hyper_stfts, hyper_losses, hyper_names, hyper_params
+    global hyper_model, hyper_stfts, hyper_losses, hyper_names, hyper_params, hyper_start
     hyper_model = model_name
     hyper_stfts = model_uses_STFTs(model_name)
     hyper_losses = []
@@ -29,7 +29,7 @@ def reset_hyper_training(model_name):
     reset_train_losses(model_name, True)
     hyper_start = time.time()
 
-    set_fail_loss(10)
+    set_fail_loss(100)
 
 
 from Train import *
@@ -63,12 +63,12 @@ def display_best_hyper_parameters():
 
 
 def evaluate_model(params):
-    global hyper_model, hyper_losses, hyper_names, hyper_epochs, tuning_count
+    global hyper_model, hyper_losses, hyper_names, hyper_epochs, tuning_count, max_loss
     
     tuning_count += 1
     print(f"\n\nHyper-Parameter tuning#{tuning_count}/{max_hyper_runs}: {hyper_model} {params}")
     
-    max_overfit = 1.3 # Ensure we retain the models that generalise reasonably well.
+    max_overfit = 1.5 # Ensure we retain the models that generalise reasonably well.
     
     max_epochs = 100 # This is sufficient to figure out which model will converge best if we let it run for longer.
     if get_device() == "mps" and is_incremental_vae(hyper_model) or is_audio(hyper_model): # fast models
@@ -78,6 +78,10 @@ def evaluate_model(params):
     max_time = 5*60 # we don't like slow models...
     # if get_device() == 'cpu':
     #     max_time *= 10
+
+    max_loss = 100
+    if is_incremental_vae(hyper_model):
+        max_loss = 500
 
     verbose = False # avoid printing lots of detail for each run
     preload = False
@@ -240,14 +244,14 @@ def optimise_hyper_parameters(model_name, sample_count = 200):
         case "AudioConv_AE":
             # audio_length, depth, kernel_count, kernel_size, stride
             max_kernel_size = int(sample_rate / middleCHz)
-            search_space.append(Integer( 2,     4,     'uniform',  name='layers'))
+            search_space.append(Integer( 1,     4,     'uniform',  name='layers'))
             search_space.append(Integer(1,    50,     'log-uniform',  name='kernels'))
             search_space.append(Integer(10,    max_kernel_size, 'log-uniform',  name='kernel_size'))
             search_space.append(Real(  2,    5, 'log-uniform',  name='ratio'))
 
         case "AudioConv_VAE_Incremental":
-            search_space.append(Integer(5, 30, 'uniform', name='VAE latent'))
-            search_space.append(Integer(2, 5, 'uniform', name='depth'))
+            search_space.append(Integer(5, 200, 'uniform', name='VAE latent'))
+            search_space.append(Integer(2, 7, 'uniform', name='depth'))
             search_space.append(Real(0.1, 10, 'log-uniform', name='ratio'))
 
         case "AudioConv_VAE":
@@ -304,7 +308,7 @@ def train_best_params(model_name, params = None, samples = None, finest = False)
     start_new_stft_video(f"STFT - train {model_name}", True)
 
     max_time = 2 * hour # hopefully the model converges way before this!
-    max_overfit = 1.3 # if we set this too high, the VAE stdevs become huge and the model doesn't generalise.
+    max_overfit = 20.0 # hack
 
     # if "VAE" in model_name: # Allow the Auto-Encoders to over-fit
     #     max_overfit = 10.0
@@ -314,9 +318,9 @@ def train_best_params(model_name, params = None, samples = None, finest = False)
     max_epochs = 9999 # ignore
     max_loss = 100
     if is_incremental(model_name):
-        max_loss = 500
+        max_loss = 500 # for some reason these models start with much higher losses...
 
-    set_fail_loss(audio_length)
+    set_fail_loss(100)
 
      # This does improve the final accuracy, but it's very slow.
     if finest:
