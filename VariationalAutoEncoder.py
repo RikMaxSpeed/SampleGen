@@ -16,19 +16,20 @@ cached_weights = {}
 def weighted_time_reconstruction_loss(inputs, outputs, weight, time_ratio, verbose=False):
     assert inputs.dim() >= 2, f"Expected inputs to be greater than 2, not {inputs.dim()}"
     assert weight >= 1, f"Expected weight to be greater than 1, not {weight}"
-    assert time_ratio >= 0 and time_ratio <= 1, f"Expected time_ratio to be between 0 and 1, not {time_ratio}"
+    assert time_ratio > 0 and time_ratio < 1, f"Expected time_ratio to be between 0 and 1, not {time_ratio}"
 
     batch_size = inputs.size(0)
     sequence_length = inputs.size(-1)
 
-    time_steps = int(time_ratio * sequence_length)
+    time_steps = min(int(time_ratio * sequence_length), 1)
+    assert time_steps < sequence_length, f"Expected time steps to be less than {sequence_length}, not {time_steps}"
 
     if inputs.dim() == 3:
         features = inputs.size(1)
     else:
         features = 1
 
-    # if features > sequence_length:
+    # if features > sequence_length: # warning heuristic, fails under extreme time compression
     #     print(f"Warning: features={features} is greater than sequence_length={sequence_length}")
 
     # Linear interpolation of weights from 'weight' to 1 over N steps
@@ -37,12 +38,9 @@ def weighted_time_reconstruction_loss(inputs, outputs, weight, time_ratio, verbo
     cached_key = (sequence_length, time_steps, weight)
     weights = cached_weights.get(cached_key)
     if weights is None:
-        if time_steps > 0:
-            weights = torch.linspace(weight, 1, time_steps, device=inputs.device)
-            if sequence_length > time_steps:
-                weights = torch.cat((weights, torch.ones(sequence_length - time_steps, device=inputs.device)))
-        else:
-            weights = torch.ones(sequence_length, device=inputs.device)
+        weights = torch.linspace(weight, 1, time_steps, device=inputs.device)
+        weights = torch.cat((weights, torch.ones(sequence_length - time_steps, device=inputs.device)))
+
         cached_weights[cached_key] = weights
         if verbose:
             print(f"weight={weight}, length={sequence_length}, time_steps={time_steps}, weights={weights}")
@@ -72,7 +70,7 @@ def reconstruction_loss(inputs, outputs):
     #return basic_reconstruction_loss(inputs, outputs)
 
     # this does work too.
-    return weighted_time_reconstruction_loss(inputs, outputs, weight=10, time_ratio=0.3)
+    return weighted_time_reconstruction_loss(inputs, outputs, weight=10, time_ratio=0.1)
 
 # Test the basic loss & weighted loss:
 if __name__ == '__main__':
@@ -106,7 +104,7 @@ def set_kl_weight(kl, epoch):
             print(f"Using VAE KL divergence weight={100*kl_weight:.1f}% at epoch {epoch}")
             last_displayed_kl_weight = kl
 
-def _vae_loss_function(inputs, outputs, mu, logvar):
+def vae_loss_function(inputs, outputs, mu, logvar):
 
     distance  = reconstruction_loss(inputs, outputs)
     assert distance >= 0, f"negative distance={distance}"
@@ -185,7 +183,7 @@ class VariationalAutoEncoder(nn.Module):
             logvar = self.fc_logvar(x)
         else:
             mu = nn.Tanh()(mu)
-            logvar = torch.zeros(mu.shape).to(get_device())
+            logvar = torch.full(mu.shape, -9999).to(get_device())
         
         return mu, logvar
 
@@ -219,7 +217,7 @@ class VariationalAutoEncoder(nn.Module):
 
     def loss_function(self, inputs, outputs, mus, logvars):
         if self.is_variational:
-            return _vae_loss_function(inputs, outputs, mus, logvars)
+            return vae_loss_function(inputs, outputs, mus, logvars)
         else:
             return reconstruction_loss(inputs, outputs)
 

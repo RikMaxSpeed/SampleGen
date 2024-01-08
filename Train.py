@@ -22,16 +22,44 @@ def log_interp(start, end, steps):
     return torch.exp(torch.linspace(math.log(start), math.log(end), steps))
 
 
-def predict_sample(model, input, use_stfts):
+def predict_sample(name, model, input, use_stfts):
     input = convert_sample_to_input(input)
     input = input.unsqueeze(0) # add batch dimension
 
     with torch.no_grad():
         loss, resynth = model.forward_loss(input)
 
-    resynth = resynth.squeeze(0)
+    loss = loss.item()
 
-    return convert_output_to_sample(resynth, use_stfts), loss.item()
+    # More detail:
+    model_name = model.__class__.__name__
+    # Additional debug code...
+    if False and "Combined" in model_name:
+        print(f"predict_sample: {name}, {model_name} loss: {loss:.4f}")
+        with torch.no_grad():
+            hidden_input = model.auto_encoder.encode(input)
+            latent_mu, latent_logvar = model.vae.encode(hidden_input)
+            hidden_output = model.vae.decode(latent_mu)
+            sample_output = model.auto_encoder.decode(hidden_output)
+            hidden_loss = reconstruction_loss(hidden_input, hidden_output).item()
+            sample_loss = reconstruction_loss(input, sample_output).item()
+            vae_loss = vae_loss_function(input, sample_output, latent_mu, latent_logvar)
+            diff_loss = abs(sample_loss - loss)
+            output_diff = reconstruction_loss(sample_output, resynth).item() # should be 0
+            print(f"\tlatent={latent_mu.shape}")
+            print(f"\tmodel.vae.is_variational={model.vae.is_variational}")
+            print(f"\thidden_loss={hidden_loss:.4f}")
+            print(f"\tsample_loss={sample_loss:.4f}")
+
+            if model.vae.is_variational:
+                print(f"\tvae_loss={vae_loss:.4f}")
+
+            print(f"\tdiff={diff_loss:.4f} {'ok' if abs(diff_loss) < 1e-2 else 'warning!'}")
+            print(f"\toutput_diff={output_diff:.4f}")
+            print("\n")
+            #assert abs(sample_loss - loss) < 1e-3, f"Sample loss={sample_loss} vs loss={loss}, diff={sample_loss - loss}"
+
+    return convert_output_to_sample(resynth.unsqueeze(0), use_stfts), loss
 
 
 # Sample data
@@ -47,7 +75,7 @@ def resynth_test_tones(model_name, model, use_stfts):
     for i in range(len(demo_samples)):
         sample = demo_samples[i]
         name = demo_names[i]
-        resynth, loss = predict_sample(model, sample, use_stfts)
+        resynth, loss = predict_sample(name, model, sample, use_stfts)
         file_name = f"Results/{model_name} {name} - resynth.wav"
         save_and_play_resynthesized_audio(resynth, sample_rate, stft_hop, file_name, False)
         display_custom_link(file_name, f"Resynth {name}: loss={loss:.2f}%")
@@ -323,7 +351,7 @@ def train_model(model_name, hyper_params, max_epochs, max_time, max_params, max_
             break
     
         if epoch < 5: # Test a random sample to show that the code is working from A-Z
-            resynth, loss = predict_sample(model, demo_samples[0], use_stfts)
+            resynth, loss = predict_sample(demo_names[0], model, demo_samples[0], use_stfts)
 
         if total_time > max_time:
             print("Total time={:.1f} sec exceeds max={:.0f} sec".format(total_time, max_time))

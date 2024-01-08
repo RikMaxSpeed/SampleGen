@@ -36,7 +36,6 @@ if __name__ == '__main__' and False: # no longer required
     print(f"\nFastest FFT size={fastest_size}")
 
 
-
 class NormalizeWithAmplitudes(nn.Module):
     def __init__(self, temperature=0.1):
         super(NormalizeWithAmplitudes, self).__init__()
@@ -50,11 +49,13 @@ class NormalizeWithAmplitudes(nn.Module):
         max_approx = torch.sum(pos_weights * x, dim=2)
         min_approx = torch.sum(neg_weights * x, dim=2)
 
-        max_abs_values = torch.where(torch.abs(max_approx) > torch.abs(min_approx), max_approx, min_approx)
-        max_abs_values_unsqueezed = max_abs_values.unsqueeze(2)
-        normalized = x / max_abs_values_unsqueezed
 
-        return torch.cat((normalized, max_abs_values_unsqueezed), dim=2)
+        max_abs_values = torch.where(torch.abs(max_approx) > torch.abs(min_approx), max_approx, min_approx)
+        #print(f"Normalised amplitudes: max_abs_values={max_abs_values}")
+
+        max_abs_values = max_abs_values.unsqueeze(2)
+        normalized = x / max_abs_values
+        return torch.cat((normalized, max_abs_values), dim=2)
 
 class ReverseNormalizeWithAmplitudes(nn.Module):
     def __init__(self):

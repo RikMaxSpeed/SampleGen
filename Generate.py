@@ -285,9 +285,9 @@ class Sample_Generator():
             if noisy:
                 save_and_play_resynthesized_audio(sample.cpu().numpy(), sample_rate, stft_hop, None, True)
             
-            resynth, loss = predict_sample(self.model, sample, self.use_stfts)
+            resynth, loss = predict_sample(name, self.model, sample, self.use_stfts)
             names.append(name)
-            losses.append(loss * 100) # percentage
+            losses.append(loss)
             
             if graphs and self.use_stfts:
                 plot_stft("Resynth " + name, resynth, sample_rate)
