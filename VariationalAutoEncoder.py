@@ -13,15 +13,15 @@ def basic_reconstruction_loss(inputs, outputs):
 cached_weights = {}
 
 # Weight the samples over time: it's critical to get start of the sound correct.
-def weighted_time_reconstruction_loss(inputs, outputs, weight, time_ratio, verbose=False):
+def weighted_time_reconstruction_loss(inputs, outputs, weight, power, verbose=False):
     assert inputs.dim() >= 2, f"Expected inputs to be greater than 2, not {inputs.dim()}"
     assert weight >= 1, f"Expected weight to be greater than 1, not {weight}"
-    assert time_ratio > 0 and time_ratio < 1, f"Expected time_ratio to be between 0 and 1, not {time_ratio}"
+    assert power >= 1, f"Expected power={power} to be >= 1"
 
     batch_size = inputs.size(0)
     sequence_length = inputs.size(-1)
 
-    time_steps = min(int(time_ratio * sequence_length), 1)
+    time_steps = min(int(power * sequence_length), 1)
     assert time_steps < sequence_length, f"Expected time steps to be less than {sequence_length}, not {time_steps}"
 
     if inputs.dim() == 3:
@@ -38,8 +38,10 @@ def weighted_time_reconstruction_loss(inputs, outputs, weight, time_ratio, verbo
     cached_key = (sequence_length, time_steps, weight)
     weights = cached_weights.get(cached_key)
     if weights is None:
-        weights = torch.linspace(weight, 1, time_steps, device=inputs.device)
-        weights = torch.cat((weights, torch.ones(sequence_length - time_steps, device=inputs.device)))
+        t = torch.linspace(0, 1, sequence_length, device=inputs.device)
+        weights = 1 + (weight - 1) * (torch.abs(t - 0.5) / 0.5) ** power
+        weights /= weights.sum()
+        print(f"weights={weights}")
 
         cached_weights[cached_key] = weights
         if verbose:
@@ -50,16 +52,8 @@ def weighted_time_reconstruction_loss(inputs, outputs, weight, time_ratio, verbo
     if inputs.dim() == 3:
         loss = torch.sum(loss, dim=1)
 
-    # Apply weights to the loss
-    weighted_loss = loss * weights
-
-    # Scale by the sum of weights
-    total_weight = weights.sum()
-    average_weight = total_weight / sequence_length
-
-    loss = torch.sum(weighted_loss)
-
-    loss /= (batch_size * average_weight * sequence_length * features)
+    loss = torch.sum(loss * weights)
+    loss /= (batch_size * features) # normalise
 
     return percentage * torch.clamp(loss, 0)
 
@@ -70,19 +64,18 @@ def reconstruction_loss(inputs, outputs):
     #return basic_reconstruction_loss(inputs, outputs)
 
     # this does work too.
-    return weighted_time_reconstruction_loss(inputs, outputs, weight=10, time_ratio=0.1)
+    return weighted_time_reconstruction_loss(inputs, outputs, weight=10, power=8)
 
 # Test the basic loss & weighted loss:
 if __name__ == '__main__':
     inputs = torch.randn(7, 100, 1000)
     outputs = inputs + (2 * torch.randn(inputs.shape) - 1) * 0.4
-    time_steps = 1/3
     basic = basic_reconstruction_loss(inputs, outputs).item()
-    loss1 = weighted_time_reconstruction_loss(inputs, outputs, 1, time_steps).item()
+    loss1 = weighted_time_reconstruction_loss(inputs, outputs, 1, 1).item()
     print(f"basic={basic:.2f}, loss1={loss1:.2f}")
     assert abs(basic - loss1) < 1e-4
 
-    lossW = weighted_time_reconstruction_loss(inputs, outputs, 10, time_steps).item()
+    lossW = weighted_time_reconstruction_loss(inputs, outputs, 10, 3).item()
     delta = basic/lossW - 1
     print(f"weighted loss={lossW:.2f}, vs basic={basic:.2f}, difference={100*delta:.2f}%")
     assert abs(delta) < 0.05 # we expect these two to be commensurate

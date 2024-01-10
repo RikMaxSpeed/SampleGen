@@ -10,8 +10,8 @@ from Device import get_device
 from Debug import *
 
 
-#mu_law = MuLawCodec(8) # Yet another hyper-parameter but we can't tune this one as it's outside the model's loss function.
-mu_law = None
+mu_law = MuLawCodec(8) # Yet another hyper-parameter but we can't tune this one as it's outside the model's loss function.
+#mu_law = None
 
 amps = AmplitudeCodec()
 #amps = None
