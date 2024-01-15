@@ -217,8 +217,10 @@ class MuLawCodec:
         magnitude = (torch.exp(torch.abs(y) * torch.log1p(mu)) - 1) / mu
         return torch.sign(y) * magnitude
 
-
-codec = MuLawCodec(2) # Yet another hyper-parameter but we can't tune this one as it's outside the model's loss function.
+# TODO: remove redundant MuLaw code!
+# Is this only used in test code??
+#codec = MuLawCodec(2) # Yet another hyper-parameter but we can't tune this one as it's outside the model's loss function.
+codec = None # find out whether this is actually used!
 
 
 

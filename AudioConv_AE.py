@@ -66,6 +66,7 @@ class ReverseNormalizeWithAmplitudes(nn.Module):
         normalized_data = x[:, :, :-1]
         # Use out-of-place operation for scaling
         result = normalized_data * max_abs_values.unsqueeze(2)
+        # Note: no limiting at present...
         return result
 
 
@@ -98,6 +99,8 @@ class AudioConv_AE(nn.Module):  # no VAE
 
     @staticmethod
     def compute_kernel_sizes_and_strides(audio_length, depth, kernel_count, kernel_size, ratio):
+        assert ratio > 0 and ratio <= 1, f"invalid ratio={ratio} should be between 0 and 1"
+
         failed = [], 0, 0
         kernels = []
         strides=[]
@@ -106,8 +109,11 @@ class AudioConv_AE(nn.Module):  # no VAE
         min_length = 1 # this is a bit silly, but let's see what happens...
 
         for i in range(depth):
-            kernel = min(int(kernel_size / (2 ** (i/2))), length)
-            stride = int(kernel / ratio)
+            stride = int(kernel_size * ratio) - i
+            stride = max(stride, 2)
+
+            kernel = int(kernel_size * (1 - i/depth))
+            kernel = max(kernel, 2 * stride)
 
             if stride <= 1:
                 print(f"stride={stride} is too small")
@@ -127,15 +133,25 @@ class AudioConv_AE(nn.Module):  # no VAE
 
             next_length = conv1d_output_size(length, kernel, stride)
 
-            if i+1 < depth and next_length < min_length: # over-compressing
+            if next_length < min_length: # over-compressing
                 print(f"output length={next_length}, must be at least {min_length}.")
                 return failed
 
+            # Valid layer:
             kernels.append(kernel)
             strides.append(stride)
             lengths.append(next_length)
+
+            # Figure out the parameters of the next layer
+            stride = int(stride * (1 - ratio))
+            stride = max(stride, 2)
+
+            kernel = int(stride/ratio + 1)
+            kernel = max(kernel, 2)
+
             length = next_length
 
+        # Done
         assert len(kernels) == depth
         assert len(strides) == depth
 
@@ -203,10 +219,12 @@ class AudioConv_AE(nn.Module):  # no VAE
             return
 
         length = audio_length
+        product = 1
         for i in range(len(kernels)):
             c = length / lengths[i]
             length = lengths[i]
-            print(f"\tlayer {i+1}: kernel={kernels[i]:>3}, stride={strides[i]:>2}, length={lengths[i]:>5,}, compression={c:>6.1f}x")
+            product *= strides[i]
+            print(f"\tlayer {i+1}: kernel={kernels[i]:>3}, stride={strides[i]:>2}, length={lengths[i]:>6,}, compression={c:>6.1f}x, product={product:>6,}")
 
         self.expected_length = lengths[-1] + 1 # add 1 for the amplitude
 

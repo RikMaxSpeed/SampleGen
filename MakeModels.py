@@ -52,7 +52,7 @@ def make_RNN_VAE(model_type, model_params, max_params):
     return model, model_text, approx_size, vae_size
 
 min_compression = 35  # Larger values may help the VAE
-max_compression = 150 # The auto-encoder may fail for huge compression ratios
+max_compression = 2000 # The auto-encoder may fail for huge compression ratios
 
 def make_Conv2D_VAE(model_type, model_params, max_params):
     layer_count, kernel_count, kernel_size, latent_size, vae_depth, vae_ratio = model_params
@@ -82,7 +82,7 @@ def make_Conv2D_VAE(model_type, model_params, max_params):
 
 def make_AudioConv_VAE(model_type, model_params, max_params):
     depth, kernel_count, kernel_size, stride_ratio, latent_size, vae_depth, vae_ratio = model_params
-    model_text = f"{model_type} layers={depth}, kernels={kernel_count}, size={kernel_size}, stride_ratio={stride_ratio}, VAE latent={latent_size}, depth={vae_depth}, ratio={vae_ratio:.2f}"
+    model_text = f"{model_type} layers={depth}, kernels={kernel_count}, size={kernel_size}, stride_ratio={stride_ratio:.3f}, VAE latent={latent_size}, depth={vae_depth}, ratio={vae_ratio:.2f}"
     print(model_text)
 
     audio_conv = AudioConv_AE(audio_length, depth, kernel_count, kernel_size, stride_ratio)
@@ -106,7 +106,7 @@ def make_AudioConv_VAE(model_type, model_params, max_params):
     model = CombinedVAE(audio_conv, vae_sizes)
 
     # Hack: disable the variational encoder to see if that's what preventing the model from achieving high accuracy...
-    model.vae.enable_variational(False)
+    #model.vae.enable_variational(False)
 
     return model, model_text, approx_size, vae_size
 
@@ -301,7 +301,7 @@ def make_model(model_type, model_params, max_params, verbose):
 
         case "AudioConv_AE":
             depth, kernel_count, kernel_size, stride_ratio = model_params
-            model_text = f"{model_type} layers={depth}, kernels={kernel_count}, size={kernel_size}, stride_ratio={stride_ratio}"
+            model_text = f"{model_type} layers={depth}, kernels={kernel_count}, size={kernel_size}, stride_ratio={stride_ratio:.3f}"
             print(model_text)
             approx_size = AudioConv_AE.approx_trainable_parameters(audio_length, depth, kernel_count, kernel_size, stride_ratio)
             if is_too_large(approx_size, max_params):
@@ -340,8 +340,8 @@ def make_model(model_type, model_params, max_params, verbose):
     if model is None:
         return invalid_model(max_params)
 
-    print(model)
-
+    print("\n", model, "\n")
+    
     # Check the real size:
     size = count_trainable_parameters(model)
 #    print(f"{model_type} {size:,} parameters")

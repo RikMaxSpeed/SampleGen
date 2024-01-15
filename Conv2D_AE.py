@@ -236,10 +236,8 @@ if __name__ == '__main__':
     model.float() # ensure we're using float32 and not float64
     model.to(get_device())
 
-    #print(model)
     exact_params = count_trainable_parameters(model)
-    #print(f"exact_params: {exact_params}")
-    assert(approx_params == exact_params)
+    assert approx_params == exact_params, f"exact_params={exact_params} should be equal to approx_params={approx_params}"
 
     batch_size = 7
     input = torch.randn((batch_size, freq_buckets, sequence_length))

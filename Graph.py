@@ -1,5 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
+from matplotlib.ticker import FuncFormatter
 from scipy.stats import qmc, gmean, norm
 import torch
 import time
@@ -27,6 +28,9 @@ hour = 3600
 def total_time():
     return time.time() - start_time
 
+def format_y_as_log_scale():
+    plt.yscale('log')
+    plt.gca().yaxis.set_major_formatter(FuncFormatter(lambda y, _: f"{y:,.2f}"))
 
 
 # Crazy idea: let's make training videos!
@@ -201,7 +205,7 @@ def plot_series(arrays, names, bar_chart=False, log_scale=False):
             plt.plot(array, label=name)
 
     if log_scale:
-        plt.yscale('log')
+        format_y_as_log_scale()
 
     plt.legend()
     plt.grid(True)
@@ -264,7 +268,7 @@ def plot_train_test_losses(train_losses, test_losses, title):
 
     plt.xlabel('Epoch')
     plt.ylabel('Loss (log)')
-    plt.gca().set_yscale('log')
+    format_y_as_log_scale()
     plt.title(title + ": loss after {} epochs".format(len(train_losses)))
 
     # Create a second y-axis for the overfit ratio
@@ -290,8 +294,7 @@ hyperVideo = PlotVideoMaker("Hyper-Training", True, 0.5)
 
 def plot_multiple_losses(losses, names, min_count, title):
     plt.figure(figsize=(12, 6))
-    plt.yscale('log')
-    
+
     # Plot all the loss curves
     min_loss = min([min(l) for l in losses])
     
@@ -327,6 +330,7 @@ def plot_multiple_losses(losses, names, min_count, title):
     plt.ylabel("Loss (log scale)")
     plt.xlabel("Epoch")
     plt.legend(loc='upper right')
+    format_y_as_log_scale()
     plt.tight_layout()
     
     hyperVideo.add_plot(True)
@@ -340,7 +344,7 @@ def plot_hypertrain_loss(loss, names, model_name):
     loss = np.array(loss)
     
     plt.figure(figsize=(12, 6))
-    plt.yscale('log')
+    format_y_as_log_scale()
     runs = [x+1 for x in range(len(loss))]
     
     plt.scatter(runs, loss, marker="o", s=8, c='b', label = "loss")

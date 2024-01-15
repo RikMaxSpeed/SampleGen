@@ -10,7 +10,7 @@ from Device import get_device
 from Debug import *
 
 
-mu_law = MuLawCodec(8) # Yet another hyper-parameter but we can't tune this one as it's outside the model's loss function.
+mu_law = MuLawCodec(8) # Compresses several orders of magnitudes to a linear range [-1, 1]
 #mu_law = None
 
 amps = AmplitudeCodec()
@@ -174,7 +174,7 @@ def load_from_file(file_name):
 stft_file = f"STFT {sample_rate} Hz, size={stft_size}, hop={stft_hop}.pkl"
 audio_file = f"Audio {sample_rate}.pkl"
 
-def make_STFTs(verbose):
+def preprocess_all_samples(verbose):
     #notes = ["C5", "C4", "C3", "C2"]
     notes = ["C3", "C4"] # There's confusion over what C4 means, so we have a frequency check instead
     stft_list, file_names, audio_list = gather_stfts_from_directory("../WaveFiles", notes, 44100, verbose)
@@ -186,7 +186,7 @@ if os.path.exists(stft_file):
     print(f"STFT file already created: {stft_file}")
 else:
     print(f"STFT not found: {stft_file}")
-    make_STFTs(False)
+    preprocess_all_samples(False)
 
     
 def load_STFTs():
@@ -318,7 +318,7 @@ def convert_sample_to_input(sample):
             sample = convert_to_reals(sample)
         else:
             sample = amps.encode(sample)
-            sample = remove_low_magnitudes(sample, -70)
+            #sample = remove_low_magnitudes(sample, -70) # do we need this?
 
     # Check sizes
     if is_stft:
@@ -346,6 +346,13 @@ def convert_output_to_sample(output, use_stfts):
         output = torch.clamp(output, min=0, max=1)
 
     if mu_law is not None:
+        max = torch.max(output.abs())
+
+        # if max > 1:
+        #     print(f"clipping: max={max:.2f}")
+
+        output /=  max # avoid clipping
+
         output = mu_law.decode(output)
 
     if use_stfts:

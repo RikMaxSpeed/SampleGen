@@ -71,7 +71,7 @@ def evaluate_model(params):
     max_overfit = 1.5 # Ensure we retain the models that generalise reasonably well.
     
     max_epochs = 100 # This is sufficient to figure out which model will converge best if we let it run for longer.
-    if get_device() == "mps" and is_incremental_vae(hyper_model) or is_audio(hyper_model): # fast models
+    if get_device() == "mps" and (is_incremental_vae(hyper_model) or is_audio(hyper_model)): # fast models
         max_overfit = 2.0
         max_epochs = 5000 # assuming we'll bump into max_time first!
 
@@ -244,13 +244,13 @@ def optimise_hyper_parameters(model_name, sample_count = 200):
         case "AudioConv_AE":
             # audio_length, depth, kernel_count, kernel_size, stride
             max_kernel_size = int(sample_rate / middleCHz)
-            search_space.append(Integer( 1,     4,     'uniform',  name='layers'))
-            search_space.append(Integer(1,    50,     'log-uniform',  name='kernels'))
-            search_space.append(Integer(10,    max_kernel_size, 'log-uniform',  name='kernel_size'))
-            search_space.append(Real(  2,    5, 'log-uniform',  name='ratio'))
+            search_space.append(Integer( 3,     6,     'uniform',  name='layers'))
+            search_space.append(Integer(5,    50,     'log-uniform',  name='kernels'))
+            search_space.append(Integer(3,    24, 'log-uniform',  name='kernel_size'))
+            search_space.append(Real(  0.1,    0.99, 'uniform',  name='ratio'))
 
         case "AudioConv_VAE_Incremental":
-            search_space.append(Integer(5, 200, 'uniform', name='VAE latent'))
+            search_space.append(Integer(5, 20, 'uniform', name='VAE latent'))
             search_space.append(Integer(2, 7, 'uniform', name='depth'))
             search_space.append(Real(0.1, 10, 'log-uniform', name='ratio'))
 
@@ -308,7 +308,8 @@ def train_best_params(model_name, params = None, samples = None, finest = False)
     start_new_stft_video(f"STFT - train {model_name}", True)
 
     max_time = 2 * hour # hopefully the model converges way before this!
-    max_overfit = 20.0 # hack
+    if is_audio(model_name):
+        max_overfit = 3.0 # hack for maximum fidelity on the training samples
 
     # if "VAE" in model_name: # Allow the Auto-Encoders to over-fit
     #     max_overfit = 10.0
@@ -334,10 +335,10 @@ def train_best_params(model_name, params = None, samples = None, finest = False)
     train_model(model_name, params, max_epochs, max_time, max_params, max_overfit, max_loss, verbose, finest)
 
 
-def full_hypertrain(model_name, sample_count = 200):
+def full_hypertrain(model_name, sample_count = None):
     optimise_hyper_parameters(model_name, sample_count)
     train_best_params(model_name)
-    fine_tune(model_name)
+    #fine_tune(model_name) # generally not too useful?
 
 
 def train_topN_hyper_params(topN = 5):

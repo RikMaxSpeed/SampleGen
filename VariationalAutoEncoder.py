@@ -64,7 +64,7 @@ def reconstruction_loss(inputs, outputs):
     #return basic_reconstruction_loss(inputs, outputs)
 
     # this does work too.
-    return weighted_time_reconstruction_loss(inputs, outputs, weight=10, power=8)
+    return weighted_time_reconstruction_loss(inputs, outputs, weight=10, power=4)
 
 # Test the basic loss & weighted loss:
 if __name__ == '__main__':
